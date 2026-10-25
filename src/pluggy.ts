@@ -1,6 +1,7 @@
 import { RequestUrlResponse, requestUrl } from "obsidian";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "./bank-sync";
 import type { PluggyInvestment, PluggyInvestmentTransaction } from "./investment-sync";
+import { t } from "./i18n";
 import type { PluggyConfig } from "./ledger";
 
 /**
@@ -21,7 +22,7 @@ function failure(res: RequestUrlResponse, what: string): PluggyError {
   } catch {
     // body was not JSON
   }
-  return new PluggyError(`${what} failed (HTTP ${res.status})${detail ? `: ${detail}` : ""}`);
+  return new PluggyError(t.errors.failed(what, res.status, detail));
 }
 
 async function authenticate(config: PluggyConfig): Promise<string> {
@@ -32,8 +33,8 @@ async function authenticate(config: PluggyConfig): Promise<string> {
     body: JSON.stringify({ clientId: config.clientId, clientSecret: config.clientSecret }),
     throw: false,
   });
-  if (res.status === 401 || res.status === 403) throw new PluggyError("Pluggy rejected the client ID or secret");
-  if (res.status >= 300) throw failure(res, "Pluggy sign-in");
+  if (res.status === 401 || res.status === 403) throw new PluggyError(t.errors.pluggyRejected);
+  if (res.status >= 300) throw failure(res, t.errors.pluggySignIn);
   return (res.json as { apiKey: string }).apiKey;
 }
 
@@ -48,7 +49,7 @@ async function fetchTransactions(apiKey: string, accountId: string, dateFrom: st
   const out: PluggyTransaction[] = [];
   const params: Record<string, string> = { accountId, dateFrom };
   for (let i = 0; i < MAX_PAGES; i++) {
-    const page = await get<{ results: PluggyTransaction[]; next: string | null }>(apiKey, "/v2/transactions", params, "Loading transactions");
+    const page = await get<{ results: PluggyTransaction[]; next: string | null }>(apiKey, "/v2/transactions", params, t.errors.loadingTransactions);
     out.push(...page.results);
     const after = page.next ? new URL(page.next, BASE).searchParams.get("after") : null;
     if (!after) break;
@@ -60,7 +61,7 @@ async function fetchTransactions(apiKey: string, accountId: string, dateFrom: st
 /** Category tree; empty when the Pluggy plan does not include categorization. */
 async function fetchCategories(apiKey: string): Promise<PluggyCategory[]> {
   try {
-    const res = await get<{ results: PluggyCategory[] } | PluggyCategory[]>(apiKey, "/categories", {}, "Loading categories");
+    const res = await get<{ results: PluggyCategory[] } | PluggyCategory[]>(apiKey, "/categories", {}, t.errors.loadingCategories);
     return Array.isArray(res) ? res : res.results;
   } catch {
     return [];
@@ -87,7 +88,7 @@ async function fetchInvestments(apiKey: string, itemId: string): Promise<PluggyI
       apiKey,
       "/investments",
       { itemId, page: String(page) },
-      `Loading investments of item ${itemId}`
+      t.errors.loadingInvestments(itemId)
     );
     out.push(...res.results);
     if (!res.totalPages || page >= res.totalPages) break;
@@ -102,7 +103,7 @@ async function fetchInvestments(apiKey: string, itemId: string): Promise<PluggyI
  */
 async function connectorName(apiKey: string, itemId: string): Promise<string | undefined> {
   try {
-    const item = await get<{ connector?: { name?: string } }>(apiKey, `/items/${encodeURIComponent(itemId)}`, {}, "Loading item");
+    const item = await get<{ connector?: { name?: string } }>(apiKey, `/items/${encodeURIComponent(itemId)}`, {}, t.errors.loadingItem);
     const name = item.connector?.name?.trim();
     return name && !/meu\s*pluggy/i.test(name) ? name : undefined;
   } catch {
@@ -117,7 +118,7 @@ async function fetchInvestmentTransactions(apiKey: string, investment: PluggyInv
       apiKey,
       `/investments/${encodeURIComponent(investment.id)}/transactions`,
       { page: String(page) },
-      `Loading movements of ${investment.name}`
+      t.errors.loadingMovements(investment.name)
     );
     out.push(...res.results);
     if (!res.totalPages || page >= res.totalPages) break;
@@ -136,7 +137,7 @@ export async function fetchBankData(config: PluggyConfig, dateFrom: string): Pro
   const transactions: PluggyTransaction[] = [];
   const investments: InvestmentData = { investments: [], itemIds: [], errors: [] };
   for (const itemId of config.itemIds) {
-    const page = await get<{ results: PluggyAccount[] }>(apiKey, "/accounts", { itemId }, `Loading accounts of item ${itemId}`);
+    const page = await get<{ results: PluggyAccount[] }>(apiKey, "/accounts", { itemId }, t.errors.loadingAccounts(itemId));
     for (const acc of page.results) {
       accounts.push(acc);
       transactions.push(...(await fetchTransactions(apiKey, acc.id, dateFrom)));

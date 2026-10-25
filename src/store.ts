@@ -1,4 +1,5 @@
 import { App, TFile, normalizePath } from "obsidian";
+import { t } from "./i18n";
 import {
   KeyMaterial,
   decryptEnvelope,
@@ -44,7 +45,7 @@ export class EncryptedStore {
   /** Decrypt the ledger. Throws WrongPassphraseError / InvalidEnvelopeError. */
   async load(passphrase: string): Promise<Ledger> {
     const text = await this.readRaw();
-    if (text === null) throw new Error(`${this.path} not found`);
+    if (text === null) throw new Error(t.errors.fileNotFound(this.path));
     const env = parseEnvelope(text);
     const km = await keyForEnvelope(env, passphrase, this.key);
     const ledger = parseLedger(await decryptEnvelope(env, km));
@@ -62,7 +63,7 @@ export class EncryptedStore {
   /** Encrypt and write the ledger. Requires a prior load() or create(). */
   save(ledger: Ledger): Promise<void> {
     const run = async () => {
-      if (!this.key) throw new Error("Trimly is locked");
+      if (!this.key) throw new Error(t.errors.locked);
       const text = await encryptText(JSON.stringify(ledger), this.key);
       await this.writeEncrypted(text);
     };

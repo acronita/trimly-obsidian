@@ -1,0 +1,55 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { defaultLedger, newId, saveAsset } from "../src/ledger.ts";
+import type { Asset } from "../src/ledger.ts";
+import { applyQuotes, quoteTickers, tickerOf } from "../src/quotes.ts";
+import { periodReturn, portfolioIndex } from "../src/returns.ts";
+
+const asset = (extra: Partial<Asset>): Asset => ({ id: newId(), name: "x", assetClass: "stock", value: 0, updatedAt: "2026-10-01", ...extra });
+
+test("only B3 tickers are quoted; the fractional F is dropped", () => {
+  assert.equal(tickerOf({ code: "petr4" }), "PETR4");
+  assert.equal(tickerOf({ code: "HGLG11" }), "HGLG11");
+  assert.equal(tickerOf({ code: "PETR4F" }), "PETR4");
+  assert.equal(tickerOf({ code: "CDB224AXYZ1" }), null);
+  assert.equal(tickerOf({ code: "LFT" }), null);
+  assert.equal(tickerOf({}), null);
+});
+
+test("each open ticker is requested once", () => {
+  const l = defaultLedger();
+  l.investments.assets.push(asset({ code: "PETR4" }), asset({ code: "PETR4", pluggyId: "p" }), asset({ code: "VALE3", closed: true }));
+  assert.deepEqual(quoteTickers(l), ["PETR4"]);
+});
+
+test("a manual position with quantity is revalued at the quote", () => {
+  const l = defaultLedger();
+  const a = asset({ code: "PETR4", quantity: 100, value: 3000_00, invested: 3000_00 });
+  saveAsset(l, a, "2026-10-01");
+  const n = applyQuotes(l, [{ symbol: "PETR4", price: 38.21, changePct: 1.5, longName: "Petróleo Brasileiro S.A. - Petrobras" }], "2026-10-02");
+  assert.equal(n, 1);
+  const pos = l.investments.assets[0];
+  assert.equal(pos.value, 3821_00);
+  assert.equal(pos.quote?.price, 38_21);
+  assert.equal(pos.quote?.longName, "Petróleo Brasileiro S.A. - Petrobras");
+  // the price change is market return, not money put in
+  const idx = portfolioIndex(l.investments.snapshots);
+  const r = periodReturn(idx, "2026-10-01", "2026-10-02");
+  assert.ok(r !== null && Math.abs(r - (3821 / 3000 - 1)) < 1e-9);
+});
+
+test("a synced position keeps its bank value but shows the quote", () => {
+  const l = defaultLedger();
+  l.investments.assets.push(asset({ code: "VALE3", quantity: 10, value: 600_00, pluggyId: "p" }));
+  applyQuotes(l, [{ symbol: "VALE3", price: 61 }], "2026-10-02");
+  assert.equal(l.investments.assets[0].value, 600_00);
+  assert.equal(l.investments.assets[0].quote?.price, 61_00);
+});
+
+test("a position without quantity only gets the quote", () => {
+  const l = defaultLedger();
+  l.investments.assets.push(asset({ code: "BOVA11", value: 1000_00 }));
+  applyQuotes(l, [{ symbol: "BOVA11", price: 120 }], "2026-10-02");
+  assert.equal(l.investments.assets[0].value, 1000_00);
+  assert.equal(l.investments.snapshots.length, 0);
+});

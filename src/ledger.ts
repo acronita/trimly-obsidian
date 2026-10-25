@@ -4,8 +4,10 @@
  * All money values are integer cents to avoid floating-point drift. Dates are
  * local "YYYY-MM-DD" strings; months are "YYYY-MM".
  *
- * Kept free of Obsidian and local imports so it can be unit tested in Node.
+ * Kept free of Obsidian imports so it can be unit tested in Node.
  */
+import { LANGUAGES, t } from "./i18n/index.ts";
+import type { Strings } from "./i18n/index.ts";
 
 export const LEDGER_VERSION = 3;
 
@@ -16,15 +18,6 @@ export type Frequency = "weekly" | "monthly" | "yearly";
 export type MovementType = "buy" | "sell" | "income" | "tax" | "amortization" | "transfer";
 export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
 
-export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
-  checking: "Checking",
-  savings: "Savings",
-  credit: "Credit card",
-  cash: "Cash",
-  investment: "Investment",
-  other: "Other",
-};
-
 export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
   checking: "landmark",
   savings: "piggy-bank",
@@ -32,17 +25,6 @@ export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
   cash: "wallet",
   investment: "trending-up",
   other: "coins",
-};
-
-export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
-  fixed_income: "Fixed income",
-  treasury: "Treasury",
-  stock: "Stocks",
-  reit: "Real estate funds",
-  etf: "ETFs",
-  fund: "Funds",
-  retirement: "Retirement",
-  other: "Other",
 };
 
 export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
@@ -67,15 +49,6 @@ export const ASSET_CLASS_ICONS: Record<AssetClass, string> = {
   other: "coins",
 };
 
-export const MOVEMENT_LABELS: Record<MovementType, string> = {
-  buy: "Contribution",
-  sell: "Withdrawal",
-  income: "Income",
-  tax: "Tax",
-  amortization: "Amortization",
-  transfer: "Transfer",
-};
-
 export const MOVEMENT_ICONS: Record<MovementType, string> = {
   buy: "arrow-down-left",
   sell: "arrow-up-right",
@@ -92,12 +65,6 @@ export const CATEGORY_ICONS = [
   "graduation-cap", "book", "baby", "dog", "dumbbell", "wrench", "receipt", "landmark", "briefcase",
   "laptop", "trending-up", "coins", "piggy-bank", "plus-circle", "more-horizontal", "tag",
 ];
-
-export const FREQUENCY_LABELS: Record<Frequency, string> = {
-  weekly: "Weekly",
-  monthly: "Monthly",
-  yearly: "Yearly",
-};
 
 export interface Account {
   id: string;
@@ -204,6 +171,20 @@ export interface Asset {
   pluggyName?: string;
   /** the user changed the name, so sync stops replacing it */
   renamed?: boolean;
+  /** last brapi quote, for positions with a B3 ticker */
+  quote?: Quote;
+}
+
+/** Market quote of a ticker. */
+export interface Quote {
+  /** price per share, in cents */
+  price: number;
+  /** change today, in percent */
+  changePct?: number;
+  /** ISO timestamp of the quote */
+  time?: string;
+  /** company or fund name */
+  longName?: string;
 }
 
 /** Money moving in or out of one position, in cents. */
@@ -257,6 +238,13 @@ export interface Investments {
   targets: AllocationTarget[];
 }
 
+/** brapi.dev token for quotes. Kept inside the encrypted ledger, never in data.json. */
+export interface BrapiConfig {
+  token: string;
+  /** ISO timestamp of the last successful update */
+  lastUpdate?: string;
+}
+
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
 export interface PluggyConfig {
   clientId: string;
@@ -276,34 +264,54 @@ export interface Ledger {
   investments: Investments;
   /** set when bank sync is configured */
   pluggy?: PluggyConfig;
+  /** set when quotes are configured */
+  brapi?: BrapiConfig;
 }
 
 export function newId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
-const DEFAULT_CATEGORIES: [string, CategoryKind, string, string][] = [
-  ["Housing", "expense", "#8e7cc3", "home"],
-  ["Groceries", "expense", "#6aa84f", "shopping-cart"],
-  ["Dining out", "expense", "#e69138", "utensils"],
-  ["Transport", "expense", "#3d85c6", "car"],
-  ["Health", "expense", "#cc4125", "heart-pulse"],
-  ["Utilities", "expense", "#45818e", "zap"],
-  ["Entertainment", "expense", "#c27ba0", "clapperboard"],
-  ["Shopping", "expense", "#f1c232", "shopping-bag"],
-  ["Education", "expense", "#674ea7", "graduation-cap"],
-  ["Other expenses", "expense", "#999999", "more-horizontal"],
-  ["Salary", "income", "#38761d", "briefcase"],
-  ["Freelance", "income", "#0b5394", "laptop"],
-  ["Investments", "income", "#134f5c", "trending-up"],
-  ["Other income", "income", "#666666", "plus-circle"],
+export type DefaultCategory = keyof Strings["defaults"]["categories"];
+
+const DEFAULT_CATEGORIES: [DefaultCategory, CategoryKind, string, string][] = [
+  ["housing", "expense", "#8e7cc3", "home"],
+  ["groceries", "expense", "#6aa84f", "shopping-cart"],
+  ["dining", "expense", "#e69138", "utensils"],
+  ["transport", "expense", "#3d85c6", "car"],
+  ["health", "expense", "#cc4125", "heart-pulse"],
+  ["utilities", "expense", "#45818e", "zap"],
+  ["entertainment", "expense", "#c27ba0", "clapperboard"],
+  ["shopping", "expense", "#f1c232", "shopping-bag"],
+  ["education", "expense", "#674ea7", "graduation-cap"],
+  ["otherExpenses", "expense", "#999999", "more-horizontal"],
+  ["salary", "income", "#38761d", "briefcase"],
+  ["freelance", "income", "#0b5394", "laptop"],
+  ["investments", "income", "#134f5c", "trending-up"],
+  ["otherIncome", "income", "#666666", "plus-circle"],
 ];
+
+/** Which starter category `c` still is, by its name in any language; undefined once renamed. */
+export function defaultCategoryKey(c: Pick<Category, "name" | "kind">): DefaultCategory | undefined {
+  return DEFAULT_CATEGORIES.find(
+    ([key, kind]) => kind === c.kind && Object.values(LANGUAGES).some((l) => l.defaults.categories[key] === c.name)
+  )?.[0];
+}
+
+/** Rename the starter categories and account still named as in `from` to their names in `to`. Mutates the ledger. */
+export function translateDefaults(ledger: Ledger, from: Strings, to: Strings) {
+  for (const c of ledger.categories) {
+    const key = DEFAULT_CATEGORIES.find(([k, kind]) => kind === c.kind && from.defaults.categories[k] === c.name)?.[0];
+    if (key) c.name = to.defaults.categories[key];
+  }
+  for (const a of ledger.accounts) if (a.name === from.defaults.wallet) a.name = to.defaults.wallet;
+}
 
 export function defaultLedger(): Ledger {
   return {
     version: LEDGER_VERSION,
-    accounts: [{ id: newId(), name: "Wallet", type: "cash", openingBalance: 0 }],
-    categories: DEFAULT_CATEGORIES.map(([name, kind, color, icon]) => ({ id: newId(), name, kind, color, icon })),
+    accounts: [{ id: newId(), name: t.defaults.wallet, type: "cash", openingBalance: 0 }],
+    categories: DEFAULT_CATEGORIES.map(([key, kind, color, icon]) => ({ id: newId(), name: t.defaults.categories[key], kind, color, icon })),
     transactions: [],
     budgets: [],
     recurring: [],
@@ -315,12 +323,15 @@ export function defaultLedger(): Ledger {
 export function parseLedger(json: string): Ledger {
   const raw = JSON.parse(json) as Partial<Ledger>;
   if (typeof raw.version === "number" && raw.version > LEDGER_VERSION) {
-    throw new Error(`Ledger version ${raw.version} is newer than this plugin supports; update Trimly`);
+    throw new Error(t.errors.newerLedger(raw.version));
   }
   const categories = raw.categories ?? [];
   // ledgers created before category icons existed: give default categories their icon
   for (const c of categories) {
-    if (!c.icon) c.icon = DEFAULT_CATEGORIES.find(([name, kind]) => name === c.name && kind === c.kind)?.[3];
+    if (!c.icon) {
+      const key = defaultCategoryKey(c);
+      c.icon = DEFAULT_CATEGORIES.find(([k]) => k === key)?.[3];
+    }
   }
   return {
     version: LEDGER_VERSION,
@@ -336,6 +347,7 @@ export function parseLedger(json: string): Ledger {
       targets: raw.investments?.targets ?? [],
     },
     pluggy: raw.pluggy,
+    brapi: raw.brapi,
   };
 }
 

@@ -1,4 +1,5 @@
 import { requestUrl } from "obsidian";
+import { t } from "./i18n";
 import type { Benchmarks, Rate } from "./returns";
 
 /**
@@ -27,7 +28,7 @@ async function series(code: number, from: string, to: string): Promise<Rate[]> {
   });
   // SGS answers 404 when the range has no values yet (e.g. this month's IPCA)
   if (res.status === 404) return [];
-  if (res.status >= 300) throw new Error(`Central Bank series ${code} failed (HTTP ${res.status})`);
+  if (res.status >= 300) throw new Error(t.errors.bcbSeries(code, res.status));
   return (res.json as { data: string; valor: string }[]).map((r) => ({ date: fromBr(r.data), rate: Number(r.valor) }));
 }
 

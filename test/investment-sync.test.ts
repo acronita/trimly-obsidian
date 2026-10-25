@@ -266,3 +266,15 @@ test("a position without an institution falls back to its issuer instead of show
   assert.equal(asset(l, "c").institution, "Banco Inter");
   assert.equal(asset(l, "d").institution, "XP");
 });
+
+test("treasury bonds named by code get their Tesouro Direto name and year", () => {
+  const due = "2027-03-01T00:00:00.000Z";
+  assert.equal(displayName({ name: "LFT", type: "FIXED_INCOME", subtype: "TREASURY", dueDate: due }), "Tesouro Selic 2027");
+  assert.equal(displayName({ name: "NTN-B Principal", type: "FIXED_INCOME", subtype: "TREASURY", dueDate: due }), "Tesouro IPCA+ 2027");
+  assert.equal(displayName({ name: "NTN-B", type: "FIXED_INCOME", subtype: "TREASURY", dueDate: due }), "Tesouro IPCA+ com Juros Semestrais 2027");
+  assert.equal(displayName({ name: "LTN", type: "FIXED_INCOME", subtype: "TREASURY", dueDate: due }), "Tesouro Prefixado 2027");
+  // unknown code: the index tells the product
+  assert.equal(displayName({ name: "TD 123", type: "FIXED_INCOME", subtype: "TREASURY", rateType: "SELIC", dueDate: due }), "Tesouro Selic 2027");
+  // already a proper name
+  assert.equal(displayName({ name: "Tesouro Selic 2029", type: "FIXED_INCOME", subtype: "TREASURY" }), "Tesouro Selic 2029");
+});

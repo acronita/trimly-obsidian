@@ -1,12 +1,15 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, moment } from "obsidian";
+import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
+import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { fetchBenchmarks } from "./bcb";
+import { LANGUAGES, LANGUAGE_NAMES, Language, setLanguage, t } from "./i18n";
 import { applyInvestments } from "./investment-sync";
-import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, toISODate, todayISO } from "./ledger";
+import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, toISODate, todayISO, translateDefaults } from "./ledger";
 import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
+import { applyQuotes, quoteTickers } from "./quotes";
 import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
 import { TrimlyView, VIEW_TYPE_TRIMLY, openTransactionModal } from "./view";
@@ -21,10 +24,14 @@ export interface TrimlySettings {
   rememberPassphrase: boolean;
   /** fetch public CDI/IPCA series from the Central Bank to compare investments with */
   benchmarks: boolean;
+  /** interface language; Brazilian Portuguese first */
+  language: Language;
 }
 
 /** Unlocking syncs the bank again only when the last sync is older than this. */
 const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** Unlocking refreshes quotes only when the last update is older than this. */
+const QUOTES_INTERVAL_MS = 60 * 60 * 1000;
 /** After a failed benchmark fetch, wait this long before trying again. */
 const BENCHMARK_RETRY_MS = 60 * 60 * 1000;
 /** The daily CDI series accepts at most 10 years per request. */
@@ -35,7 +42,12 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   currency: "BRL",
   rememberPassphrase: true,
   benchmarks: true,
+  language: "pt-BR",
 };
+
+function olderThan(iso: string | undefined, ms: number): boolean {
+  return !iso || Date.now() - Date.parse(iso) > ms;
+}
 
 export default class TrimlyPlugin extends Plugin {
   settings!: TrimlySettings;
@@ -49,30 +61,34 @@ export default class TrimlyPlugin extends Plugin {
   private benchmarkLoading = false;
   private benchmarkFailedAt = 0;
   benchmarkError: string | null = null;
+  /** set when data.json predates the language setting: the ledger's starter names are still English */
+  private translateOnUnlock = false;
 
   async onload() {
     await this.loadSettings();
+    // command and ribbon names are fixed at load: a language change applies to them after a restart
+    setLanguage(this.settings.language);
     this.passphrases = new PassphraseManager(this.app, () => this.settings.rememberPassphrase);
     this.store = new EncryptedStore(this.app, () => this.settings.folder);
 
     this.registerView(VIEW_TYPE_TRIMLY, (leaf) => new TrimlyView(leaf, this));
-    this.addRibbonIcon("wallet", "Open Trimly", () => void this.openDashboard());
-    this.addCommand({ id: "open-dashboard", name: "Open dashboard", callback: () => void this.openDashboard() });
+    this.addRibbonIcon("wallet", t.commands.ribbon, () => void this.openDashboard());
+    this.addCommand({ id: "open-dashboard", name: t.commands.open, callback: () => void this.openDashboard() });
     this.addCommand({
       id: "add-transaction",
-      name: "Add transaction",
+      name: t.commands.addTransaction,
       callback: async () => {
         if (await this.unlock()) this.openTransactionModal(null);
       },
     });
     this.addCommand({
       id: "sync-bank",
-      name: "Sync bank accounts",
+      name: t.commands.sync,
       callback: async () => {
-        if (await this.unlock()) await this.syncBank();
+        if (await this.unlock()) await this.sync();
       },
     });
-    this.addCommand({ id: "lock", name: "Lock", callback: () => this.lock() });
+    this.addCommand({ id: "lock", name: t.commands.lock, callback: () => this.lock() });
     this.addSettingTab(new TrimlySettingTab(this.app, this));
 
     // the ledger changed on disk without us (vault sync, git pull): reload it
@@ -89,7 +105,9 @@ export default class TrimlyPlugin extends Plugin {
   }
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, (await this.loadData()) as Partial<TrimlySettings>);
+    const saved = (await this.loadData()) as Partial<TrimlySettings> | null;
+    this.translateOnUnlock = !!saved && !saved.language;
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
   }
 
   async saveSettings() {
@@ -97,11 +115,15 @@ export default class TrimlyPlugin extends Plugin {
   }
 
   locale(): string {
-    return moment.locale() || "en";
+    return t.locale;
   }
 
   formatMoney(cents: number): string {
     return formatMoney(cents, this.settings.currency, localeForCurrency(this.settings.currency, this.locale()));
+  }
+
+  formatDateTime(iso: string): string {
+    return new Date(iso).toLocaleString(this.locale());
   }
 
   async openDashboard() {
@@ -121,6 +143,16 @@ export default class TrimlyPlugin extends Plugin {
     }
   }
 
+  /** Switch the interface language, renaming starter categories that still have their default name. */
+  async setLanguage(lang: Language) {
+    const from = t;
+    this.settings.language = lang;
+    setLanguage(lang);
+    await this.saveSettings();
+    if (this.ledger) await this.mutate((l) => translateDefaults(l, from, t));
+    else this.refreshViews();
+  }
+
   /** Make sure the ledger is decrypted, prompting for the passphrase if needed. */
   unlock(): Promise<boolean> {
     if (this.ledger) return Promise.resolve(true);
@@ -128,7 +160,7 @@ export default class TrimlyPlugin extends Plugin {
       this.unlocking = this.doUnlock().finally(() => {
         this.unlocking = null;
         this.refreshViews();
-        if (this.ledger) this.autoSyncBank();
+        if (this.ledger) void this.afterUnlock();
       });
     }
     return this.unlocking;
@@ -166,11 +198,11 @@ export default class TrimlyPlugin extends Plugin {
           try {
             await this.store.create(ledger, p);
           } catch (e) {
-            return `Could not create ${this.store.path}: ${(e as Error).message}`;
+            return t.notices.createFailed(this.store.path, (e as Error).message);
           }
           this.ledger = ledger;
           this.passphrases.set(p);
-          new Notice(`Trimly ledger created at ${this.store.path}.`);
+          new Notice(t.notices.ledgerCreated(this.store.path));
           resolve(true);
           return null;
         },
@@ -187,13 +219,13 @@ export default class TrimlyPlugin extends Plugin {
       const posted = postDueRecurring(ledger, todayISO());
       if (posted) {
         await this.store.save(ledger);
-        new Notice(`Posted ${posted} recurring transaction${posted === 1 ? "" : "s"}.`);
+        new Notice(t.recurring.posted(posted));
       }
       return null;
     } catch (e) {
-      if (e instanceof WrongPassphraseError) return "Wrong passphrase.";
-      if (e instanceof InvalidEnvelopeError) return e.message;
-      return `Could not open the ledger: ${(e as Error).message}`;
+      if (e instanceof WrongPassphraseError) return t.notices.wrongPassphrase;
+      if (e instanceof InvalidEnvelopeError) return t.notices.invalidFile(e.message);
+      return t.notices.openFailed((e as Error).message);
     }
   }
 
@@ -203,7 +235,7 @@ export default class TrimlyPlugin extends Plugin {
     const pass = this.passphrases.get();
     if (!pass || (await this.tryLoad(pass)) !== null) {
       this.lock();
-      new Notice("Trimly: the ledger changed on disk and could not be reopened. Unlock it again.");
+      new Notice(t.notices.reloadFailed);
       return;
     }
     this.refreshViews();
@@ -224,21 +256,49 @@ export default class TrimlyPlugin extends Plugin {
     try {
       await this.store.save(this.ledger);
     } catch (e) {
-      new Notice(`Trimly: could not save: ${(e as Error).message}`);
+      new Notice(t.notices.saveFailed((e as Error).message));
     }
   }
 
-  private autoSyncBank() {
-    const last = this.ledger?.pluggy?.lastSync;
-    // no snapshot = investments never synced (e.g. right after upgrading), so don't wait for the interval
-    const neverInvestments = this.ledger?.investments.snapshots.length === 0;
-    if (this.ledger?.pluggy && (!last || neverInvestments || Date.now() - Date.parse(last) > AUTO_SYNC_INTERVAL_MS)) void this.syncBank(true);
+  /** Whether anything can be synced: bank sync or quotes are set up. */
+  canSync(): boolean {
+    return !!(this.ledger?.pluggy || this.ledger?.brapi);
   }
 
-  /** Pull accounts and transactions from Pluggy. `quiet` skips the notice when nothing changed. */
-  syncBank(quiet = false): Promise<void> {
+  private async afterUnlock() {
+    if (this.translateOnUnlock) {
+      // ledgers created before the language setting have English starter names
+      this.translateOnUnlock = false;
+      await this.mutate((l) => translateDefaults(l, LANGUAGES.en, t));
+      await this.saveSettings();
+    }
+    this.autoSync();
+  }
+
+  private autoSync() {
+    const l = this.ledger;
+    if (!l) return;
+    // no snapshot = investments never synced (e.g. right after upgrading), so don't wait for the interval
+    const bankDue = !!l.pluggy && (l.investments.snapshots.length === 0 || olderThan(l.pluggy.lastSync, AUTO_SYNC_INTERVAL_MS));
+    const quotesDue = !!l.brapi && olderThan(l.brapi.lastUpdate, QUOTES_INTERVAL_MS);
+    if (bankDue || quotesDue) void this.sync(true, bankDue);
+  }
+
+  /**
+   * Pull bank data from Pluggy (when `bank`) and then quotes from brapi, for
+   * whichever is set up. `quiet` skips the notices when nothing changed.
+   */
+  sync(quiet = false, bank = true): Promise<void> {
     if (!this.syncing) {
-      this.syncing = this.doSyncBank(quiet).finally(() => {
+      this.syncing = (async () => {
+        if (!this.canSync()) {
+          new Notice(t.notices.setupSyncFirst);
+          return;
+        }
+        this.refreshViews();
+        if (bank && this.ledger?.pluggy) await this.syncBank(quiet);
+        if (this.ledger?.brapi) await this.refreshQuotes(quiet);
+      })().finally(() => {
         this.syncing = null;
         this.refreshViews();
       });
@@ -250,20 +310,16 @@ export default class TrimlyPlugin extends Plugin {
     return this.syncing !== null;
   }
 
-  private async doSyncBank(quiet: boolean) {
+  private async syncBank(quiet: boolean) {
     const config = this.ledger?.pluggy;
-    if (!config) {
-      new Notice("Set up bank sync in Trimly's settings first.");
-      return;
-    }
-    this.refreshViews();
+    if (!config) return;
     const now = new Date();
     const windowStart = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - SYNC_WINDOW_DAYS));
     let data;
     try {
       data = await fetchBankData(config, windowStart);
     } catch (e) {
-      new Notice(`Trimly: bank sync failed: ${(e as Error).message}`);
+      new Notice(t.notices.syncFailed((e as Error).message));
       return;
     }
     let summary = "";
@@ -272,24 +328,47 @@ export default class TrimlyPlugin extends Plugin {
       const r = applyBankData(ledger, data.bank, windowStart, todayISO(now));
       const inv = applyInvestments(ledger, data.investments.investments, data.investments.itemIds, todayISO(now));
       ledger.pluggy.lastSync = now.toISOString();
+      const n = t.notices;
       const parts = [
-        r.accountsCreated && `${r.accountsCreated} new account${r.accountsCreated === 1 ? "" : "s"}`,
-        r.added && `${r.added} new`,
-        r.updated && `${r.updated} updated`,
-        r.removed && `${r.removed} removed`,
-        inv.added && `${inv.added} new investment${inv.added === 1 ? "" : "s"}`,
-        inv.closed && `${inv.closed} investment${inv.closed === 1 ? "" : "s"} closed`,
-        inv.movements && `${inv.movements} investment movement${inv.movements === 1 ? "" : "s"}`,
-      ].filter(Boolean);
+        r.accountsCreated && n.newAccounts(r.accountsCreated),
+        r.added && n.added(r.added),
+        r.updated && n.updated(r.updated),
+        r.removed && n.removed(r.removed),
+        inv.added && n.newInvestments(inv.added),
+        inv.closed && n.closedInvestments(inv.closed),
+        inv.movements && n.investmentMovements(inv.movements),
+      ].filter((x): x is string => !!x);
       // say when Pluggy reports no investments at all, so an empty Investments tab is explainable
       if (!quiet && !data.investments.errors.length && data.investments.investments.length === 0) {
-        parts.push(`Pluggy reported no investments for ${data.investments.itemIds.length} item${data.investments.itemIds.length === 1 ? "" : "s"}`);
+        parts.push(n.noInvestments(data.investments.itemIds.length));
       }
-      summary = parts.length ? `Bank sync: ${parts.join(", ")}.` : quiet ? "" : "Bank sync: everything up to date.";
+      summary = parts.length ? n.syncSummary(parts) : quiet ? "" : n.syncUpToDate;
     });
     if (summary) new Notice(summary);
     // investments are optional per item, but a failure must not pass silently
-    if (data.investments.errors.length) new Notice(`Trimly: some investment data could not be loaded: ${data.investments.errors.join("; ")}`);
+    if (data.investments.errors.length) new Notice(t.notices.investmentErrors(data.investments.errors.join("; ")));
+  }
+
+  /** Quote every open position with a B3 ticker. */
+  private async refreshQuotes(quiet: boolean) {
+    const config = this.ledger?.brapi;
+    if (!config || !this.ledger) return;
+    const tickers = quoteTickers(this.ledger);
+    let result;
+    try {
+      result = tickers.length ? await fetchQuotes(config.token, tickers) : { quotes: [], errors: [] };
+    } catch (e) {
+      new Notice(t.notices.quotesFailed((e as Error).message));
+      return;
+    }
+    const now = new Date();
+    let changed = 0;
+    await this.mutate((l) => {
+      changed = applyQuotes(l, result.quotes, todayISO(now));
+      if (l.brapi) l.brapi.lastUpdate = now.toISOString();
+    });
+    if (!quiet && changed) new Notice(t.notices.quotesUpdated(changed));
+    if (result.errors.length) new Notice(t.notices.quotesFailed(result.errors.join("; ")));
   }
 
   /**
@@ -323,18 +402,18 @@ export default class TrimlyPlugin extends Plugin {
 
   changePassphrase() {
     if (!this.ledger) {
-      new Notice("Unlock Trimly first.");
+      new Notice(t.notices.unlockFirst);
       return;
     }
     new PassphraseModal(this.app, "change", async (p) => {
-      if (!this.ledger) return "Trimly was locked.";
+      if (!this.ledger) return t.notices.lockedWhileChanging;
       try {
         await this.store.rekey(this.ledger, p);
       } catch (e) {
-        return `Could not re-encrypt: ${(e as Error).message}`;
+        return t.notices.reencryptFailed((e as Error).message);
       }
       this.passphrases.set(p);
-      new Notice("Passphrase changed. Store the new one somewhere safe.");
+      new Notice(t.notices.passphraseChanged);
       return null;
     }).open();
   }
@@ -348,27 +427,36 @@ class TrimlySettingTab extends PluginSettingTab {
   display() {
     const { containerEl } = this;
     const p = this.plugin;
+    const s = t.settings;
     containerEl.empty();
 
-    new Setting(containerEl).setName("Security").setHeading();
-    containerEl.createEl("p", {
-      cls: "trimly-warning",
-      text:
-        "Everything Trimly saves in your vault is encrypted with AES-GCM using your passphrase. " +
-        "If you lose the passphrase, the data cannot be recovered.",
-    });
+    new Setting(containerEl)
+      .setName(s.language)
+      .setDesc(s.languageDesc)
+      .addDropdown((d) =>
+        d
+          .addOptions(LANGUAGE_NAMES)
+          .setValue(p.settings.language)
+          .onChange(async (v) => {
+            await p.setLanguage(v as Language);
+            this.display();
+          })
+      );
+
+    new Setting(containerEl).setName(s.security).setHeading();
+    containerEl.createEl("p", { cls: "trimly-warning", text: s.securityWarning });
 
     new Setting(containerEl)
-      .setName("Status")
-      .setDesc(p.ledger ? `Unlocked: ${p.store.path}` : p.store.exists() ? "Locked" : "No ledger yet")
+      .setName(s.status)
+      .setDesc(p.ledger ? s.unlockedAt(p.store.path) : p.store.exists() ? s.locked : s.noLedger)
       .addButton((b) =>
         p.ledger
-          ? b.setButtonText("Lock now").onClick(() => {
+          ? b.setButtonText(s.lockNow).onClick(() => {
               p.lock();
               this.display();
             })
           : b
-              .setButtonText(p.store.exists() ? "Unlock" : "Create ledger")
+              .setButtonText(p.store.exists() ? s.unlock : s.createLedger)
               .setCta()
               .onClick(async () => {
                 await p.unlock();
@@ -377,13 +465,10 @@ class TrimlySettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Remember passphrase on this device")
-      .setDesc(
-        "Keeps the passphrase in this device's local app storage, outside the vault, so it is never synced or committed. " +
-          "Turn off to be asked once per session."
-      )
-      .addToggle((t) =>
-        t.setValue(p.settings.rememberPassphrase).onChange(async (v) => {
+      .setName(s.remember)
+      .setDesc(s.rememberDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.rememberPassphrase).onChange(async (v) => {
           p.settings.rememberPassphrase = v;
           await p.saveSettings();
           p.passphrases.syncRemember();
@@ -391,19 +476,19 @@ class TrimlySettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Change passphrase")
-      .setDesc("Re-encrypts the ledger with a new passphrase.")
-      .addButton((b) => b.setButtonText("Change").onClick(() => p.changePassphrase()));
+      .setName(s.change)
+      .setDesc(s.changeDesc)
+      .addButton((b) => b.setButtonText(s.changeButton).onClick(() => p.changePassphrase()));
 
     new Setting(containerEl)
-      .setName("Forget passphrase on this device")
-      .setDesc("Removes the stored passphrase from this device and locks Trimly. Your data stays encrypted in the vault.")
+      .setName(s.forget)
+      .setDesc(s.forgetDesc)
       .addButton((b) =>
         b
-          .setButtonText("Forget")
+          .setButtonText(s.forgetButton)
           .setWarning()
           .onClick(() =>
-            new ConfirmModal(this.app, "Forget the passphrase on this device? Make sure you have it saved elsewhere.", "Forget", () => {
+            new ConfirmModal(this.app, s.forgetConfirm, s.forgetButton, () => {
               p.passphrases.forget();
               p.lock();
               this.display();
@@ -411,13 +496,13 @@ class TrimlySettingTab extends PluginSettingTab {
           )
       );
 
-    new Setting(containerEl).setName("Storage").setHeading();
+    new Setting(containerEl).setName(s.storage).setHeading();
 
     new Setting(containerEl)
-      .setName("Folder")
-      .setDesc("Vault folder for the encrypted ledger file. Changing it locks Trimly; move the existing file yourself.")
-      .addText((t) =>
-        t
+      .setName(s.folder)
+      .setDesc(s.folderDesc)
+      .addText((text) =>
+        text
           .setPlaceholder("Trimly")
           .setValue(p.settings.folder)
           .onChange(async (v) => {
@@ -428,10 +513,10 @@ class TrimlySettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("Currency")
-      .setDesc("Three-letter currency code, e.g. BRL, USD, EUR.")
-      .addText((t) =>
-        t.setValue(p.settings.currency).onChange(async (v) => {
+      .setName(s.currency)
+      .setDesc(s.currencyDesc)
+      .addText((text) =>
+        text.setValue(p.settings.currency).onChange(async (v) => {
           const code = v.trim().toUpperCase();
           if (!/^[A-Z]{3}$/.test(code)) return;
           p.settings.currency = code;
@@ -440,37 +525,84 @@ class TrimlySettingTab extends PluginSettingTab {
         })
       );
 
-    new Setting(containerEl).setName("Investments").setHeading();
+    new Setting(containerEl).setName(s.investments).setHeading();
     new Setting(containerEl)
-      .setName("Compare with benchmarks")
-      .setDesc(
-        "Fetches the public CDI and IPCA series from the Central Bank of Brazil (api.bcb.gov.br) when you open the investments view. " +
-          "Only the series and a date range are requested; nothing about you or your portfolio is sent."
-      )
-      .addToggle((t) =>
-        t.setValue(p.settings.benchmarks).onChange(async (v) => {
+      .setName(s.benchmarks)
+      .setDesc(s.benchmarksDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.benchmarks).onChange(async (v) => {
           p.settings.benchmarks = v;
           await p.saveSettings();
           p.refreshViews();
         })
       );
 
+    this.displayQuotes();
     this.displayBankSync();
+  }
+
+  private displayQuotes() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    const s = t.settings;
+    new Setting(containerEl).setName(s.quotes).setHeading();
+    containerEl.createEl("p", { cls: "setting-item-description", text: s.quotesIntro });
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc(s.unlockForSync);
+      return;
+    }
+    const config = p.ledger.brapi;
+    let token = config?.token ?? "";
+    new Setting(containerEl)
+      .setName(s.quotesToken)
+      .setDesc(s.quotesTokenDesc)
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.setValue(token).onChange((v) => (token = v.trim()));
+      });
+    new Setting(containerEl)
+      .setName(s.status)
+      .setDesc(s.quotesStatus(config?.lastUpdate ? p.formatDateTime(config.lastUpdate) : null))
+      .addButton((b) =>
+        b
+          .setButtonText(s.quotesSave)
+          .setCta()
+          .onClick(async () => {
+            if (!token) {
+              new Notice(t.notices.fillBrapi);
+              return;
+            }
+            await p.mutate((l) => {
+              l.brapi = { ...l.brapi, token };
+            });
+            await p.sync(false, false);
+            this.display();
+          })
+      );
+    if (!config) return;
+    new Setting(containerEl)
+      .setName(s.quotesRemove)
+      .setDesc(s.quotesRemoveDesc)
+      .addButton((b) =>
+        b
+          .setButtonText(s.quotesRemove)
+          .setWarning()
+          .onClick(() =>
+            new ConfirmModal(this.app, s.quotesRemoveConfirm, s.quotesRemove, () => {
+              void p.mutate((l) => delete l.brapi).then(() => this.display());
+            }).open()
+          )
+      );
   }
 
   private displayBankSync() {
     const { containerEl } = this;
     const p = this.plugin;
-    new Setting(containerEl).setName("Bank sync (optional)").setHeading();
-    containerEl.createEl("p", {
-      cls: "setting-item-description",
-      text:
-        "Imports accounts and transactions from your banks through Pluggy (pluggy.ai), so you don't have to type them in. " +
-        "Optional: without it Trimly works fully offline and makes no network requests. When on, Trimly contacts " +
-        "api.pluggy.ai to fetch your data; the credentials are stored inside the encrypted ledger.",
-    });
+    const s = t.settings;
+    new Setting(containerEl).setName(s.bankSync).setHeading();
+    containerEl.createEl("p", { cls: "setting-item-description", text: s.bankSyncIntro });
     if (!p.ledger) {
-      new Setting(containerEl).setDesc("Unlock Trimly to set up bank sync.");
+      new Setting(containerEl).setDesc(s.unlockForSync);
       return;
     }
 
@@ -481,55 +613,49 @@ class TrimlySettingTab extends PluginSettingTab {
       itemIds: config?.itemIds.join(", ") ?? "",
     };
     new Setting(containerEl)
-      .setName("Client ID")
-      .setDesc("Shown when you create an application in the dashboard at pluggy.ai.")
-      .addText((t) => t.setValue(draft.clientId).onChange((v) => (draft.clientId = v.trim())));
-    new Setting(containerEl).setName("Client secret").addText((t) => {
-      t.inputEl.type = "password";
-      t.setValue(draft.clientSecret).onChange((v) => (draft.clientSecret = v.trim()));
+      .setName(s.clientId)
+      .setDesc(s.clientIdDesc)
+      .addText((text) => text.setValue(draft.clientId).onChange((v) => (draft.clientId = v.trim())));
+    new Setting(containerEl).setName(s.clientSecret).addText((text) => {
+      text.inputEl.type = "password";
+      text.setValue(draft.clientSecret).onChange((v) => (draft.clientSecret = v.trim()));
     });
     new Setting(containerEl)
-      .setName("Item IDs")
-      .setDesc("One per connected bank, separated by commas.")
-      .addText((t) => t.setValue(draft.itemIds).onChange((v) => (draft.itemIds = v)));
+      .setName(s.itemIds)
+      .setDesc(s.itemIdsDesc)
+      .addText((text) => text.setValue(draft.itemIds).onChange((v) => (draft.itemIds = v)));
 
     new Setting(containerEl)
-      .setName(config ? "Status" : "Connect")
-      .setDesc(
-        config
-          ? config.lastSync
-            ? `Last synced ${new Date(config.lastSync).toLocaleString()}.`
-            : "Not synced yet."
-          : "Saves the credentials and runs the first sync."
-      )
+      .setName(config ? s.status : s.connect)
+      .setDesc(config ? (config.lastSync ? s.lastSynced(p.formatDateTime(config.lastSync)) : s.notSynced) : s.connectDesc)
       .addButton((b) =>
         b
-          .setButtonText(config ? "Save and sync" : "Connect")
+          .setButtonText(config ? s.saveAndSync : s.connect)
           .setCta()
           .onClick(async () => {
             const itemIds = draft.itemIds.split(/[\s,]+/).filter(Boolean);
             if (!draft.clientId || !draft.clientSecret || !itemIds.length) {
-              new Notice("Fill in the client ID, client secret and at least one item ID.");
+              new Notice(t.notices.fillPluggy);
               return;
             }
             await p.mutate((l) => {
               l.pluggy = { ...l.pluggy, clientId: draft.clientId, clientSecret: draft.clientSecret, itemIds };
             });
-            await p.syncBank();
+            await p.sync();
             this.display();
           })
       );
 
     if (!config) return;
     new Setting(containerEl)
-      .setName("Disconnect")
-      .setDesc("Stops syncing and removes the credentials. Imported accounts and transactions stay.")
+      .setName(s.disconnect)
+      .setDesc(s.disconnectDesc)
       .addButton((b) =>
         b
-          .setButtonText("Disconnect")
+          .setButtonText(s.disconnect)
           .setWarning()
           .onClick(() =>
-            new ConfirmModal(this.app, "Disconnect bank sync and remove the Pluggy credentials?", "Disconnect", () => {
+            new ConfirmModal(this.app, s.disconnectConfirm, s.disconnect, () => {
               void p.mutate((l) => delete l.pluggy).then(() => this.display());
             }).open()
           )

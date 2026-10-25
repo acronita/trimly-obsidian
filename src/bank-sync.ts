@@ -9,8 +9,8 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, newId } from "./ledger.ts";
-import type { Account, AccountType, Ledger, Transaction, TxType } from "./ledger.ts";
+import { accountBalance, defaultCategoryKey, newId } from "./ledger.ts";
+import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync fetches and reconciles. */
 export const SYNC_WINDOW_DAYS = 90;
@@ -62,24 +62,24 @@ export interface SyncResult {
   removed: number;
 }
 
-/** Pluggy category (any level) -> name of a default Trimly category. */
-const CATEGORY_MAP: Record<string, string> = {
-  Salary: "Salary",
-  "Entrepreneurial activities": "Freelance",
-  "Proceeds interests and dividends": "Investments",
-  Income: "Other income",
-  Utilities: "Utilities",
-  Telecommunications: "Utilities",
-  Education: "Education",
-  "Wellness and fitness": "Health",
-  Tickets: "Entertainment",
-  Housing: "Housing",
-  Groceries: "Groceries",
-  "Food and drinks": "Dining out",
-  Transportation: "Transport",
-  Healthcare: "Health",
-  Shopping: "Shopping",
-  "Digital services": "Entertainment",
+/** Pluggy category (any level, Pluggy's English description) -> Trimly starter category. */
+const CATEGORY_MAP: Record<string, DefaultCategory> = {
+  Salary: "salary",
+  "Entrepreneurial activities": "freelance",
+  "Proceeds interests and dividends": "investments",
+  Income: "otherIncome",
+  Utilities: "utilities",
+  Telecommunications: "utilities",
+  Education: "education",
+  "Wellness and fitness": "health",
+  Tickets: "entertainment",
+  Housing: "housing",
+  Groceries: "groceries",
+  "Food and drinks": "dining",
+  Transportation: "transport",
+  Healthcare: "health",
+  Shopping: "shopping",
+  "Digital services": "entertainment",
 };
 
 /** Categories marking money moved between the user's own accounts. */
@@ -194,8 +194,8 @@ function mapCategory(ledger: Ledger, rec: Rec): string | undefined {
   if (rec.type === "transfer") return undefined;
   const kind = rec.type === "income" ? "income" : "expense";
   for (const d of rec.path) {
-    const name = CATEGORY_MAP[d];
-    const cat = name && ledger.categories.find((c) => c.name === name && c.kind === kind);
+    const key = CATEGORY_MAP[d];
+    const cat = key && ledger.categories.find((c) => c.kind === kind && defaultCategoryKey(c) === key);
     if (cat) return cat.id;
   }
   return undefined;

@@ -2,6 +2,28 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Interface in Brazilian Portuguese, with English as an option. All interface text now
+  lives in `src/i18n/` with pt-BR as the source language and English as a translation; new setting
+  *Idioma / Language* (`language` in `data.json`, default `pt-BR`). Switching language renames the
+  starter categories and the starter account that still have their default name, and the first
+  unlock after upgrading translates the English starter names of existing ledgers. Bank sync maps
+  Pluggy categories to starter categories by key instead of by English name. Dates and numbers
+  follow the interface language. Why: Trimly is for Brazil, and Brazilian financial terms read
+  badly in translation. Files touched: `src/i18n/*`, every module with interface text,
+  `test/bank-sync.test.ts`, `test/encryption-rule.test.ts`, `.claude/CLAUDE.md`, `README.md`,
+  `docs/`.
+
+- 2026-10-25 — Quotes from brapi.dev (optional). With a brapi token (stored inside the encrypted
+  ledger), each sync, and unlocking at most once an hour, quotes every open position whose code is a
+  B3 ticker (one request per ticker): price, daily change and company name, shown on the row and in
+  the details. Manual positions with a quantity get their value recalculated, which counts as market
+  return. The sync button and command now cover bank sync and quotes. Tesouro Direto bonds Pluggy
+  names by code (LFT, LTN, NTN-B…) are named "Tesouro Selic 2027" and the like. Ledger v3 gains
+  `brapi` and `Asset.quote`. Why: positions named by code were unrecognizable, and manual stocks had
+  no way to follow the market. Files touched: `src/brapi.ts`, `src/quotes.ts`, `src/main.ts`,
+  `src/investment-sync.ts`, `src/ledger.ts`, `src/view.ts`, `test/quotes.test.ts`,
+  `test/investment-sync.test.ts`.
+
 - 2026-10-25 — Investments mode, phase 5: allocation targets. New Targets tab: a target percentage
   per asset class (scaled to 100% when they don't add up), each class's current share and how much
   to buy or sell to reach its target, and a contribution planner that splits an amount across

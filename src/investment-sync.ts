@@ -12,6 +12,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
+import { t } from "./i18n/index.ts";
 import { flowWindowStart, newId, recordSnapshot } from "./ledger.ts";
 import type { Asset, AssetClass, Ledger, Movement, MovementType } from "./ledger.ts";
 
@@ -103,29 +104,59 @@ function cents(value: number | null | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : undefined;
 }
 
-const SUBTYPE_LABELS: Record<string, string> = {
-  CDB: "CDB",
-  LCI: "LCI",
-  LCA: "LCA",
-  LC: "LC",
-  LIG: "LIG",
-  LF: "LF",
-  CRI: "CRI",
-  CRA: "CRA",
-  DEBENTURES: "Debenture",
-  TREASURY: "Treasury",
-  RETIREMENT: "Retirement plan",
-  PGBL: "PGBL",
-  VGBL: "VGBL",
-  STRUCTURED_NOTE: "COE",
-};
+/** Product codes that read as product names; the rest are translated. */
+const SUBTYPE_NAMES = ["CDB", "LCI", "LCA", "LC", "LIG", "LF", "CRI", "CRA", "PGBL", "VGBL"];
 
-/** Pluggy's name, unless it is a bare product code (e.g. "CDB224AXYZ1"): then "CDB · Issuer". Tickers stay as they are. */
-export function displayName(p: Pick<PluggyInvestment, "name" | "code" | "type" | "subtype" | "issuer">): string {
+function productLabel(p: Pick<PluggyInvestment, "type" | "subtype">): string {
+  const sub = p.subtype ?? "";
+  if (SUBTYPE_NAMES.includes(sub)) return sub;
+  if (sub === "STRUCTURED_NOTE") return "COE";
+  const translated = t.labels.product[sub as keyof typeof t.labels.product];
+  if (translated) return translated;
+  return p.type === "FIXED_INCOME" ? t.labels.product.fixedIncome : "";
+}
+
+/** Tesouro Direto bonds by their technical code, most specific first. Product names are Brazilian proper names. */
+const TREASURY_BONDS: [RegExp, string][] = [
+  [/^LFT\b/i, "Tesouro Selic"],
+  [/^NTN-?F\b/i, "Tesouro Prefixado com Juros Semestrais"],
+  [/^LTN\b/i, "Tesouro Prefixado"],
+  [/^NTN-?B1\b/i, "Tesouro RendA+"],
+  [/^NTN-?B\s*(P|PRINC)/i, "Tesouro IPCA+"],
+  [/^NTN-?B\b/i, "Tesouro IPCA+ com Juros Semestrais"],
+];
+
+/**
+ * Tesouro Direto name ("Tesouro Selic 2027") for a bond Pluggy names by its
+ * code (LFT, LTN, NTN-B…), falling back to the index when the code is unknown.
+ * Null when it is not a treasury bond or already has a proper name.
+ */
+export function treasuryName(p: Pick<PluggyInvestment, "name" | "subtype" | "rateType" | "fixedAnnualRate" | "dueDate">): string | null {
+  const name = p.name.trim();
+  if (/tesouro/i.test(name)) return null;
+  const known = TREASURY_BONDS.find(([re]) => re.test(name))?.[1];
+  if (!known && p.subtype !== "TREASURY") return null;
+  const product =
+    known ??
+    (p.rateType === "SELIC" ? "Tesouro Selic" : p.rateType === "IPCA" ? "Tesouro IPCA+" : p.fixedAnnualRate ? "Tesouro Prefixado" : null);
+  if (!product) return null;
+  const year = p.dueDate?.slice(0, 4);
+  return year ? `${product} ${year}` : product;
+}
+
+/**
+ * Pluggy's name, unless it is a treasury bond code ("LFT" → "Tesouro Selic 2027")
+ * or a bare product code ("CDB224AXYZ1" → "CDB · Issuer"). Tickers stay as they are.
+ */
+export function displayName(
+  p: Pick<PluggyInvestment, "name" | "code" | "type" | "subtype" | "issuer" | "rateType" | "fixedAnnualRate" | "dueDate">
+): string {
+  const treasury = treasuryName(p);
+  if (treasury) return treasury;
   const name = p.name.trim();
   const looksLikeCode = (!/\s/.test(name) && /\d/.test(name)) || (!!p.code && name === p.code);
   if (!looksLikeCode || p.type === "EQUITY" || p.type === "ETF") return name;
-  const label = (p.subtype && SUBTYPE_LABELS[p.subtype]) ?? (p.type === "FIXED_INCOME" ? "Fixed income" : "");
+  const label = productLabel(p);
   const parts = [label, p.issuer?.trim()].filter(Boolean);
   return parts.length ? parts.join(" · ") : name;
 }

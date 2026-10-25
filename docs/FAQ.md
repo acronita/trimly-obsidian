@@ -28,6 +28,17 @@ They come from bank sync. The connected Pluggy item must include the investments
 loading them fails, the sync shows a notice with Pluggy's error. Positions only have history from
 your first sync on, since Pluggy reports current values only.
 
+**How do I switch Trimly to English?**
+*Settings → Trimly → Idioma*. Starter categories you haven't renamed are renamed too; command
+names change after restarting Obsidian.
+
+**How do quotes work?**
+Create a token at brapi.dev and paste it in *Settings → Trimly → Cotações*. Positions whose code is a
+B3 ticker (PETR4, HGLG11, BOVA11…) get their price on every sync. For a manual position, fill in the
+ticker and the quantity and its value follows the quote. Synced positions keep the value their bank
+reports. brapi's free plan quotes one ticker per request and has a monthly limit; when it is
+reached, the sync says so.
+
 **How do I add an investment bank sync doesn't see (crypto, a foreign broker)?**
 In investments mode, *Add → New position* with its current value, then record contributions,
 withdrawals and income with *Add → New movement*. Update the position's value from time to time
