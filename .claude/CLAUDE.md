@@ -19,6 +19,16 @@ Start your response by listing which files were read.
 
 All instruction files, skill files, and code comments intended for contributors must be written in **English**.
 
+### Interface language: Brazilian Portuguese first
+
+Trimly is built for people in Brazil. Every piece of interface text (labels, notices, errors shown to
+the user, settings) is written **first in Brazilian Portuguese** in `src/i18n/pt-BR.ts`, then
+translated in `src/i18n/en.ts` (the English dictionary must match the Portuguese one's shape, so
+`tsc` fails on a missing key). Never write a UI string in English and translate it to Portuguese
+afterwards, and never hard-code UI text in components: read it from `t` (`src/i18n/index.ts`).
+Brazilian product and index names (Tesouro Selic, CDI, IPCA, JCP, FII) stay as they are in both
+languages.
+
 ---
 
 ## Engineering Rules

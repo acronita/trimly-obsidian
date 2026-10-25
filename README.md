@@ -19,9 +19,21 @@ passphrase that never leaves your device.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
+- **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
+  profit, allocation by class and institution, upcoming maturities, every position grouped by
+  class, an evolution chart, time-weighted returns (month by month, 12 months, since start)
+  compared with CDI and IPCA, every contribution, withdrawal and tax, and the income (dividends,
+  JCP, interest, coupons) per month and per position. Positions come from bank sync or are added by
+  hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
+  withdrawals, income and taxes. Click a position for its details. Set a target share per asset
+  class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
   through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
   purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).
+- **Quotes (optional)** — with a [brapi.dev](https://brapi.dev) token, stocks, real estate funds, ETFs and
+  BDRs show their price, daily change and company name, and manual positions with a ticker and
+  quantity follow the market.
+- **Language** — Brazilian Portuguese by default, English in settings.
 - Amount input accepts `1234.56`, `1.234,56` or `1,234.56`; any ISO currency code (BRL by default).
 
 ## Security model
@@ -33,10 +45,16 @@ passphrase that never leaves your device.
 - The passphrase is **never** stored in the vault. With *Remember passphrase on this device* on
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
-- The plugin's `data.json` (inside the vault) only holds the folder, currency and that toggle.
+- The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle
+  and the benchmarks toggle.
 - **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
-  passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger.
+  passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With
+  investments that have history, the investments view also fetches the public CDI and IPCA series
+  from `api.bcb.gov.br` (Central Bank of Brazil); only the series and a date range are requested.
+  Turn off *Compare with CDI and IPCA* in settings to stop it. With a brapi token, Trimly sends the
+  tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
+  the encrypted ledger.
 - **If you lose the passphrase, the data cannot be recovered.** Save it in a password manager.
 
 ## Install (manual)
@@ -71,6 +89,12 @@ the bank no longer lists are removed, and a manually deleted imported entry come
 description and notes on an imported entry are kept. The dashboard syncs on unlock (at most every
 6 hours) and from the refresh button. Categories are filled in only while your Pluggy plan includes
 categorization.
+
+Bank sync also imports the investment positions of each item (fixed income, treasury, stocks, real
+estate funds, funds, ETFs, retirement plans) when the item includes Pluggy's investments product.
+Each sync overwrites their values, imports their movements, and records the day's portfolio total
+with the money moved and the income paid since the day before, so the history starts with your
+first sync. A position the item stops reporting is shown as closed.
 
 ## Development
 

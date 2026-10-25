@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyBankData } from "../src/bank-sync.ts";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "../src/bank-sync.ts";
-import { accountBalance, defaultLedger, monthSummary, parseLedger } from "../src/ledger.ts";
+import { accountBalance, defaultLedger, monthSummary, parseLedger, translateDefaults } from "../src/ledger.ts";
+import { LANGUAGES } from "../src/i18n/index.ts";
 import type { Ledger } from "../src/ledger.ts";
 
 const WINDOW = "2026-08-01";
@@ -121,8 +122,9 @@ test("a card transaction restated with a new id keeps the user's category and is
   const imported = l.transactions.find((t) => t.pluggyIds?.includes("old-id"));
   assert.ok(imported);
   assert.equal(imported.pending, true);
-  const groceries = l.categories.find((c) => c.name === "Groceries");
-  imported.categoryId = groceries?.id;
+  const groceries = l.categories.find((c) => c.name === "Mercado");
+  assert.ok(groceries);
+  imported.categoryId = groceries.id;
 
   // the bill closed: Pluggy deletes the row and re-creates it, posted, with a new id and date
   const r = applyBankData(l, data([tx("new-id", "p-card", "2026-10-12", 80, "DEBIT")]), WINDOW, TODAY);
@@ -132,7 +134,7 @@ test("a card transaction restated with a new id keeps the user's category and is
   assert.deepEqual(card[0].pluggyIds, ["new-id"]);
   assert.equal(card[0].date, "2026-10-12");
   assert.equal(card[0].pending, undefined);
-  assert.equal(card[0].categoryId, groceries?.id);
+  assert.equal(card[0].categoryId, groceries.id);
 });
 
 test("imported transactions the bank no longer returns are removed, but only inside the window", () => {
@@ -165,8 +167,8 @@ test("Pluggy categories map onto the default Trimly categories by tree, otherwis
     const t = l.transactions.find((x) => x.pluggyIds?.includes(pid));
     return l.categories.find((c) => c.id === t?.categoryId)?.name;
   };
-  assert.equal(nameOf("ifood"), "Dining out");
-  assert.equal(nameOf("market"), "Groceries");
+  assert.equal(nameOf("ifood"), "Restaurantes");
+  assert.equal(nameOf("market"), "Mercado");
   assert.equal(nameOf("mystery"), undefined);
 });
 
@@ -174,4 +176,12 @@ test("bank sync credentials survive saving and reopening the ledger", () => {
   const l = fresh();
   l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"] };
   assert.deepEqual(parseLedger(JSON.stringify(l)).pluggy, l.pluggy);
+});
+
+test("starter categories still map after being translated", () => {
+  const l = fresh();
+  translateDefaults(l, LANGUAGES["pt-BR"], LANGUAGES.en);
+  applyBankData(l, data([tx("market", "p-card", "2026-10-11", 90, "DEBIT", { categoryId: "10000000" })]), WINDOW, TODAY);
+  const t = l.transactions.find((x) => x.pluggyIds?.includes("market"));
+  assert.equal(l.categories.find((c) => c.id === t?.categoryId)?.name, "Groceries");
 });
