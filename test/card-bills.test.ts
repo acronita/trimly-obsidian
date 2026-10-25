@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cardBills } from "../src/ledger.ts";
+import { cardBill, cardBills } from "../src/ledger.ts";
 import type { Ledger, Transaction } from "../src/ledger.ts";
 
 /** Card closing on the 3rd, due on the 10th, with a checking account paying it. */
@@ -80,4 +80,12 @@ test("a closing day past the end of a short month falls on its last day", () => 
   const l = ledger([], { closingDay: 31, dueDay: 8 });
   const { closed, open } = cardBills(l, "card", "2026-02-15");
   assert.deepEqual([closed.close, open.close, open.due], ["2026-01-31", "2026-02-28", "2026-03-08"]);
+});
+
+test("an older bill counts the payments made in the cycle after it closed", () => {
+  const l = ledger([buy("aug", "2026-08-20", 300_00), pay("p-aug", "2026-09-08", 300_00), buy("sep", "2026-09-20", 100_00)]);
+  const aug = cardBill(l, "card", "2026-10-25", -2);
+  assert.deepEqual([aug.start, aug.close, aug.total, aug.paid, aug.remaining], ["2026-08-04", "2026-09-03", 300_00, 300_00, 0]);
+  // the August payment does not leak into the September bill
+  assert.equal(cardBill(l, "card", "2026-10-25", -1).remaining, 100_00);
 });

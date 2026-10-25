@@ -454,7 +454,17 @@ export class AccountModal extends Modal {
         });
     daySettings.push(
       daySetting(t.modals.account.closingDay, t.modals.account.closingDayDesc, "closingDay"),
-      daySetting(t.modals.account.dueDay, t.modals.account.dueDayDesc, "dueDay")
+      daySetting(t.modals.account.dueDay, t.modals.account.dueDayDesc, "dueDay"),
+      new Setting(contentEl)
+        .setName(t.modals.account.limit)
+        .setDesc(t.modals.account.limitDesc)
+        .addText((text) => {
+          text.inputEl.inputMode = "decimal";
+          text.setValue(this.draft.creditLimit ? centsToInput(this.draft.creditLimit) : "").onChange((v) => {
+            const c = parseAmount(v);
+            this.draft.creditLimit = c && c > 0 ? c : undefined;
+          });
+        })
     );
     showDays();
     new Setting(contentEl)
@@ -474,7 +484,7 @@ export class AccountModal extends Modal {
     const onView = this.onViewTransactions;
     if (onView) {
       new Setting(contentEl).addButton((b) =>
-        b.setButtonText(t.modals.account.viewTransactions).onClick(() => {
+        b.setButtonText(this.draft.type === "credit" ? t.modals.account.viewBills : t.modals.account.viewTransactions).onClick(() => {
           this.close();
           onView();
         })
@@ -490,6 +500,7 @@ export class AccountModal extends Modal {
         if (this.draft.type !== "credit") {
           delete this.draft.closingDay;
           delete this.draft.dueDay;
+          delete this.draft.creditLimit;
         }
         this.draft.name = this.draft.name.trim();
         this.onSave(this.draft);

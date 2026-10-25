@@ -27,8 +27,8 @@ export interface PluggyAccount {
   marketingName?: string | null;
   /** bank: signed balance; credit card: amount owed */
   balance: number;
-  /** credit cards: ISO dates of the current bill's closing and due day */
-  creditData?: { balanceCloseDate?: string | null; balanceDueDate?: string | null } | null;
+  /** credit cards: ISO dates of the current bill's closing and due day, and the limit */
+  creditData?: { balanceCloseDate?: string | null; balanceDueDate?: string | null; creditLimit?: number | null } | null;
 }
 
 export interface PluggyTransaction {
@@ -240,6 +240,8 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     const dueDay = Number(p.creditData?.balanceDueDate?.slice(8, 10));
     if (acc.type === "credit" && !acc.closingDay && closeDay) acc.closingDay = closeDay;
     if (acc.type === "credit" && !acc.dueDay && dueDay) acc.dueDay = dueDay;
+    // the limit changes on the bank's side (raises), so the bank's value always wins
+    if (acc.type === "credit" && p.creditData?.creditLimit) acc.creditLimit = cents(p.creditData.creditLimit);
     byPluggyId.set(p.id, acc);
   }
 

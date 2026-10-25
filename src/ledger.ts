@@ -80,6 +80,8 @@ export interface Account {
   closingDay?: number;
   /** credit cards: day of month the closed bill is due */
   dueDay?: number;
+  /** credit cards: credit limit, in cents */
+  creditLimit?: number;
 }
 
 export interface Category {
@@ -540,6 +542,8 @@ export interface CardBill {
   due?: string;
   /** charges minus refunds in the cycle, in cents (positive = owed) */
   total: number;
+  /** payments counted toward this bill */
+  paid: number;
   /** part of `total` not paid yet */
   remaining: number;
 }
@@ -558,49 +562,56 @@ function dueAfter(close: string, dueDay: number): string {
   return same > close ? same : closingIn(y, m, dueDay);
 }
 
+/** A transfer into the card: paying its bill. */
+export function isCardPayment(tx: Transaction, accountId: string): boolean {
+  return tx.type === "transfer" && tx.toAccountId === accountId;
+}
+
 /**
- * The last closed bill and the open one of a credit card on `today`. A card's
- * balance adds up its whole history; bills split it by cycle instead. Card
- * payments (transfers into the card) after the closing pay the closed bill
- * first, and only what exceeds it goes to the open one. Refunds and other
- * credits lower the bill of their own cycle.
+ * A credit card bill on `today`: offset 0 is the open one, -1 the last closed,
+ * -2 the one before, and so on. A card's balance adds up its whole history;
+ * bills split it by cycle instead. Payments (transfers into the card) made
+ * after a bill closes, until the next closing, pay that bill; what exceeds it
+ * goes to the following one. Refunds and other credits lower the bill of their
+ * own cycle.
  */
-export function cardBills(ledger: Ledger, accountId: string, today: string): { closed: CardBill; open: CardBill } {
+export function cardBill(ledger: Ledger, accountId: string, today: string, offset = 0): CardBill {
   const acc = ledger.accounts.find((a) => a.id === accountId);
   const [y, m] = today.split("-").map(Number);
   // the cycle includes its closing day, so a bill closing today is still open
   let k = 0;
   while (closingIn(y, m - 1 + k, acc?.closingDay) < today) k++;
-  const nextClose = closingIn(y, m - 1 + k, acc?.closingDay);
-  const lastClose = closingIn(y, m - 2 + k, acc?.closingDay);
-  const prevClose = closingIn(y, m - 3 + k, acc?.closingDay);
-  const dayAfter = (iso: string) => toISODate(new Date(Date.parse(`${iso}T12:00:00`) + 86_400_000));
+  const closeAt = (j: number) => closingIn(y, m - 1 + k + offset + j, acc?.closingDay);
+  const [before, prev, close, next] = [closeAt(-2), closeAt(-1), closeAt(0), closeAt(1)];
 
-  let closedTotal = 0;
-  let openTotal = 0;
+  let total = 0;
+  let prevTotal = 0;
   let paid = 0;
+  let prevPaid = 0;
   for (const tx of ledger.transactions) {
     const v = effectOn(tx, accountId);
-    if (v === 0 || tx.date <= prevClose) continue;
-    const payment = tx.type === "transfer" && tx.toAccountId === accountId;
-    if (payment) {
-      if (tx.date > lastClose) paid += v;
-    } else if (tx.date <= lastClose) closedTotal -= v;
-    else if (tx.date <= nextClose) openTotal -= v;
+    if (v === 0 || tx.date <= before || tx.date > next) continue;
+    if (isCardPayment(tx, accountId)) {
+      if (tx.date > close) paid += v;
+      else if (tx.date > prev) prevPaid += v;
+    } else if (tx.date > prev && tx.date <= close) total -= v;
+    else if (tx.date <= prev) prevTotal -= v;
   }
-  const closedRemaining = Math.max(0, closedTotal - paid);
-  const extra = Math.max(0, paid - Math.max(0, closedTotal));
-  const bill = (start: string, close: string, total: number, remaining: number): CardBill => ({
+  paid += Math.max(0, prevPaid - Math.max(0, prevTotal));
+  const start = toISODate(new Date(Date.parse(`${prev}T12:00:00`) + 86_400_000));
+  return {
     start,
     close,
     due: acc?.dueDay ? dueAfter(close, acc.dueDay) : undefined,
     total,
-    remaining,
-  });
-  return {
-    closed: bill(dayAfter(prevClose), lastClose, closedTotal, closedRemaining),
-    open: bill(dayAfter(lastClose), nextClose, openTotal, Math.max(0, openTotal - extra)),
+    paid,
+    remaining: Math.max(0, total - paid),
   };
+}
+
+/** The last closed bill and the open one of a credit card on `today`. */
+export function cardBills(ledger: Ledger, accountId: string, today: string): { closed: CardBill; open: CardBill } {
+  return { closed: cardBill(ledger, accountId, today, -1), open: cardBill(ledger, accountId, today, 0) };
 }
 
 /** Accounts plus investments. */

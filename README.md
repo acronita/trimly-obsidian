@@ -14,7 +14,8 @@ passphrase that never leaves your device.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
   and notes. Search and filter by account, category, type and month.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
-  credit cards show their open and closed bill (closing and due day) instead of a running balance
+  grouped into accounts, credit cards and investments; credit cards show their current bill and
+  limit, and their transactions are browsed bill by bill (closing and due day)
   without losing history.
 - **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),

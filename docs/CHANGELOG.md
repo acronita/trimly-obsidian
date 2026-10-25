@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.7.0 — 2026-10-25
+
+- 2026-10-25 — Credit cards get their own views. The Accounts tab is split into *Contas*,
+  *Cartões de crédito* and *Investimentos* groups. A card tile is now compact: current bill, when it
+  closes, a bar of the limit used with what is available, and one line for a closed bill still
+  unpaid (red when overdue). Transactions filtered by a card show one bill at a time instead of a
+  month: arrows step through bills, a status (open, closed, paid, overdue), total / paid / to pay /
+  due date, the bill's purchases by day and, for closed bills, the payments that paid it. The
+  account modal gets a *Limite* field and shows *Ver faturas* for cards. Synced cards take the
+  limit from Pluggy's `creditData.creditLimit` on every sync (the bank raises limits, so its value
+  wins). New `cardBill(ledger, card, today, offset)` returns any bill; payments made after a bill
+  closes, until the next closing, pay that bill, and the excess goes to the next one. New optional
+  `creditLimit` on accounts (no format bump). The overview gets a *Cartões de crédito* card: per
+  card the current bill, a closed bill still unpaid (red when overdue) or when the current one
+  closes, and the limit bar; clicking a card opens its bills. Cards left the overview's *Contas*
+  card. Files touched: `src/ledger.ts`, `src/bank-sync.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/*`, `test/card-bills.test.ts`,
+  `test/bank-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
 ## 0.6.0 — 2026-10-25
 
 - 2026-10-25 — Credit cards show bills instead of a balance. A card's balance added up its whole

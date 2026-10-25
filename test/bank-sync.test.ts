@@ -173,11 +173,14 @@ test("Pluggy categories map onto the default Trimly categories by tree, otherwis
 });
 
 test("a synced card takes its closing and due days from the bank, without overriding ones set by hand", () => {
-  const withDays: PluggyAccount = { ...card, creditData: { balanceCloseDate: "2026-11-03T00:00:00.000Z", balanceDueDate: "2026-11-10T00:00:00.000Z" } };
+  const withDays: PluggyAccount = {
+    ...card,
+    creditData: { balanceCloseDate: "2026-11-03T00:00:00.000Z", balanceDueDate: "2026-11-10T00:00:00.000Z", creditLimit: 5000 },
+  };
   const l = fresh();
   applyBankData(l, data([], [withDays]), WINDOW, TODAY);
   const acc = synced(l, "p-card");
-  assert.deepEqual([acc.closingDay, acc.dueDay], [3, 10]);
+  assert.deepEqual([acc.closingDay, acc.dueDay, acc.creditLimit], [3, 10, 5000_00]);
   acc.closingDay = 5;
   applyBankData(l, data([], [withDays]), WINDOW, TODAY);
   assert.deepEqual([acc.closingDay, acc.dueDay], [5, 10]);
