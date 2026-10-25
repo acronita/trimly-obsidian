@@ -8,8 +8,9 @@
  */
 import { LANGUAGES, t } from "./i18n/index.ts";
 import type { Strings } from "./i18n/index.ts";
+import { businessDayFrom } from "./business-days.ts";
 
-export const LEDGER_VERSION = 4;
+export const LEDGER_VERSION = 5;
 
 export type AccountType = "checking" | "savings" | "credit" | "cash" | "investment" | "other";
 export type CategoryKind = "expense" | "income";
@@ -18,6 +19,7 @@ export type Frequency = "weekly" | "monthly" | "yearly";
 export type MovementType = "buy" | "sell" | "income" | "tax" | "amortization" | "transfer";
 export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
 export type ObligationKind = "payment" | "document";
+export type ObligationFrequency = "monthly" | "yearly";
 
 export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
   checking: "landmark",
@@ -144,20 +146,27 @@ export interface Recurring {
 }
 
 /**
- * Something to do by a due date every period, by hand: a bill to pay, a tax
- * return to file, an invoice to issue. Unlike a recurring rule it moves no
+ * Something to do by a due date every month or year, by hand: a bill to pay, a
+ * tax return to file, an invoice to issue. Unlike a recurring rule it moves no
  * money by itself; each occurrence is marked done (optionally with the
- * transaction that paid it) or skipped.
+ * transaction that paid it) or skipped. Dates are only days (and a month for
+ * yearly ones): every period's occurrence falls in that month or year.
  */
 export interface Obligation {
   id: string;
   name: string;
   kind: ObligationKind;
-  frequency: Frequency;
-  /** first due date; its day of month anchors monthly/yearly ones */
-  startDate: string;
-  /** last allowed due date (inclusive), optional */
-  endDate?: string;
+  frequency: ObligationFrequency;
+  /** payments: day of month due; documents: day the window to send it opens */
+  day: number;
+  /** documents: last day of the window, the deadline; unset = `day` */
+  endDay?: number;
+  /** yearly ones: month of the occurrence, 1-12 */
+  month?: number;
+  /** when it was created; occurrences due earlier are never open */
+  since: string;
+  /** stopped: no more occurrences, history kept */
+  archived?: boolean;
   /** usual amount, payments only, in cents */
   amount?: number;
   /** remind this many days before the due date */
@@ -172,7 +181,10 @@ export interface Settlement {
   due: string;
   /** done = paid or issued; skipped = nothing to do that period (no water bill this month) */
   status: "done" | "skipped";
-  /** when it was marked */
+  /**
+   * when it was done; for a payment marked on a day banks are closed, the next
+   * business day it is scheduled for (later than today until then)
+   */
   date: string;
   /** the transaction that paid it, optional */
   transactionId?: string;
@@ -418,7 +430,7 @@ export function parseLedger(json: string): Ledger {
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
-    obligations: raw.obligations ?? [],
+    obligations: (raw.obligations ?? []).map(migrateObligation),
     investments: {
       assets: raw.investments?.assets ?? [],
       snapshots: raw.investments?.snapshots ?? [],
@@ -429,6 +441,19 @@ export function parseLedger(json: string): Ledger {
     brapi: raw.brapi,
     fx: raw.fx,
   };
+}
+
+/** An obligation as saved up to 0.9.0, with full first and last due dates instead of days. */
+type LegacyObligation = Obligation & { startDate?: string; endDate?: string };
+
+function migrateObligation(o: LegacyObligation): Obligation {
+  if (o.day) return o;
+  const { startDate = todayISO(), endDate, ...rest } = o;
+  // weekly obligations no longer exist; they become monthly on the same day
+  const migrated: Obligation = { ...rest, frequency: o.frequency === "yearly" ? "yearly" : "monthly", day: Number(startDate.slice(8, 10)), since: startDate };
+  if (migrated.frequency === "yearly") migrated.month = Number(startDate.slice(5, 7));
+  if (endDate && endDate < todayISO()) migrated.archived = true;
+  return migrated;
 }
 
 // ---- money ----
@@ -1152,26 +1177,55 @@ export function settlementFor(o: Obligation, due: string): Settlement | undefine
   return o.settled.find((s) => periodOf(s.due, o.frequency) === period);
 }
 
+function dayIn(year: number, month: number, day: number): string {
+  return toISODate(new Date(year, month - 1, Math.min(day, daysInMonth(year, month - 1))));
+}
+
+/** Due dates (deadlines, for documents) from the period of `since` on, skipping those before it. */
+function* dueDates(o: Obligation): Generator<string> {
+  const [y, m] = o.since.split("-").map(Number);
+  // guard against a corrupted obligation looping forever
+  for (let i = 0; i < 1000; i++) {
+    const due =
+      o.frequency === "yearly"
+        ? dayIn(y + i, o.month ?? 1, o.endDay ?? o.day)
+        : dayIn(y + Math.floor((m - 1 + i) / 12), ((m - 1 + i) % 12) + 1, o.endDay ?? o.day);
+    if (due >= o.since) yield due;
+  }
+}
+
+/** Day the window to send a document opens, for its occurrence due on `due`. */
+export function windowStart(o: Obligation, due: string): string {
+  const [y, m] = due.split("-").map(Number);
+  return dayIn(y, m, o.day);
+}
+
 /** Due dates of an obligation on or before `until` not dealt with yet, oldest first. */
 export function openOccurrences(o: Obligation, until: string): string[] {
-  const anchorDay = Number(o.startDate.slice(8, 10));
   const out: string[] = [];
-  let due = o.startDate;
-  // guard against a corrupted obligation looping forever
-  for (let i = 0; i < 1000 && due <= until; i++) {
-    if (o.endDate && due > o.endDate) break;
+  if (o.archived) return out;
+  for (const due of dueDates(o)) {
+    if (due > until) break;
     if (!settlementFor(o, due)) out.push(due);
-    due = nextOccurrence(due, o.frequency, anchorDay);
   }
   return out;
 }
 
 /** First due date after `after` (exclusive), or undefined once the obligation has ended. */
 export function nextDue(o: Obligation, after: string): string | undefined {
-  const anchorDay = Number(o.startDate.slice(8, 10));
-  let due = o.startDate;
-  for (let i = 0; i < 1000 && due <= after; i++) due = nextOccurrence(due, o.frequency, anchorDay);
-  return o.endDate && due > o.endDate ? undefined : due;
+  if (o.archived) return undefined;
+  for (const due of dueDates(o)) if (due > after) return due;
+  return undefined;
+}
+
+/**
+ * Settlement for marking a payment done on `date`: on a day banks are closed
+ * the payment is only scheduled, for the next business day.
+ */
+export function paidOn(o: Obligation, due: string, date: string, transactionId?: string): Settlement {
+  const s: Settlement = { due, status: "done", date: o.kind === "payment" ? businessDayFrom(date) : date };
+  if (transactionId) s.transactionId = transactionId;
+  return s;
 }
 
 export interface DueObligation {

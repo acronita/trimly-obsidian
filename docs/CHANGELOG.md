@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.10.0 — 2026-10-25
+
+- 2026-10-25 — Obligations are set by day, not by date. Bills take a due day; documents a start
+  and an end day (the window to send them, due on the end day); yearly ones also a month. The year
+  and month are always the current ones, so the *Primeiro vencimento* and *Data final* dates are
+  gone; an *Encerrada* toggle in the editor stops an obligation instead. *Marcar como paga* /
+  *Marcar como enviado* record the day it was done; a bill marked on a weekend or national bank
+  holiday (Carnaval, Sexta-feira Santa and Corpus Christi included) is recorded as scheduled for
+  the next business day, shows *agendada para …* until then, and *paga* after. Ledger format
+  bumped to version 5 (`day`, `endDay?`, `month?`, `since`, `archived?` replace `startDate` and
+  `endDate`): version 4 ledgers migrate on load (day and month from the first due date, a past end
+  date archives it, weekly ones become monthly), and 0.9.0 refuses version 5 ledgers instead of
+  breaking. Why: typing full dates for something that happens every month was confusing, and a
+  bill paid on a Saturday is only debited on Monday. Files touched: `src/business-days.ts` (new),
+  `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/*`, `test/obligations.test.ts`,
+  `README.md`, `docs/ARCHITECTURE.md`, `manifest.json`, `package.json`, `versions.json`.
+
 ## 0.9.0 — 2026-10-25
 
 - 2026-10-25 — The subscriptions total stands out: instead of a small muted line under the list,

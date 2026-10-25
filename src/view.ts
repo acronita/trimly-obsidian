@@ -49,9 +49,11 @@ import {
   daysUntil,
   dueObligations,
   nextDue,
+  paidOn,
   paymentCandidates,
   settleObligation,
   unsettleObligation,
+  windowStart,
   removeCategory,
   removeManualAsset,
   removeManualMovement,
@@ -1154,15 +1156,25 @@ export class TrimlyView extends ItemView {
       this.iconTile(row, OBLIGATION_ICONS[o.kind], due < today ? OVERDUE : NEUTRAL);
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: o.name });
-      main.createDiv({ cls: "trimly-row-sub", text: `${dueWhen(today, due)} · ${this.shortDate(due)}` });
+      const opens = o.kind === "document" && o.endDay ? windowStart(o, due) : undefined;
+      const when =
+        opens && opens > today
+          ? t.obligations.opensOn(this.shortDate(opens), this.shortDate(due))
+          : opens
+            ? `${dueWhen(today, due)} · ${t.obligations.window(this.shortDate(opens), this.shortDate(due))}`
+            : `${dueWhen(today, due)} · ${this.shortDate(due)}`;
+      main.createDiv({ cls: "trimly-row-sub", text: when });
       if (o.amount) row.createDiv({ cls: "trimly-amount is-expense", text: this.money(o.amount) });
-      const done = row.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.obligations.markDone } });
+      const isPayment = o.kind === "payment";
+      const done = row.createEl("button", { cls: "clickable-icon", attr: { "aria-label": isPayment ? t.obligations.markPaid : t.obligations.markSent } });
       setIcon(done, "check");
       done.addEventListener("click", (e) => {
         e.stopPropagation();
+        const s = paidOn(o, due, todayISO());
+        if (s.date > todayISO()) new Notice(t.obligations.scheduledNotice(o.name, this.shortDate(s.date)));
         void this.plugin.mutate((l) => {
           const target = l.obligations.find((x) => x.id === o.id);
-          if (target) settleObligation(target, { due, status: "done", date: todayISO() });
+          if (target) settleObligation(target, s);
         });
       });
       row.addEventListener("click", () => this.settle(o, due));
@@ -1191,13 +1203,16 @@ export class TrimlyView extends ItemView {
     for (const { o, s } of history) {
       const row = hist.createDiv("trimly-row is-clickable");
       if (s.status === "skipped") row.addClass("is-archived");
-      this.iconTile(row, s.status === "skipped" ? "minus" : "check", NEUTRAL);
+      const scheduled = s.status === "done" && s.date > today;
+      this.iconTile(row, s.status === "skipped" ? "minus" : scheduled ? "clock" : "check", NEUTRAL);
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: o.name });
       const tx = s.transactionId ? ledger.transactions.find((x) => x.id === s.transactionId) : undefined;
       const parts = [
         this.shortDate(s.due),
-        s.status === "skipped" ? t.obligations.skipped : (o.kind === "payment" ? t.obligations.paidOn : t.obligations.doneOn)(this.shortDate(s.date)),
+        s.status === "skipped"
+          ? t.obligations.skipped
+          : (scheduled ? t.obligations.scheduledFor : o.kind === "payment" ? t.obligations.paidOn : t.obligations.sentOn)(this.shortDate(s.date)),
       ];
       if (tx) parts.push(t.obligations.linked);
       main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
