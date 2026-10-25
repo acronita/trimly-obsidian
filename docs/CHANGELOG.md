@@ -2,6 +2,12 @@
 
 ## 0.9.0 — 2026-10-25
 
+- 2026-10-25 — The subscriptions total stands out: instead of a small muted line under the list,
+  the card ends with a separated footer, *Total em assinaturas* on the left and the monthly cost in
+  large type on the right with the yearly cost under it. Why: the sum was easy to miss, and it is
+  the number that tells whether subscriptions are worth it. Files touched: `src/view.ts`,
+  `src/styles/index.css`, `src/i18n/*`.
+
 - 2026-10-25 — Amounts in other currencies. Pluggy reports purchases abroad in their own currency
   (`currencyCode`, e.g. USD) with the charge in the account's currency in `amountInAccountCurrency`,
   and some accounts (e.g. dollar accounts) are in another currency; Trimly read every `amount` as

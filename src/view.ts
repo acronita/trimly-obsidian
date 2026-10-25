@@ -1111,10 +1111,11 @@ export class TrimlyView extends ItemView {
       row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(r.amount, r.type, currency) });
       row.addEventListener("click", () => this.editRecurring(r.id));
     }
-    card.createDiv({
-      cls: "trimly-muted trimly-card-foot",
-      text: t.recurring.subscriptionsTotal(this.money(Math.round(monthly)), this.money(Math.round(monthly * 12))),
-    });
+    const foot = card.createDiv("trimly-total-foot");
+    foot.createDiv({ cls: "trimly-eyebrow", text: t.recurring.subscriptionsTotal });
+    const sums = foot.createDiv("trimly-total-foot-values");
+    sums.createDiv({ cls: "trimly-total-foot-value is-expense", text: t.recurring.perMonth(this.money(Math.round(monthly))) });
+    sums.createDiv({ cls: "trimly-muted", text: t.recurring.perYear(this.money(Math.round(monthly * 12))) });
   }
 
   private editRecurring(id: string | null) {
