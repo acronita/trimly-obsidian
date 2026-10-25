@@ -187,7 +187,7 @@ export class TrimlyView extends ItemView {
   // ---- shared bits ----
 
   private money(cents: number) {
-    return this.plugin.formatMoney(cents);
+    return this.plugin.settings.hideValues ? "••••••" : this.plugin.formatMoney(cents);
   }
 
   private signedMoney(cents: number, type: TxType) {
@@ -300,6 +300,17 @@ export class TrimlyView extends ItemView {
     if (this.mode === "accounts") this.renderMonthNav(left);
 
     const actions = top.createDiv("trimly-top-actions");
+    const hidden = this.plugin.settings.hideValues;
+    const eye = actions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": hidden ? t.header.showValues : t.header.hideValues },
+    });
+    setIcon(eye, hidden ? "eye-off" : "eye");
+    eye.addEventListener("click", () => {
+      this.plugin.settings.hideValues = !hidden;
+      void this.plugin.saveSettings();
+      this.plugin.refreshViews();
+    });
     if (this.plugin.canSync()) {
       const syncing = this.plugin.isSyncing();
       const sync = actions.createEl("button", {

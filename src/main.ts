@@ -26,6 +26,8 @@ export interface TrimlySettings {
   benchmarks: boolean;
   /** interface language; Brazilian Portuguese first */
   language: Language;
+  /** mask money amounts on screen (eye button in the header) */
+  hideValues: boolean;
 }
 
 /** Unlocking syncs the bank again only when the last sync is older than this. */
@@ -43,6 +45,7 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   rememberPassphrase: true,
   benchmarks: true,
   language: "pt-BR",
+  hideValues: false,
 };
 
 function olderThan(iso: string | undefined, ms: number): boolean {
@@ -309,13 +312,14 @@ export default class TrimlyPlugin extends Plugin {
           new Notice(t.notices.setupSyncFirst);
           return;
         }
-        this.refreshViews();
         if (bank && this.ledger?.pluggy) await this.syncBank(quiet);
         if (this.ledger?.brapi) await this.refreshQuotes(quiet);
       })().finally(() => {
         this.syncing = null;
         this.refreshViews();
       });
+      // render only once `this.syncing` is set, so the button starts spinning right away
+      this.refreshViews();
     }
     return this.syncing;
   }

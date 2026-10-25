@@ -108,6 +108,8 @@ export const ptBR = {
     modeInvestments: "Investimentos",
     sync: "Sincronizar",
     syncing: "Sincronizando…",
+    hideValues: "Ocultar valores",
+    showValues: "Mostrar valores",
     lock: "Bloquear o Trimly",
     newTransaction: "Nova transação",
     add: "Adicionar",

@@ -103,6 +103,8 @@ export const en: Strings = {
     modeInvestments: "Investments",
     sync: "Sync",
     syncing: "Syncing…",
+    hideValues: "Hide values",
+    showValues: "Show values",
     lock: "Lock Trimly",
     newTransaction: "New transaction",
     add: "Add",

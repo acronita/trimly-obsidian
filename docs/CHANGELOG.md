@@ -2,6 +2,13 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Eye button in the dashboard header hides every money amount (shown as `••••••`,
+  charts and tooltips included; percentages stay), for using Trimly with someone looking at the
+  screen. The choice is kept in `data.json` (`hideValues`, off by default) — a display preference,
+  not financial data. The sync button now spins as soon as it is clicked: the view re-rendered
+  before the sync was marked as running, so it only spun after switching tabs. Files touched:
+  `src/main.ts`, `src/view.ts`, `src/i18n/*`, `test/encryption-rule.test.ts`.
+
 - 2026-10-25 — Line charts show the value under the pointer: hovering or touching a chart (evolution,
   cumulative return, a position's 3 months) draws a guide line, a dot on each series and a tooltip
   with the date and values. Tesouro Direto positions without an institution show "Tesouro Nacional"
