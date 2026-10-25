@@ -1,0 +1,31 @@
+// Mirrors the TS checks behind the Obsidian plugin scorecard (community.obsidian.md).
+import { defineConfig, globalIgnores } from "eslint/config";
+import obsidianmd from "eslint-plugin-obsidianmd";
+
+export default defineConfig([
+  globalIgnores(["main.js", "node_modules/", "build-local.mjs", "esbuild.config.mjs", "scripts/", "test/"]),
+  ...obsidianmd.configs.recommended,
+  {
+    languageOptions: {
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: ["eslint.config.*"],
+        },
+      },
+    },
+    rules: {
+      // Off in the recommended preset, but the scorecard reports it.
+      "obsidianmd/prefer-active-doc": "warn",
+      // getSettingDefinitions() is an Obsidian 1.13 API, far above minAppVersion and absent from the pinned types.
+      "obsidianmd/settings-tab/prefer-setting-definitions": "off",
+      // Product names, UI paths and terms the plugin intentionally capitalizes.
+      "obsidianmd/ui/sentence-case": [
+        "warn",
+        {
+          brands: ["Obsidian", "Markdown", "Trimly", "AES-GCM", "PBKDF2", "BRL", "USD", "EUR"],
+          ignoreWords: ["Ctrl", "Settings"],
+        },
+      ],
+    },
+  },
+]);
