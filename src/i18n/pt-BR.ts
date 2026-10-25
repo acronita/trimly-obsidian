@@ -17,7 +17,7 @@ export const ptBR = {
     add: "Adicionar",
     all: "Tudo",
     other: "Outros",
-    unknown: "Desconhecida",
+    unknown: "Não informada",
     uncategorized: "Sem categoria",
     net: "Saldo",
     income: "Receitas",
@@ -408,7 +408,9 @@ export const ptBR = {
       name: "Nome",
       namePlaceholder: "Nome do investimento",
       class: "Classe",
-      syncedNote: "Este ativo vem da sincronização bancária: valores e movimentações são atualizados a cada sincronização.",
+      syncedNote:
+        "Este ativo vem da sincronização bancária: valores e movimentações são atualizados a cada sincronização. " +
+        "Nome, classe e instituição que você definir aqui são mantidos.",
       code: "Ticker ou código",
       codeDesc: "Com um ticker (ex.: PETR4) e a quantidade, a cotação da brapi atualiza o valor.",
       optional: "Opcional",

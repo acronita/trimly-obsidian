@@ -2,6 +2,13 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Fewer positions without an institution. A position Pluggy reports without one takes
+  the institution most other positions of the same Pluggy item report (an item is one bank
+  connection), before falling back to the issuer. Synced positions can now have their institution
+  set by hand in *Editar ativo*, and sync keeps it (`Asset.institutionEdited`). The rest are grouped
+  as "Não informada". Files touched: `src/investment-sync.ts`, `src/ledger.ts`, `src/modals.ts`,
+  `src/i18n/*`, `test/investment-sync.test.ts`.
+
 - 2026-10-25 — Interface in Brazilian Portuguese, with English as an option. All interface text now
   lives in `src/i18n/` with pt-BR as the source language and English as a translation; new setting
   *Idioma / Language* (`language` in `data.json`, default `pt-BR`). Switching language renames the

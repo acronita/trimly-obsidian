@@ -544,7 +544,17 @@ export class AssetModal extends Modal {
         .setValue(d.assetClass)
         .onChange((v) => (d.assetClass = v as AssetClass))
     );
+    const institution = () =>
+      new Setting(contentEl)
+        .setName(a.institution)
+        .addText((text) =>
+          text
+            .setPlaceholder(a.institutionPlaceholder)
+            .setValue(d.institution ?? "")
+            .onChange((v) => (d.institution = v.trim() || undefined))
+        );
     if (synced) {
+      institution();
       contentEl.createEl("p", {
         cls: "setting-item-description",
         text: a.syncedNote,
@@ -559,14 +569,7 @@ export class AssetModal extends Modal {
             .setValue(d.code ?? "")
             .onChange((v) => (d.code = v.trim().toUpperCase() || undefined))
         );
-      new Setting(contentEl)
-        .setName(a.institution)
-        .addText((text) =>
-          text
-            .setPlaceholder(a.institutionPlaceholder)
-            .setValue(d.institution ?? "")
-            .onChange((v) => (d.institution = v.trim() || undefined))
-        );
+      institution();
       moneySetting(contentEl, a.value, a.valueDesc, this.onDelete ? d.value : undefined, (c) =>
         this.field("value", c === undefined ? null : c, (v) => (d.value = Math.abs(v)))
       );

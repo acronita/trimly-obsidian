@@ -162,7 +162,7 @@ export function displayName(
 }
 
 /** Copy Pluggy's numbers onto `asset`; returns whether anything changed. */
-function apply(asset: Asset, p: PluggyInvestment, today: string): boolean {
+function apply(asset: Asset, p: PluggyInvestment, today: string, itemInstitution?: string): boolean {
   const before = JSON.stringify(asset);
   const set = <K extends keyof Asset>(key: K, value: Asset[K] | null | undefined) => {
     if (value === undefined || value === null || value === "") delete asset[key];
@@ -177,8 +177,9 @@ function apply(asset: Asset, p: PluggyInvestment, today: string): boolean {
   set("issuer", p.issuer);
   set("subtype", p.subtype);
   set("pluggyName", p.name);
-  // MeuPluggy and some banks leave the institution empty; the issuer is the closest stand-in
-  set("institution", p.institution?.name || p.issuer);
+  // MeuPluggy and some banks leave the institution empty: another position of the same
+  // connection (same bank) may name it, and the issuer is the last stand-in
+  if (!asset.institutionEdited) set("institution", p.institution?.name || itemInstitution || p.issuer);
   if (!asset.renamed) asset.name = displayName(p);
   set("rate", p.rate || undefined);
   set("rateType", p.rateType);
@@ -261,6 +262,18 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
   // money moved that the positions' movements don't explain
   let untracked = 0;
 
+  // an item is one bank connection: the institution most of its positions report
+  const itemInstitution = new Map<string, string>();
+  const counts = new Map<string, Map<string, number>>();
+  for (const p of investments) {
+    const name = p.institution?.name?.trim();
+    if (!name) continue;
+    const byName = counts.get(p.itemId) ?? new Map<string, number>();
+    byName.set(name, (byName.get(name) ?? 0) + 1);
+    counts.set(p.itemId, byName);
+  }
+  for (const [item, byName] of counts) itemInstitution.set(item, [...byName.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+
   const seen = new Set<string>();
   for (const p of investments) {
     seen.add(p.id);
@@ -269,10 +282,10 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
     const newlyTracked = !asset || !!asset.closed;
     if (!asset) {
       asset = { id: newId(), name: displayName(p), assetClass: assetClass(p), value: 0, updatedAt: today, pluggyId: p.id, pluggyItemId: p.itemId };
-      apply(asset, p, today);
+      apply(asset, p, today, itemInstitution.get(p.itemId));
       assets.push(asset);
       result.added++;
-    } else if (apply(asset, p, today)) {
+    } else if (apply(asset, p, today, itemInstitution.get(p.itemId))) {
       result.updated++;
     }
     if (p.transactions) result.movements += mergeMovements(ledger, asset, p.transactions);

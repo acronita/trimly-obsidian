@@ -171,6 +171,8 @@ export interface Asset {
   pluggyName?: string;
   /** the user changed the name, so sync stops replacing it */
   renamed?: boolean;
+  /** the user set the institution of a synced position, so sync stops replacing it */
+  institutionEdited?: boolean;
   /** last brapi quote, for positions with a B3 ticker */
   quote?: Quote;
 }
@@ -678,6 +680,7 @@ export function saveAsset(ledger: Ledger, asset: Asset, today: string) {
     assets.push(asset);
   } else {
     if (before.name !== asset.name) asset.renamed = true;
+    if (asset.pluggyId && (before.institution ?? "") !== (asset.institution ?? "")) asset.institutionEdited = true;
     if (!before.closed && asset.closed) untracked = -before.value;
     else if (before.closed && !asset.closed) untracked = asset.value;
     assets[i] = asset;

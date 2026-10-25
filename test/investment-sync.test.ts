@@ -262,7 +262,12 @@ test("sync renames positions to the readable name until the user renames them", 
 
 test("a position without an institution falls back to its issuer instead of showing as unknown", () => {
   const l = defaultLedger();
-  applyInvestments(l, [inv("c", { issuer: "Banco Inter", institution: null }), inv("d", { institution: { name: "XP" } })], ["item-1"], TODAY);
+  applyInvestments(
+    l,
+    [inv("c", { issuer: "Banco Inter", institution: null }), inv("d", { itemId: "item-2", institution: { name: "XP" } })],
+    ["item-1", "item-2"],
+    TODAY
+  );
   assert.equal(asset(l, "c").institution, "Banco Inter");
   assert.equal(asset(l, "d").institution, "XP");
 });
@@ -277,4 +282,25 @@ test("treasury bonds named by code get their Tesouro Direto name and year", () =
   assert.equal(displayName({ name: "TD 123", type: "FIXED_INCOME", subtype: "TREASURY", rateType: "SELIC", dueDate: due }), "Tesouro Selic 2027");
   // already a proper name
   assert.equal(displayName({ name: "Tesouro Selic 2029", type: "FIXED_INCOME", subtype: "TREASURY" }), "Tesouro Selic 2029");
+});
+
+test("a position without an institution takes the one other positions of the same bank connection report", () => {
+  const l = defaultLedger();
+  applyInvestments(
+    l,
+    [inv("stock", { type: "EQUITY", subtype: "STOCK", institution: null, issuer: null }), inv("cdb", { institution: { name: "XP Investimentos" } }), inv("other-bank", { itemId: "item-2", institution: null, issuer: null })],
+    ["item-1", "item-2"],
+    TODAY
+  );
+  assert.equal(asset(l, "stock").institution, "XP Investimentos");
+  // nothing to go on for the other connection
+  assert.equal(asset(l, "other-bank").institution, undefined);
+});
+
+test("an institution set by the user on a synced position survives the next sync", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("s", { institution: null, issuer: null })], ["item-1"], "2026-10-24");
+  saveAsset(l, { ...asset(l, "s"), institution: "Nubank" }, "2026-10-24");
+  applyInvestments(l, [inv("s", { institution: { name: "Something else" } })], ["item-1"], TODAY);
+  assert.equal(asset(l, "s").institution, "Nubank");
 });

@@ -14,7 +14,7 @@ export const en: Strings = {
     add: "Add",
     all: "All",
     other: "Other",
-    unknown: "Unknown",
+    unknown: "Not reported",
     uncategorized: "Uncategorized",
     net: "Net",
     income: "Income",
@@ -403,7 +403,9 @@ export const en: Strings = {
       name: "Name",
       namePlaceholder: "Name of the investment",
       class: "Class",
-      syncedNote: "This position comes from bank sync: its values and movements are updated on every sync.",
+      syncedNote:
+        "This position comes from bank sync: its values and movements are updated on every sync. " +
+        "The name, class and institution you set here are kept.",
       code: "Ticker or code",
       codeDesc: "With a ticker (for example PETR4) and the quantity, the brapi quote updates the value.",
       optional: "Optional",
