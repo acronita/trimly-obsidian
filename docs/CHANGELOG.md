@@ -2,6 +2,10 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Unlocking syncs right away when investments were never synced, instead of waiting
+  for the 6-hour interval; a manual sync that finds no investments says so. Why: after upgrading,
+  the Investments tab stayed empty until the next scheduled sync. Files touched: `src/main.ts`.
+
 - 2026-10-25 — Investments mode, phase 1. A switch at the top of the dashboard toggles between
   *Accounts* (the existing tabs) and *Investments*, which has its own tabs: Overview (portfolio
   value, amount invested, profit, taxes and fees due, allocation by class, value by institution,

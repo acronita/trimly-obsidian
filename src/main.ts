@@ -216,7 +216,9 @@ export default class TrimlyPlugin extends Plugin {
 
   private autoSyncBank() {
     const last = this.ledger?.pluggy?.lastSync;
-    if (this.ledger?.pluggy && (!last || Date.now() - Date.parse(last) > AUTO_SYNC_INTERVAL_MS)) void this.syncBank(true);
+    // no snapshot = investments never synced (e.g. right after upgrading), so don't wait for the interval
+    const neverInvestments = this.ledger?.investments.snapshots.length === 0;
+    if (this.ledger?.pluggy && (!last || neverInvestments || Date.now() - Date.parse(last) > AUTO_SYNC_INTERVAL_MS)) void this.syncBank(true);
   }
 
   /** Pull accounts and transactions from Pluggy. `quiet` skips the notice when nothing changed. */
@@ -264,6 +266,10 @@ export default class TrimlyPlugin extends Plugin {
         inv.added && `${inv.added} new investment${inv.added === 1 ? "" : "s"}`,
         inv.closed && `${inv.closed} investment${inv.closed === 1 ? "" : "s"} closed`,
       ].filter(Boolean);
+      // say when Pluggy reports no investments at all, so an empty Investments tab is explainable
+      if (!quiet && !data.investments.errors.length && data.investments.investments.length === 0) {
+        parts.push(`Pluggy reported no investments for ${data.investments.itemIds.length} item${data.investments.itemIds.length === 1 ? "" : "s"}`);
+      }
       summary = parts.length ? `Bank sync: ${parts.join(", ")}.` : quiet ? "" : "Bank sync: everything up to date.";
     });
     if (summary) new Notice(summary);
