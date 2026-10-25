@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.6.0 — 2026-10-25
+
+- 2026-10-25 — Credit cards show bills instead of a balance. A card's balance added up its whole
+  history and stayed negative, so it said nothing about what is due. Cards now have an optional
+  closing day and due day (account modal; filled from Pluggy's `creditData` on sync when blank, a
+  day set by hand stays): the card tile shows the open bill and its closing date, the last closed
+  bill with what is left to pay and its due date (or *paga*), and the total owed; the overview's
+  account list shows the open bill. Card payments (transfers into the card) after the closing pay
+  the closed bill first, the rest goes to the open one; refunds lower their own cycle. Without a
+  closing day a bill follows the calendar month. Net worth still subtracts the full card debt.
+  New optional `closingDay` / `dueDay` on accounts (no format bump). The account modal also gets
+  *Ver transações*, which opens Transactions filtered by that account across all months, and the
+  Accounts tab gets an *Investimentos* tile (value, number of positions) that opens the
+  investments mode. Files touched: `src/ledger.ts`, `src/bank-sync.ts`, `src/modals.ts`,
+  `src/view.ts`, `src/i18n/*`, `test/card-bills.test.ts`, `test/bank-sync.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
 ## 0.5.0 — 2026-10-25
 
 - 2026-10-25 — New *Obrigações* tab: a checklist of what has to be done by hand by a due date,

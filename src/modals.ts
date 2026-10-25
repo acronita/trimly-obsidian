@@ -414,7 +414,8 @@ export class AccountModal extends Modal {
     app: App,
     existing: Account | null,
     private onSave: (a: Account) => void,
-    private onDelete: ((a: Account) => void) | null
+    private onDelete: ((a: Account) => void) | null,
+    private onViewTransactions: (() => void) | null = null
   ) {
     super(app);
     this.draft = existing ? { ...existing } : { id: newId(), name: "", type: "checking", openingBalance: 0 };
@@ -425,12 +426,37 @@ export class AccountModal extends Modal {
     contentEl.addClass("trimly-modal");
     this.setTitle(this.onDelete ? t.modals.account.editTitle : t.modals.account.newTitle);
     new Setting(contentEl).setName(t.modals.account.name).addText((text) => text.setValue(this.draft.name).onChange((v) => (this.draft.name = v)));
+    const daySettings: Setting[] = [];
+    const showDays = () => daySettings.forEach((s) => s.settingEl.toggle(this.draft.type === "credit"));
     new Setting(contentEl).setName(t.modals.account.type).addDropdown((d) =>
       d
         .addOptions(t.labels.accountType)
         .setValue(this.draft.type)
-        .onChange((v) => (this.draft.type = v as AccountType))
+        .onChange((v) => {
+          this.draft.type = v as AccountType;
+          showDays();
+        })
     );
+    const badDays = new Set<string>();
+    const daySetting = (name: string, desc: string, key: "closingDay" | "dueDay") =>
+      new Setting(contentEl)
+        .setName(name)
+        .setDesc(desc)
+        .addText((text) => {
+          text.inputEl.inputMode = "numeric";
+          text.setValue(this.draft[key]?.toString() ?? "").onChange((v) => {
+            const n = Number(v.trim());
+            const bad = !!v.trim() && !(Number.isInteger(n) && n >= 1 && n <= 31);
+            if (bad) badDays.add(key);
+            else badDays.delete(key);
+            this.draft[key] = v.trim() && !bad ? n : undefined;
+          });
+        });
+    daySettings.push(
+      daySetting(t.modals.account.closingDay, t.modals.account.closingDayDesc, "closingDay"),
+      daySetting(t.modals.account.dueDay, t.modals.account.dueDayDesc, "dueDay")
+    );
+    showDays();
     new Setting(contentEl)
       .setName(t.modals.account.opening)
       .setDesc(t.modals.account.openingDesc)
@@ -445,12 +471,26 @@ export class AccountModal extends Modal {
       .setName(t.modals.account.archived)
       .setDesc(t.modals.account.archivedDesc)
       .addToggle((tg) => tg.setValue(!!this.draft.archived).onChange((v) => (this.draft.archived = v || undefined)));
+    const onView = this.onViewTransactions;
+    if (onView) {
+      new Setting(contentEl).addButton((b) =>
+        b.setButtonText(t.modals.account.viewTransactions).onClick(() => {
+          this.close();
+          onView();
+        })
+      );
+    }
     const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
     footer(
       contentEl,
       errorEl,
       () => {
         if (!this.draft.name.trim()) return t.common.addName;
+        if (badDays.size && this.draft.type === "credit") return t.modals.account.dayInvalid;
+        if (this.draft.type !== "credit") {
+          delete this.draft.closingDay;
+          delete this.draft.dueDay;
+        }
         this.draft.name = this.draft.name.trim();
         this.onSave(this.draft);
         return null;

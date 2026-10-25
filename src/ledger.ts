@@ -76,6 +76,10 @@ export interface Account {
   archived?: boolean;
   /** Pluggy account this one mirrors; its balance and transactions come from bank sync */
   pluggyId?: string;
+  /** credit cards: day of month the bill closes (last day of a cycle); month end when unset */
+  closingDay?: number;
+  /** credit cards: day of month the closed bill is due */
+  dueDay?: number;
 }
 
 export interface Category {
@@ -524,6 +528,79 @@ export function accountBalance(ledger: Ledger, accountId: string, upTo?: string)
     bal += effectOn(tx, accountId);
   }
   return bal;
+}
+
+/** One credit card bill: the charges of a cycle and what is still unpaid. */
+export interface CardBill {
+  /** first day of the cycle */
+  start: string;
+  /** closing date, last day of the cycle (inclusive) */
+  close: string;
+  /** undefined when the card has no due day */
+  due?: string;
+  /** charges minus refunds in the cycle, in cents (positive = owed) */
+  total: number;
+  /** part of `total` not paid yet */
+  remaining: number;
+}
+
+/** The card's closing date in a month (0-based), clamped to short months. */
+function closingIn(year: number, month: number, closingDay?: number): string {
+  const d = new Date(year, month, 1);
+  const last = daysInMonth(d.getFullYear(), d.getMonth());
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), Math.min(closingDay ?? last, last)));
+}
+
+/** First date on `dueDay` after `close`. */
+function dueAfter(close: string, dueDay: number): string {
+  const [y, m] = close.split("-").map(Number);
+  const same = closingIn(y, m - 1, dueDay);
+  return same > close ? same : closingIn(y, m, dueDay);
+}
+
+/**
+ * The last closed bill and the open one of a credit card on `today`. A card's
+ * balance adds up its whole history; bills split it by cycle instead. Card
+ * payments (transfers into the card) after the closing pay the closed bill
+ * first, and only what exceeds it goes to the open one. Refunds and other
+ * credits lower the bill of their own cycle.
+ */
+export function cardBills(ledger: Ledger, accountId: string, today: string): { closed: CardBill; open: CardBill } {
+  const acc = ledger.accounts.find((a) => a.id === accountId);
+  const [y, m] = today.split("-").map(Number);
+  // the cycle includes its closing day, so a bill closing today is still open
+  let k = 0;
+  while (closingIn(y, m - 1 + k, acc?.closingDay) < today) k++;
+  const nextClose = closingIn(y, m - 1 + k, acc?.closingDay);
+  const lastClose = closingIn(y, m - 2 + k, acc?.closingDay);
+  const prevClose = closingIn(y, m - 3 + k, acc?.closingDay);
+  const dayAfter = (iso: string) => toISODate(new Date(Date.parse(`${iso}T12:00:00`) + 86_400_000));
+
+  let closedTotal = 0;
+  let openTotal = 0;
+  let paid = 0;
+  for (const tx of ledger.transactions) {
+    const v = effectOn(tx, accountId);
+    if (v === 0 || tx.date <= prevClose) continue;
+    const payment = tx.type === "transfer" && tx.toAccountId === accountId;
+    if (payment) {
+      if (tx.date > lastClose) paid += v;
+    } else if (tx.date <= lastClose) closedTotal -= v;
+    else if (tx.date <= nextClose) openTotal -= v;
+  }
+  const closedRemaining = Math.max(0, closedTotal - paid);
+  const extra = Math.max(0, paid - Math.max(0, closedTotal));
+  const bill = (start: string, close: string, total: number, remaining: number): CardBill => ({
+    start,
+    close,
+    due: acc?.dueDay ? dueAfter(close, acc.dueDay) : undefined,
+    total,
+    remaining,
+  });
+  return {
+    closed: bill(dayAfter(prevClose), lastClose, closedTotal, closedRemaining),
+    open: bill(dayAfter(lastClose), nextClose, openTotal, Math.max(0, openTotal - extra)),
+  };
 }
 
 /** Accounts plus investments. */

@@ -178,6 +178,12 @@ export const en: Strings = {
     add: "Add account",
     inUse: "This account has transactions. Archive it instead, or delete its transactions first.",
     deleteConfirm: (name: string) => `Delete account "${name}"?`,
+    openBill: (close: string) => `Open bill · closes on ${close}`,
+    closedBill: (v: string) => `Closed bill: ${v} to pay`,
+    closedBillDue: (v: string, due: string) => `Closed bill: ${v} to pay by ${due}`,
+    closedBillPaid: "Closed bill paid",
+    cardDebt: (v: string) => `Total owed: ${v}`,
+    noClosingDay: "No closing day: bills follow the month",
   },
 
   budgets: {
@@ -466,6 +472,12 @@ export const en: Strings = {
       openingDesc: "Balance before your first recorded transaction. Use a negative value for debt.",
       archived: "Archived",
       archivedDesc: "Hide from pickers and the overview. History is kept.",
+      closingDay: "Closing day",
+      closingDayDesc: "Last day of the bill cycle; purchases after it go to the next bill. Empty: the bill follows the month.",
+      dueDay: "Due day",
+      dueDayDesc: "Day the closed bill is due.",
+      dayInvalid: "Use a day between 1 and 31.",
+      viewTransactions: "View transactions",
     },
     category: {
       newTitle: "New category",

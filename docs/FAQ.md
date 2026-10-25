@@ -68,6 +68,13 @@ Trimly only pairs a move between two banks into a transfer when Pluggy categoriz
 same-person transfer (card bill payments are paired by amount and date). Without Pluggy's
 categorization, edit the two entries by hand: delete one and turn the other into a transfer.
 
+**My credit card bill amount looks wrong.**
+Set the card's closing day (and due day) in its account modal: without it the bill follows the
+calendar month. Synced cards take both from the bank when blank. A payment only counts when it is
+a transfer from another account into the card; a bill paid from a bank Trimly doesn't sync shows
+as income on the card and lowers the open bill instead. Turn it into a transfer from the paying
+account to fix that.
+
 **Why didn't I get an obligation reminder on my phone?**
 Reminders come from Trimly itself, so they only fire while Obsidian is open and Trimly is
 unlocked (obligations live inside the encrypted ledger): on unlock and every hour after. A plugin

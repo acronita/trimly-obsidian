@@ -183,6 +183,12 @@ export const ptBR = {
     add: "Adicionar conta",
     inUse: "Esta conta tem transações. Arquive-a, ou exclua as transações antes.",
     deleteConfirm: (name: string) => `Excluir a conta "${name}"?`,
+    openBill: (close: string) => `Fatura aberta · fecha em ${close}`,
+    closedBill: (v: string) => `Fatura fechada: ${v} a pagar`,
+    closedBillDue: (v: string, due: string) => `Fatura fechada: ${v} a pagar até ${due}`,
+    closedBillPaid: "Fatura fechada paga",
+    cardDebt: (v: string) => `Saldo devedor total: ${v}`,
+    noClosingDay: "Sem dia de fechamento: faturas seguem o mês",
   },
 
   budgets: {
@@ -472,6 +478,12 @@ export const ptBR = {
       openingDesc: "Saldo antes da primeira transação registrada. Use valor negativo para dívida.",
       archived: "Arquivada",
       archivedDesc: "Some das listas e da visão geral. O histórico é mantido.",
+      closingDay: "Dia de fechamento",
+      closingDayDesc: "Último dia do ciclo da fatura; compras depois dele entram na próxima. Vazio: a fatura segue o mês.",
+      dueDay: "Dia de vencimento",
+      dueDayDesc: "Dia em que a fatura fechada vence.",
+      dayInvalid: "Use um dia entre 1 e 31.",
+      viewTransactions: "Ver transações",
     },
     category: {
       newTitle: "Nova categoria",

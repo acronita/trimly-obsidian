@@ -27,6 +27,8 @@ export interface PluggyAccount {
   marketingName?: string | null;
   /** bank: signed balance; credit card: amount owed */
   balance: number;
+  /** credit cards: ISO dates of the current bill's closing and due day */
+  creditData?: { balanceCloseDate?: string | null; balanceDueDate?: string | null } | null;
 }
 
 export interface PluggyTransaction {
@@ -233,6 +235,11 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
       ledger.accounts.push(acc);
       result.accountsCreated++;
     }
+    // the bank's days only fill in blanks, so a day the user set by hand stays
+    const closeDay = Number(p.creditData?.balanceCloseDate?.slice(8, 10));
+    const dueDay = Number(p.creditData?.balanceDueDate?.slice(8, 10));
+    if (acc.type === "credit" && !acc.closingDay && closeDay) acc.closingDay = closeDay;
+    if (acc.type === "credit" && !acc.dueDay && dueDay) acc.dueDay = dueDay;
     byPluggyId.set(p.id, acc);
   }
 

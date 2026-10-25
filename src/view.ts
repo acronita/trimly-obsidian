@@ -6,6 +6,7 @@ import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
   ASSET_CLASS_ICONS,
+  Account,
   Asset,
   AssetClass,
   Category,
@@ -21,6 +22,7 @@ import {
   TxType,
   accountBalance,
   accountInUse,
+  cardBills,
   allocationByClass,
   applyInstitutionToConnection,
   centsToInput,
@@ -450,9 +452,15 @@ export class TrimlyView extends ItemView {
       this.iconTile(row, ACCOUNT_TYPE_ICONS[a.type], "var(--interactive-accent)");
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: a.name });
-      main.createDiv({ cls: "trimly-row-sub", text: t.labels.accountType[a.type] });
-      const bal = accountBalance(ledger, a.id, monthEnd);
-      row.createDiv({ cls: `trimly-amount ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      if (a.type === "credit") {
+        const open = cardBills(ledger, a.id, todayISO()).open;
+        main.createDiv({ cls: "trimly-row-sub", text: t.accounts.openBill(this.shortDate(open.close)) });
+        row.createDiv({ cls: "trimly-amount", text: this.money(open.remaining) });
+      } else {
+        main.createDiv({ cls: "trimly-row-sub", text: t.labels.accountType[a.type] });
+        const bal = accountBalance(ledger, a.id, monthEnd);
+        row.createDiv({ cls: `trimly-amount ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      }
       row.addEventListener("click", () => this.editAccount(a.id));
     }
     if (positions) {
@@ -696,12 +704,39 @@ export class TrimlyView extends ItemView {
       top.createDiv({ cls: "trimly-tile-tag", text: a.archived ? t.accounts.archived : t.labels.accountType[a.type] });
       tile.createDiv({ cls: "trimly-tile-name", text: a.name });
       const bal = accountBalance(ledger, a.id);
-      tile.createDiv({ cls: `trimly-tile-value ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      if (a.type === "credit") this.cardBillLines(tile, ledger, a, bal);
+      else tile.createDiv({ cls: `trimly-tile-value ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
       const count = ledger.transactions.filter((tx) => tx.accountId === a.id || tx.toAccountId === a.id).length;
       tile.createDiv({ cls: "trimly-muted", text: t.accounts.txCount(count) });
       tile.addEventListener("click", () => this.editAccount(a.id));
     }
+    const positions = openAssets(ledger).length;
+    if (positions) {
+      const tile = grid.createDiv("trimly-tile is-clickable");
+      const top = tile.createDiv("trimly-tile-top");
+      this.iconTile(top, "trending-up", "var(--interactive-accent)");
+      top.createDiv({ cls: "trimly-tile-tag", text: t.overview.positions(positions) });
+      tile.createDiv({ cls: "trimly-tile-name", text: t.overview.investments });
+      tile.createDiv({ cls: "trimly-tile-value", text: this.money(invested) });
+      tile.addEventListener("click", () => this.setMode("investments"));
+    }
     this.addTile(grid, t.accounts.add, () => this.editAccount(null));
+  }
+
+  /** A card shows its bills instead of a balance that adds up its whole history. */
+  private cardBillLines(tile: HTMLElement, ledger: Ledger, a: Account, balance: number) {
+    const { closed, open } = cardBills(ledger, a.id, todayISO());
+    tile.createDiv({ cls: "trimly-tile-value", text: this.money(open.remaining) });
+    tile.createDiv({ cls: "trimly-muted", text: t.accounts.openBill(this.shortDate(open.close)) });
+    if (closed.total > 0) {
+      const v = this.money(closed.remaining);
+      tile.createDiv({
+        cls: `trimly-muted ${closed.remaining > 0 && closed.due && closed.due < todayISO() ? "is-expense" : ""}`,
+        text: closed.remaining === 0 ? t.accounts.closedBillPaid : closed.due ? t.accounts.closedBillDue(v, this.shortDate(closed.due)) : t.accounts.closedBill(v),
+      });
+    }
+    if (balance < 0) tile.createDiv({ cls: "trimly-muted", text: t.accounts.cardDebt(this.money(-balance)) });
+    if (!a.closingDay) tile.createDiv({ cls: "trimly-muted", text: t.accounts.noClosingDay });
   }
 
   private addTile(grid: HTMLElement, label: string, onClick: () => void) {
@@ -736,8 +771,15 @@ export class TrimlyView extends ItemView {
               })
             ).open();
           }
-        : null
+        : null,
+      existing ? () => this.showAccountTransactions(existing.id) : null
     ).open();
+  }
+
+  private showAccountTransactions(accountId: string) {
+    this.filter = { text: "", accountId, categoryId: "", type: "", allMonths: true };
+    this.mode = "accounts";
+    this.goTab("transactions");
   }
 
   // ---- budgets ----
