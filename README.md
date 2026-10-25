@@ -26,8 +26,8 @@ passphrase that never leaves your device.
   cost, last charge and price changes, to judge whether it is still worth paying for.
 - **Obrigações (obligations)** — a checklist of what you must do by hand by a due date: bills to
   pay (electricity, water, health plan, card bill, DAS MEI) and documents to issue or file (IRPF,
-  DASN-SIMEI, invoices). Bills take only a due day, documents a start and an end day (and yearly
-  ones a month); the current month and year are filled in. Mark each one paid or sent, optionally
+  DASN-SIMEI, invoices). Bills take only a due day, documents a start and an end day (yearly
+  ones a month and day for each, e.g. IRPF from March 23 to May 29); the current month and year are filled in. Mark each one paid or sent, optionally
   linking the transaction that paid it, or as "none this time"; a bill paid on a weekend or
   holiday shows as scheduled for the next business day. Overdue ones stay listed until dealt with. Reminders show as an
   Obsidian notice, and optionally a system notification on desktop, while Trimly is unlocked.

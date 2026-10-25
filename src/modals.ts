@@ -924,33 +924,32 @@ export class ObligationModal extends Modal {
           this.render();
         })
     );
-    if (this.draft.frequency === "yearly") {
-      new Setting(contentEl).setName(m.month).addDropdown((d) =>
-        d
-          .addOptions(Object.fromEntries(t.labels.months.map((name, i) => [String(i + 1), name])))
-          .setValue(String(this.draft.month ?? 1))
-          .onChange((v) => (this.draft.month = Number(v)))
-      );
-    }
     const isDoc = this.draft.kind === "document";
+    const yearly = this.draft.frequency === "yearly";
     let day = String(this.draft.day);
     let endDay = String(this.draft.endDay ?? "");
-    new Setting(contentEl)
-      .setName(isDoc ? m.startDay : m.dueDay)
-      .setDesc(isDoc ? m.startDayDesc : m.dueDayDesc)
-      .addText((text) => {
+    let month = this.draft.month ?? 1;
+    let endMonth = this.draft.endMonth ?? month;
+    const months = Object.fromEntries(t.labels.months.map((name, i) => [String(i + 1), name]));
+    // yearly ones pick the month next to the day
+    const dayRow = (name: string, desc: string, value: string, onDay: (v: string) => void, monthValue: number, onMonth: (v: number) => void) => {
+      const row = new Setting(contentEl).setName(name).setDesc(desc);
+      if (yearly) row.addDropdown((d) => d.addOptions(months).setValue(String(monthValue)).onChange((v) => onMonth(Number(v))));
+      row.addText((text) => {
         text.inputEl.type = "number";
-        text.setValue(day).onChange((v) => (day = v));
+        text.setPlaceholder(m.dayPlaceholder);
+        text.setValue(value).onChange(onDay);
       });
-    if (isDoc) {
-      new Setting(contentEl)
-        .setName(m.endDay)
-        .setDesc(m.endDayDesc)
-        .addText((text) => {
-          text.inputEl.type = "number";
-          text.setValue(endDay).onChange((v) => (endDay = v));
-        });
-    }
+    };
+    dayRow(
+      isDoc ? m.startDay : m.dueDay,
+      isDoc ? m.startDayDesc : yearly ? m.dueDayYearlyDesc : m.dueDayDesc,
+      day,
+      (v) => (day = v),
+      month,
+      (v) => (month = v)
+    );
+    if (isDoc) dayRow(m.endDay, m.endDayDesc, endDay, (v) => (endDay = v), endMonth, (v) => (endMonth = v));
     let amountValid = true;
     if (this.draft.kind === "payment") {
       new Setting(contentEl).setName(m.amount).addText((text) => {
@@ -984,19 +983,22 @@ export class ObligationModal extends Modal {
         if (!this.draft.name.trim()) return t.common.addName;
         const first = Number(day);
         const last = isDoc && endDay.trim() ? Number(endDay) : first;
+        const lastMonth = isDoc && yearly ? endMonth : month;
         const validDay = (n: number) => Number.isInteger(n) && n >= 1 && n <= 31;
         if (!validDay(first) || !validDay(last)) return m.dayInvalid;
-        if (last < first) return m.endBeforeStart;
+        if (lastMonth * 100 + last < month * 100 + first) return m.endBeforeStart;
         if (!amountValid) return t.common.notValidAmount;
         const days = Number(remind);
         if (!Number.isInteger(days) || days < 0 || days > 60) return m.remindInvalid;
         this.draft.remindDays = days;
         this.draft.name = this.draft.name.trim();
         this.draft.day = first;
-        if (last > first) this.draft.endDay = last;
+        if (last !== first) this.draft.endDay = last;
         else delete this.draft.endDay;
-        if (this.draft.frequency === "yearly") this.draft.month ??= 1;
+        if (yearly) this.draft.month = month;
         else delete this.draft.month;
+        if (yearly && lastMonth !== month) this.draft.endMonth = lastMonth;
+        else delete this.draft.endMonth;
         if (this.draft.kind !== "payment") delete this.draft.amount;
         this.onSave(this.draft);
         return null;

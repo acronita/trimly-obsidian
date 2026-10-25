@@ -161,8 +161,10 @@ export interface Obligation {
   day: number;
   /** documents: last day of the window, the deadline; unset = `day` */
   endDay?: number;
-  /** yearly ones: month of the occurrence, 1-12 */
+  /** yearly ones: month of `day`, 1-12 */
   month?: number;
+  /** yearly documents: month of `endDay` when the window ends in a later month; unset = `month` */
+  endMonth?: number;
   /** when it was created; occurrences due earlier are never open */
   since: string;
   /** stopped: no more occurrences, history kept */
@@ -1188,7 +1190,7 @@ function* dueDates(o: Obligation): Generator<string> {
   for (let i = 0; i < 1000; i++) {
     const due =
       o.frequency === "yearly"
-        ? dayIn(y + i, o.month ?? 1, o.endDay ?? o.day)
+        ? dayIn(y + i, o.endMonth ?? o.month ?? 1, o.endDay ?? o.day)
         : dayIn(y + Math.floor((m - 1 + i) / 12), ((m - 1 + i) % 12) + 1, o.endDay ?? o.day);
     if (due >= o.since) yield due;
   }
@@ -1197,7 +1199,7 @@ function* dueDates(o: Obligation): Generator<string> {
 /** Day the window to send a document opens, for its occurrence due on `due`. */
 export function windowStart(o: Obligation, due: string): string {
   const [y, m] = due.split("-").map(Number);
-  return dayIn(y, m, o.day);
+  return dayIn(y, o.frequency === "yearly" ? (o.month ?? 1) : m, o.day);
 }
 
 /** Due dates of an obligation on or before `until` not dealt with yet, oldest first. */

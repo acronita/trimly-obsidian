@@ -1156,7 +1156,8 @@ export class TrimlyView extends ItemView {
       this.iconTile(row, OBLIGATION_ICONS[o.kind], due < today ? OVERDUE : NEUTRAL);
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: o.name });
-      const opens = o.kind === "document" && o.endDay ? windowStart(o, due) : undefined;
+      const start = o.kind === "document" ? windowStart(o, due) : due;
+      const opens = start !== due ? start : undefined;
       const when =
         opens && opens > today
           ? t.obligations.opensOn(this.shortDate(opens), this.shortDate(due))

@@ -80,6 +80,14 @@ test("a document is due on the last day of its window, which opens on the start 
   assert.equal(windowStart(nf, "2026-10-20"), "2026-10-01");
 });
 
+test("a yearly document's window can span months, like the IRPF from March 23 to May 29", () => {
+  const irpf = obligation({ id: "irpf", kind: "document", frequency: "yearly", month: 3, day: 23, endMonth: 5, endDay: 29, since: "2026-01-01" });
+  assert.deepEqual(openOccurrences(irpf, "2026-12-31"), ["2026-05-29"]);
+  assert.equal(windowStart(irpf, "2026-05-29"), "2026-03-23");
+  // nothing is due before the deadline, even while the window is open
+  assert.deepEqual(openOccurrences(irpf, "2026-04-15"), []);
+});
+
 test("business days skip weekends and national bank holidays, movable ones included", () => {
   assert.equal(isBusinessDay("2026-10-23"), true); // Friday
   assert.equal(isBusinessDay("2026-10-24"), false); // Saturday
