@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyInvestments, assetClass } from "../src/investment-sync.ts";
+import { applyInvestments, assetClass, displayName } from "../src/investment-sync.ts";
 import type { PluggyInvestment, PluggyInvestmentTransaction } from "../src/investment-sync.ts";
-import { allocationByClass, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue } from "../src/ledger.ts";
+import { allocationByClass, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue, saveAsset } from "../src/ledger.ts";
 import type { Ledger } from "../src/ledger.ts";
 import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
@@ -48,7 +48,7 @@ test("first sync creates one position per Pluggy investment, valued net of taxes
 test("syncing again updates values in place without duplicating, keeping the user's name", () => {
   const l = defaultLedger();
   applyInvestments(l, [inv("cdb")], ["item-1"], "2026-10-24");
-  asset(l, "cdb").name = "Emergency fund";
+  saveAsset(l, { ...asset(l, "cdb"), name: "Emergency fund" }, "2026-10-24");
   const r = applyInvestments(l, [inv("cdb", { balance: 1010 })], ["item-1"], TODAY);
   assert.equal(r.added, 0);
   assert.equal(r.updated, 1);
@@ -142,7 +142,7 @@ test("allocation groups open positions by class, largest first", () => {
 
 test("ledgers from before investments existed load with an empty portfolio", () => {
   const l = parseLedger(JSON.stringify({ version: 2, accounts: [], categories: [], transactions: [], budgets: [], recurring: [] }));
-  assert.deepEqual(l.investments, { assets: [], snapshots: [], movements: [] });
+  assert.deepEqual(l.investments, { assets: [], snapshots: [], movements: [], targets: [] });
   assert.equal(l.version, 3);
 });
 
@@ -242,4 +242,27 @@ test("a position that disappears is treated as withdrawn at its value", () => {
   assert.equal(l.investments.snapshots[1].flow, -1000_00);
   const idx = portfolioIndex(l.investments.snapshots);
   assert.ok(Math.abs(periodReturn(idx, "2026-10-01", "2026-10-02") ?? 1) < 1e-9);
+});
+
+test("bare product codes get a readable name; real names and tickers are kept", () => {
+  assert.equal(displayName({ name: "CDB224AXYZ1", type: "FIXED_INCOME", subtype: "CDB", issuer: "Banco Inter" }), "CDB · Banco Inter");
+  assert.equal(displayName({ name: "LCA-2025", code: "LCA-2025", type: "FIXED_INCOME", subtype: "LCA", issuer: "BTG" }), "LCA · BTG");
+  assert.equal(displayName({ name: "CDB Banco Inter 110% CDI", type: "FIXED_INCOME", subtype: "CDB" }), "CDB Banco Inter 110% CDI");
+  assert.equal(displayName({ name: "PETR4", type: "EQUITY", subtype: "STOCK" }), "PETR4");
+});
+
+test("sync renames positions to the readable name until the user renames them", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("c", { name: "CDB224AXYZ1", issuer: "Banco Inter" })], ["item-1"], "2026-10-24");
+  assert.equal(asset(l, "c").name, "CDB · Banco Inter");
+  saveAsset(l, { ...asset(l, "c"), name: "Reserva" }, "2026-10-24");
+  applyInvestments(l, [inv("c", { name: "CDB224AXYZ1", issuer: "Banco Inter" })], ["item-1"], TODAY);
+  assert.equal(asset(l, "c").name, "Reserva");
+});
+
+test("a position without an institution falls back to its issuer instead of showing as unknown", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("c", { issuer: "Banco Inter", institution: null }), inv("d", { institution: { name: "XP" } })], ["item-1"], TODAY);
+  assert.equal(asset(l, "c").institution, "Banco Inter");
+  assert.equal(asset(l, "d").institution, "XP");
 });

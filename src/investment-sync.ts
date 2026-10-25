@@ -103,6 +103,33 @@ function cents(value: number | null | undefined): number | undefined {
   return typeof value === "number" && Number.isFinite(value) ? Math.round(value * 100) : undefined;
 }
 
+const SUBTYPE_LABELS: Record<string, string> = {
+  CDB: "CDB",
+  LCI: "LCI",
+  LCA: "LCA",
+  LC: "LC",
+  LIG: "LIG",
+  LF: "LF",
+  CRI: "CRI",
+  CRA: "CRA",
+  DEBENTURES: "Debenture",
+  TREASURY: "Treasury",
+  RETIREMENT: "Retirement plan",
+  PGBL: "PGBL",
+  VGBL: "VGBL",
+  STRUCTURED_NOTE: "COE",
+};
+
+/** Pluggy's name, unless it is a bare product code (e.g. "CDB224AXYZ1"): then "CDB · Issuer". Tickers stay as they are. */
+export function displayName(p: Pick<PluggyInvestment, "name" | "code" | "type" | "subtype" | "issuer">): string {
+  const name = p.name.trim();
+  const looksLikeCode = (!/\s/.test(name) && /\d/.test(name)) || (!!p.code && name === p.code);
+  if (!looksLikeCode || p.type === "EQUITY" || p.type === "ETF") return name;
+  const label = (p.subtype && SUBTYPE_LABELS[p.subtype]) ?? (p.type === "FIXED_INCOME" ? "Fixed income" : "");
+  const parts = [label, p.issuer?.trim()].filter(Boolean);
+  return parts.length ? parts.join(" · ") : name;
+}
+
 /** Copy Pluggy's numbers onto `asset`; returns whether anything changed. */
 function apply(asset: Asset, p: PluggyInvestment, today: string): boolean {
   const before = JSON.stringify(asset);
@@ -117,7 +144,11 @@ function apply(asset: Asset, p: PluggyInvestment, today: string): boolean {
   set("quantity", p.quantity ?? undefined);
   set("code", p.code);
   set("issuer", p.issuer);
-  set("institution", p.institution?.name);
+  set("subtype", p.subtype);
+  set("pluggyName", p.name);
+  // MeuPluggy and some banks leave the institution empty; the issuer is the closest stand-in
+  set("institution", p.institution?.name || p.issuer);
+  if (!asset.renamed) asset.name = displayName(p);
   set("rate", p.rate || undefined);
   set("rateType", p.rateType);
   set("fixedRate", p.fixedAnnualRate || undefined);
@@ -206,7 +237,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
     const before = asset ? { value: asset.value, invested: asset.invested, closed: asset.closed } : { value: 0, invested: 0 };
     const newlyTracked = !asset || !!asset.closed;
     if (!asset) {
-      asset = { id: newId(), name: p.name, assetClass: assetClass(p), value: 0, updatedAt: today, pluggyId: p.id, pluggyItemId: p.itemId };
+      asset = { id: newId(), name: displayName(p), assetClass: assetClass(p), value: 0, updatedAt: today, pluggyId: p.id, pluggyItemId: p.itemId };
       apply(asset, p, today);
       assets.push(asset);
       result.added++;

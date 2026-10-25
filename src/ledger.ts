@@ -199,6 +199,11 @@ export interface Asset {
   movementsSynced?: boolean;
   /** day Trimly started tracking it (YYYY-MM-DD) */
   addedOn?: string;
+  /** synced positions: Pluggy's product subtype (e.g. "CDB") and name as the bank reports it */
+  subtype?: string;
+  pluggyName?: string;
+  /** the user changed the name, so sync stops replacing it */
+  renamed?: boolean;
 }
 
 /** Money moving in or out of one position, in cents. */
@@ -237,11 +242,19 @@ export interface PortfolioSnapshot {
   income?: number;
 }
 
+/** Desired share of the portfolio for one asset class. */
+export interface AllocationTarget {
+  assetClass: AssetClass;
+  /** percent, e.g. 40 for 40% */
+  pct: number;
+}
+
 export interface Investments {
   assets: Asset[];
   /** oldest first, at most one per day */
   snapshots: PortfolioSnapshot[];
   movements: Movement[];
+  targets: AllocationTarget[];
 }
 
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
@@ -294,7 +307,7 @@ export function defaultLedger(): Ledger {
     transactions: [],
     budgets: [],
     recurring: [],
-    investments: { assets: [], snapshots: [], movements: [] },
+    investments: { assets: [], snapshots: [], movements: [], targets: [] },
   };
 }
 
@@ -320,6 +333,7 @@ export function parseLedger(json: string): Ledger {
       assets: raw.investments?.assets ?? [],
       snapshots: raw.investments?.snapshots ?? [],
       movements: raw.investments?.movements ?? [],
+      targets: raw.investments?.targets ?? [],
     },
     pluggy: raw.pluggy,
   };
@@ -548,6 +562,61 @@ export function recordSnapshot(ledger: Ledger, today: string, untracked = 0) {
   else snaps.push(snap);
 }
 
+// ---- allocation targets ----
+
+export interface RebalanceLine {
+  assetClass: AssetClass;
+  /** current value, cents */
+  value: number;
+  /** current share, percent */
+  pct: number;
+  /** target share, percent, scaled so the targets add up to 100 */
+  target: number;
+  /** cents to buy (+) or sell (−) to hit the target today */
+  gap: number;
+  /** cents of the new contribution to put here */
+  contribute: number;
+}
+
+/** Split `cents` by `weights` in whole cents; the rounding remainder goes to the largest weights. */
+function splitCents(cents: number, weights: number[]): number[] {
+  const total = weights.reduce((s, w) => s + w, 0);
+  if (total <= 0 || cents <= 0) return weights.map(() => 0);
+  const out = weights.map((w) => Math.floor((cents * w) / total));
+  let left = cents - out.reduce((s, v) => s + v, 0);
+  const order = weights.map((w, i) => [w, i]).sort((a, b) => b[0] - a[0]);
+  for (let k = 0; left > 0; k = (k + 1) % order.length, left--) out[order[k][1]]++;
+  return out;
+}
+
+/**
+ * Where each class stands against its target, and how to split a new
+ * `contribution` to get closer without selling: underweight classes first, in
+ * proportion to how far behind they are, then any rest by target weight.
+ * Classes without a target count as a 0% target. Empty when there are no targets.
+ */
+export function rebalance(ledger: Ledger, contribution: number): RebalanceLine[] {
+  const targets = ledger.investments.targets.filter((t) => t.pct > 0);
+  const sum = targets.reduce((s, t) => s + t.pct, 0);
+  if (sum <= 0) return [];
+  const current = new Map(allocationByClass(ledger));
+  const classes = [...new Set<AssetClass>([...targets.map((t) => t.assetClass), ...current.keys()])];
+  const total = portfolioValue(ledger);
+  const after = total + Math.max(0, contribution);
+  const lines: RebalanceLine[] = classes.map((c) => {
+    const value = current.get(c) ?? 0;
+    const target = ((targets.find((t) => t.assetClass === c)?.pct ?? 0) / sum) * 100;
+    return { assetClass: c, value, pct: total > 0 ? (value / total) * 100 : 0, target, gap: Math.round((total * target) / 100) - value, contribute: 0 };
+  });
+  const deficits = lines.map((l) => Math.max(0, Math.round((after * l.target) / 100) - l.value));
+  const behind = deficits.reduce((s, d) => s + d, 0);
+  const c = Math.max(0, contribution);
+  const first = splitCents(Math.min(c, behind), deficits);
+  const rest = splitCents(c - Math.min(c, behind), lines.map((l) => l.target));
+  lines.forEach((l, i) => (l.contribute = first[i] + rest[i]));
+  return lines.sort((a, b) => b.target - a.target || b.value - a.value);
+}
+
 // ---- manual investments ----
 
 function outsideWindow(ledger: Ledger, date: string, today: string): boolean {
@@ -596,6 +665,7 @@ export function saveAsset(ledger: Ledger, asset: Asset, today: string) {
     if (!asset.closed) untracked = asset.value;
     assets.push(asset);
   } else {
+    if (before.name !== asset.name) asset.renamed = true;
     if (!before.closed && asset.closed) untracked = -before.value;
     else if (before.closed && !asset.closed) untracked = asset.value;
     assets[i] = asset;

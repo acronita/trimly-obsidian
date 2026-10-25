@@ -25,7 +25,8 @@ passphrase that never leaves your device.
   compared with CDI and IPCA, every contribution, withdrawal and tax, and the income (dividends,
   JCP, interest, coupons) per month and per position. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
-  withdrawals, income and taxes. Positions are imported by bank sync; net worth in the accounts view includes them.
+  withdrawals, income and taxes. Click a position for its details. Set a target share per asset
+  class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
   through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
   purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).

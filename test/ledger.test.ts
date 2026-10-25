@@ -34,7 +34,7 @@ function ledger(): Ledger {
     ],
     budgets: [],
     recurring: [],
-    investments: { assets: [], snapshots: [], movements: [] },
+    investments: { assets: [], snapshots: [], movements: [], targets: [] },
   };
 }
 

@@ -33,6 +33,11 @@ In investments mode, *Add → New position* with its current value, then record 
 withdrawals and income with *Add → New movement*. Update the position's value from time to time
 by clicking it; that change counts as gain or loss, while movements count as money moved.
 
+**How does the contribution planner split the money?**
+It never sells. Classes below their target get the money first, in proportion to how far behind
+they are once the contribution is counted; whatever is left is split by target weight. Classes
+without a target count as 0%, so they never get new money.
+
 **How are investment returns calculated?**
 Time-weighted, from the daily snapshots each sync records: deposits and withdrawals don't count as
 gains or losses, and dividends, JCP, interest and coupons paid out do count as gains. The money

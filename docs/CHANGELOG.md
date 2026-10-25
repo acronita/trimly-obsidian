@@ -2,6 +2,25 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Investments mode, phase 5: allocation targets. New Targets tab: a target percentage
+  per asset class (scaled to 100% when they don't add up), each class's current share and how much
+  to buy or sell to reach its target, and a contribution planner that splits an amount across
+  underweight classes first, without selling. The overview's allocation legend shows each class's
+  target. Ledger v3 gains `investments.targets[]`. Why: knowing the allocation is only useful
+  against the allocation you want. Files touched: `src/ledger.ts`, `src/view.ts`,
+  `src/styles/index.css`, `test/rebalance.test.ts`, `README.md`, `docs/`.
+
+- 2026-10-25 — Investment fixes from testing. The Accounts/Investments switch no longer looks
+  offset: the active pill used Obsidian's `--shadow-s`, which drops a shadow 15px below it.
+  Positions show their name instead of the product code in front of it, and a Pluggy name that is
+  a bare code (e.g. `CDB224AXYZ1`) becomes "CDB · issuer" until you rename the position. Positions
+  Pluggy reports without an institution take the item's connector name (unless it is MeuPluggy)
+  or the issuer, instead of "Unknown". Clicking a position opens its details (value, cost, profit,
+  taxes due, quantity, unit value, rate, maturity, institution, issuer, code, product, recent
+  movements) with *Edit*, *Add movement* and *All movements*. Ledger v3 gains `Asset.subtype`,
+  `pluggyName` and `renamed`. Files touched: `src/investment-sync.ts`, `src/pluggy.ts`,
+  `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `test/investment-sync.test.ts`.
+
 - 2026-10-25 — Investments mode, phase 4: manual entry. An *Add* button in investments mode opens
   a new position (name, class, code, institution, current value, amount invested, quantity, index,
   percent of index, fixed rate, maturity) or a new movement on a manual position (contribution,

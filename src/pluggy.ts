@@ -95,6 +95,21 @@ async function fetchInvestments(apiKey: string, itemId: string): Promise<PluggyI
   return out;
 }
 
+/**
+ * Name of the institution behind an item, to label positions Pluggy reports
+ * without one. Undefined when unknown, or when the item is a MeuPluggy link,
+ * whose connector name says nothing about the bank.
+ */
+async function connectorName(apiKey: string, itemId: string): Promise<string | undefined> {
+  try {
+    const item = await get<{ connector?: { name?: string } }>(apiKey, `/items/${encodeURIComponent(itemId)}`, {}, "Loading item");
+    const name = item.connector?.name?.trim();
+    return name && !/meu\s*pluggy/i.test(name) ? name : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchInvestmentTransactions(apiKey: string, investment: PluggyInvestment): Promise<PluggyInvestmentTransaction[]> {
   const out: PluggyInvestmentTransaction[] = [];
   for (let page = 1; page <= MAX_PAGES; page++) {
@@ -134,7 +149,9 @@ export async function fetchBankData(config: PluggyConfig, dateFrom: string): Pro
       investments.errors.push((e as Error).message);
       continue;
     }
+    const bank = positions.some((p) => !p.institution?.name) ? await connectorName(apiKey, itemId) : undefined;
     for (const p of positions) {
+      if (!p.institution?.name && bank) p.institution = { name: bank };
       // only the separately fetched list counts: missing movements fall back to estimates
       delete p.transactions;
       try {
