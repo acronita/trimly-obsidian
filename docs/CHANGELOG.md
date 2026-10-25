@@ -2,6 +2,15 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Line charts no longer break the view they are in: SVG classes were passed as one
+  space-separated string, which Obsidian's `createSvg` rejects, so every position with a brapi price
+  history failed to open (and the evolution and performance charts would have failed the same way).
+  `test/svg-classes.test.ts` guards it. Positions without an institution are now shown under the
+  company or fund name from their brapi quote, marked "(pela brapi)" in the details; display only,
+  the stored institution is unchanged and one set by hand still wins. Files touched:
+  `src/charts.ts`, `src/quotes.ts`, `src/view.ts`, `src/i18n/*`, `test/svg-classes.test.ts`,
+  `test/quotes.test.ts`.
+
 - 2026-10-25 — Positions open from everywhere they are listed. Rows in the Income tab (by position,
   recent payments) and movements of synced positions now open the position details; before, they
   did nothing, which is where real estate funds mostly show up. If the details fail to render, a

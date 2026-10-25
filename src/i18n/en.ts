@@ -252,6 +252,7 @@ export const en: Strings = {
     inDays: (n: number) => `in ${n} ${s(n, "day", "days")}`,
     matured: "matured",
     institution: "Institution",
+    viaBrapi: "(from brapi)",
     issuer: "Issuer",
     company: "Company",
     code: "Code",

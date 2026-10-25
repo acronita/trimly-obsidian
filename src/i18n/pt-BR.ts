@@ -257,6 +257,7 @@ export const ptBR = {
     inDays: (n: number) => `em ${n} ${s(n, "dia", "dias")}`,
     matured: "vencido",
     institution: "Instituição",
+    viaBrapi: "(pela brapi)",
     issuer: "Emissor",
     company: "Empresa",
     code: "Código",

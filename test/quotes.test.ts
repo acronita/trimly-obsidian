@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultLedger, newId, saveAsset } from "../src/ledger.ts";
 import type { Asset } from "../src/ledger.ts";
-import { applyQuotes, averagePrice, quoteTickers, tickerOf } from "../src/quotes.ts";
+import { applyQuotes, averagePrice, institutionOf, quoteTickers, tickerOf } from "../src/quotes.ts";
 import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
 const asset = (extra: Partial<Asset>): Asset => ({ id: newId(), name: "x", assetClass: "stock", value: 0, updatedAt: "2026-10-01", ...extra });
@@ -74,4 +74,11 @@ test("average price is cost per share; unknown without quantity or cost", () => 
   assert.equal(averagePrice({ invested: 3000_00, quantity: 100 }), 30_00);
   assert.equal(averagePrice({ invested: 3000_00 }), null);
   assert.equal(averagePrice({ quantity: 100 }), null);
+});
+
+test("a position without an institution is shown under its quoted company or fund name", () => {
+  assert.deepEqual(institutionOf({ quote: { price: 1, longName: "CSHG Logística FII" } }), { name: "CSHG Logística FII", inferred: true });
+  // what the bank or the user set always wins
+  assert.deepEqual(institutionOf({ institution: "XP", quote: { price: 1, longName: "Petrobras" } }), { name: "XP", inferred: false });
+  assert.equal(institutionOf({}), null);
 });

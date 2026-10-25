@@ -93,8 +93,9 @@ export function lineChart(parent: HTMLElement, xs: number[], series: LineSeries[
   if (min < 0 && max > 0) svg.createSvg("line", { cls: "trimly-line-zero", attr: { x1: 0, x2: W, y1: y(0), y2: y(0) } });
   for (const s of series) {
     const pts = s.values.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(" ");
-    if (s.area) svg.createSvg("polygon", { cls: `trimly-line-area ${s.cls}`, attr: { points: `0,${H} ${pts} ${x(s.values.length - 1).toFixed(2)},${H}` } });
-    svg.createSvg("polyline", { cls: `trimly-line-stroke ${s.cls}${s.dashed ? " is-dashed" : ""}`, attr: { points: pts } });
+    // SVG elements take classes one token each: a space-separated string throws
+    if (s.area) svg.createSvg("polygon", { cls: ["trimly-line-area", s.cls], attr: { points: `0,${H} ${pts} ${x(s.values.length - 1).toFixed(2)},${H}` } });
+    svg.createSvg("polyline", { cls: ["trimly-line-stroke", s.cls, ...(s.dashed ? ["is-dashed"] : [])], attr: { points: pts } });
   }
   const foot = wrap.createDiv("trimly-line-labels");
   foot.createSpan({ text: labels.start });

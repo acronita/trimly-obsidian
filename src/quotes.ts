@@ -49,6 +49,17 @@ function toQuote(q: QuoteData): Quote {
   return out;
 }
 
+/**
+ * Institution to show for a position: the one the bank or the user set, else
+ * the company or fund name from its quote (`inferred`), else null. Display only:
+ * the stored institution is never replaced by a quote.
+ */
+export function institutionOf(a: Pick<Asset, "institution" | "quote">): { name: string; inferred: boolean } | null {
+  if (a.institution) return { name: a.institution, inferred: false };
+  if (a.quote?.longName) return { name: a.quote.longName, inferred: true };
+  return null;
+}
+
 /** Average price paid per share, in cents; null without quantity or cost. */
 export function averagePrice(a: Pick<Asset, "invested" | "quantity">): number | null {
   return a.invested && a.quantity ? Math.round(a.invested / a.quantity) : null;
