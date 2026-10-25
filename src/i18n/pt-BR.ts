@@ -47,6 +47,7 @@ export const ptBR = {
     },
     frequency: { weekly: "Semanal", monthly: "Mensal", yearly: "Anual" },
     txType: { expense: "Despesa", income: "Receita", transfer: "Transferência" },
+    obligationKind: { payment: "Pagamento", document: "Documento" },
     assetClass: {
       fixed_income: "Renda fixa",
       treasury: "Tesouro Direto",
@@ -125,6 +126,7 @@ export const ptBR = {
     accounts: "Contas",
     budgets: "Orçamentos",
     recurring: "Recorrentes",
+    obligations: "Obrigações",
     categories: "Categorias",
     portfolio: "Carteira",
     performance: "Rentabilidade",
@@ -215,6 +217,36 @@ export const ptBR = {
     awaitingCharge: (date: string) => `aguardando a cobrança de ${date}`,
     priceUp: (from: string) => `subiu de ${from}`,
     priceDown: (from: string) => `caiu de ${from}`,
+  },
+
+  obligations: {
+    overdue: "Atrasadas",
+    dueSoon: "Vencem em 7 dias",
+    toPay: "A pagar neste mês",
+    pending: "Pendentes",
+    nothingPending: "Nada pendente nos próximos 30 dias.",
+    all: "Todas as obrigações",
+    empty:
+      "Cadastre as contas que você paga à mão (luz, água, plano de saúde, fatura do cartão) " +
+      "e os documentos com prazo (IRPF, DASN-SIMEI, nota fiscal).",
+    add: "Adicionar obrigação",
+    dueToday: "vence hoje",
+    dueTomorrow: "vence amanhã",
+    dueIn: (n: number) => `vence em ${n} dias`,
+    overdueBy: (n: number) => `atrasada há ${n} ${s(n, "dia", "dias")}`,
+    next: (freq: string, date: string) => `${freq} · próximo vencimento em ${date}`,
+    ended: (freq: string) => `${freq} · encerrada`,
+    history: "Feitas recentemente",
+    paidOn: (date: string) => `paga em ${date}`,
+    doneOn: (date: string) => `feita em ${date}`,
+    skipped: "não teve",
+    linked: "com transação",
+    markDone: "Marcar como feita",
+    deleteConfirm: (name: string) => `Excluir a obrigação "${name}"? O histórico dela também é apagado.`,
+    reminder: (items: string) => `Obrigações: ${items}`,
+    reminderItem: (name: string, when: string) => `${name} (${when})`,
+    systemReminder: (n: number) =>
+      `${n} ${s(n, "obrigação vence em breve ou está atrasada", "obrigações vencem em breve ou estão atrasadas")}. Abra o Trimly para ver.`,
   },
 
   categories: {
@@ -406,6 +438,31 @@ export const ptBR = {
       pickAccount: "Escolha uma conta.",
       pickOtherAccount: "Escolha uma conta de destino diferente.",
     },
+    obligation: {
+      newTitle: "Nova obrigação",
+      editTitle: "Editar obrigação",
+      name: "Nome",
+      namePlaceholder: "Ex.: Conta de luz",
+      kind: "Tipo",
+      kindDesc: "Pagamento: uma conta que você paga. Documento: algo para emitir ou entregar, como a declaração do IRPF.",
+      repeats: "Repete",
+      firstDue: "Primeiro vencimento",
+      amount: "Valor de costume (opcional)",
+      remindDays: "Lembrar com antecedência (dias)",
+      endDate: "Data final (opcional)",
+      notes: "Observações",
+      remindInvalid: "Use um número de dias entre 0 e 60.",
+    },
+    settle: {
+      title: (name: string, date: string) => `${name} · vencimento ${date}`,
+      transaction: "Transação do pagamento (opcional)",
+      transactionDesc: "Vincula o pagamento a uma transação. As mais prováveis aparecem primeiro.",
+      none: "Nenhuma",
+      date: "Feita em",
+      done: "Marcar como feita",
+      skip: "Não teve neste período",
+      undo: "Desfazer marcação",
+    },
     account: {
       newTitle: "Nova conta",
       editTitle: "Editar conta",
@@ -587,6 +644,12 @@ export const ptBR = {
     disconnect: "Desconectar",
     disconnectDesc: "Para a sincronização e apaga as credenciais. Contas e transações importadas ficam.",
     disconnectConfirm: "Desconectar a sincronização e apagar as credenciais do Pluggy?",
+    reminders: "Lembretes de obrigações",
+    remindersDesc:
+      "Avisa quando uma obrigação está perto do vencimento ou atrasada: ao desbloquear o Trimly e a cada hora enquanto ele estiver desbloqueado. " +
+      "A notificação do sistema funciona só no computador e diz apenas quantas obrigações há, sem os nomes.",
+    remindersOptions: { off: "Desligados", app: "Aviso no Obsidian", system: "Aviso no Obsidian e notificação do sistema" },
+    remindersDenied: "O sistema bloqueou as notificações do Obsidian. Libere nas configurações do sistema para recebê-las.",
   },
 
   errors: {

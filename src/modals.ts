@@ -12,12 +12,16 @@ import {
   Ledger,
   Movement,
   MovementType,
+  Obligation,
+  ObligationKind,
   Recurring,
+  Settlement,
   Transaction,
   TxType,
   centsToInput,
   newId,
   parseAmount,
+  settlementFor,
   todayISO,
 } from "./ledger";
 
@@ -788,6 +792,170 @@ export class CategoryModal extends Modal {
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
       () => this.close()
     );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class ObligationModal extends Modal {
+  private draft: Obligation;
+
+  constructor(
+    app: App,
+    existing: Obligation | null,
+    private onSave: (o: Obligation) => void,
+    private onDelete: ((o: Obligation) => void) | null
+  ) {
+    super(app);
+    this.draft = existing
+      ? { ...existing }
+      : { id: newId(), name: "", kind: "payment", frequency: "monthly", startDate: todayISO(), remindDays: 3, settled: [] };
+  }
+
+  onOpen() {
+    this.setTitle(this.onDelete ? t.modals.obligation.editTitle : t.modals.obligation.newTitle);
+    this.render();
+  }
+
+  private render() {
+    const { contentEl } = this;
+    const m = t.modals.obligation;
+    contentEl.empty();
+    contentEl.addClass("trimly-modal");
+    new Setting(contentEl).setName(m.name).addText((text) =>
+      text
+        .setPlaceholder(m.namePlaceholder)
+        .setValue(this.draft.name)
+        .onChange((v) => (this.draft.name = v))
+    );
+    new Setting(contentEl)
+      .setName(m.kind)
+      .setDesc(m.kindDesc)
+      .addDropdown((d) =>
+        d
+          .addOptions(t.labels.obligationKind)
+          .setValue(this.draft.kind)
+          .onChange((v) => {
+            this.draft.kind = v as ObligationKind;
+            this.render();
+          })
+      );
+    new Setting(contentEl).setName(m.repeats).addDropdown((d) =>
+      d
+        .addOptions(t.labels.frequency)
+        .setValue(this.draft.frequency)
+        .onChange((v) => (this.draft.frequency = v as Frequency))
+    );
+    dateSetting(contentEl, m.firstDue, this.draft.startDate, (v) => (this.draft.startDate = v));
+    let amountValid = true;
+    if (this.draft.kind === "payment") {
+      new Setting(contentEl).setName(m.amount).addText((text) => {
+        text.inputEl.inputMode = "decimal";
+        text.setValue(this.draft.amount ? centsToInput(this.draft.amount) : "").onChange((v) => {
+          const c = parseAmount(v);
+          amountValid = v.trim() === "" || (c !== null && c > 0);
+          this.draft.amount = c && c > 0 ? c : undefined;
+        });
+      });
+    }
+    let remind = String(this.draft.remindDays);
+    new Setting(contentEl).setName(m.remindDays).addText((text) => {
+      text.inputEl.type = "number";
+      text.setValue(remind).onChange((v) => (remind = v));
+    });
+    dateSetting(contentEl, m.endDate, this.draft.endDate ?? "", (v) => (this.draft.endDate = v || undefined));
+    new Setting(contentEl).setName(m.notes).addTextArea((text) =>
+      text.setValue(this.draft.notes ?? "").onChange((v) => (this.draft.notes = v || undefined))
+    );
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!this.draft.name.trim()) return t.common.addName;
+        if (!this.draft.startDate) return t.common.pickDate;
+        if (!amountValid) return t.common.notValidAmount;
+        const days = Number(remind);
+        if (!Number.isInteger(days) || days < 0 || days > 60) return m.remindInvalid;
+        this.draft.remindDays = days;
+        this.draft.name = this.draft.name.trim();
+        if (this.draft.kind !== "payment") delete this.draft.amount;
+        this.onSave(this.draft);
+        return null;
+      },
+      this.onDelete ? () => this.onDelete?.(this.draft) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/**
+ * Marks one occurrence of an obligation as done (optionally linking the
+ * transaction that paid it) or skipped. `onSettle(null)` undoes an earlier mark.
+ */
+export class SettleModal extends Modal {
+  constructor(
+    app: App,
+    private obligation: Obligation,
+    private due: string,
+    private dueLabel: string,
+    private candidates: Transaction[],
+    private txLabel: (tx: Transaction) => string,
+    private onSettle: (s: Settlement | null) => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    const m = t.modals.settle;
+    contentEl.addClass("trimly-modal");
+    this.setTitle(m.title(this.obligation.name, this.dueLabel));
+    const existing = settlementFor(this.obligation, this.due);
+    let transactionId = existing?.transactionId ?? "";
+    let date = existing?.date ?? todayISO();
+    if (this.obligation.kind === "payment") {
+      const options: Record<string, string> = { "": m.none };
+      for (const tx of this.candidates.slice(0, 30)) options[tx.id] = this.txLabel(tx);
+      new Setting(contentEl)
+        .setName(m.transaction)
+        .setDesc(m.transactionDesc)
+        .addDropdown((d) =>
+          d
+            .addOptions(options)
+            .setValue(transactionId in options ? transactionId : "")
+            .onChange((v) => (transactionId = v))
+        );
+    }
+    dateSetting(contentEl, m.date, date, (v) => (date = v));
+    if (this.obligation.notes) contentEl.createEl("p", { cls: "setting-item-description", text: this.obligation.notes });
+    const settle = (status: Settlement["status"]) => {
+      const s: Settlement = { due: this.due, status, date: date || todayISO() };
+      if (status === "done" && transactionId) s.transactionId = transactionId;
+      this.close();
+      this.onSettle(s);
+    };
+    const buttons = new Setting(contentEl);
+    if (existing) {
+      buttons.addButton((b) =>
+        b
+          .setButtonText(m.undo)
+          .setWarning()
+          .onClick(() => {
+            this.close();
+            this.onSettle(null);
+          })
+      );
+    }
+    buttons
+      .addButton((b) => b.setButtonText(m.skip).onClick(() => settle("skipped")))
+      .addButton((b) => b.setButtonText(m.done).setCta().onClick(() => settle("done")));
   }
 
   onClose() {

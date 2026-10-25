@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 — 2026-10-25
+
+- 2026-10-25 — New *Obrigações* tab: a checklist of what has to be done by hand by a due date,
+  bills to pay (electricity, water, health plan, card bill, DAS MEI) and documents to issue or file
+  (IRPF, DASN-SIMEI, invoices). Each obligation repeats weekly, monthly or yearly; each occurrence
+  is marked done (optionally linking the transaction that paid it, picked from suggestions near the
+  due date) or "none this time" (no water bill that month), and can be undone. Overdue ones stay
+  listed until dealt with. The tab shows overdue / due in 7 days / amount to pay this month, the
+  pending list, every obligation and what was done recently. Reminders: an Obsidian notice on
+  unlock and every hour while unlocked, once a day per occurrence, starting `remindDays` before the
+  due date; optionally also a system notification on desktop, which only says how many there are,
+  since it shows outside Obsidian. New setting *Lembretes de obrigações* (`reminders` in
+  `data.json`: `off`, `app` (default) or `system`). There is no push with Obsidian closed: a plugin
+  can't send one without a server. Ledger format bumped to version 4 (new `obligations`): older
+  plugin versions refuse the ledger instead of dropping them on save, so update Trimly on every
+  device. Files touched: `src/ledger.ts`, `src/main.ts`, `src/modals.ts`, `src/view.ts`,
+  `src/i18n/*`, `test/obligations.test.ts`, `test/ledger.test.ts`, `test/investment-sync.test.ts`,
+  `test/encryption-rule.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
 ## 0.4.0 — 2026-10-25
 
 - 2026-10-25 — Subscriptions, and recurring rules that no longer double-count on synced accounts.

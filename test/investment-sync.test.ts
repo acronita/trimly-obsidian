@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyInvestments, assetClass, displayName } from "../src/investment-sync.ts";
 import type { PluggyInvestment, PluggyInvestmentTransaction } from "../src/investment-sync.ts";
-import { allocationByClass, applyInstitutionToConnection, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue, saveAsset } from "../src/ledger.ts";
+import { LEDGER_VERSION, allocationByClass, applyInstitutionToConnection, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue, saveAsset } from "../src/ledger.ts";
 import type { Ledger } from "../src/ledger.ts";
 import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
@@ -143,7 +143,7 @@ test("allocation groups open positions by class, largest first", () => {
 test("ledgers from before investments existed load with an empty portfolio", () => {
   const l = parseLedger(JSON.stringify({ version: 2, accounts: [], categories: [], transactions: [], budgets: [], recurring: [] }));
   assert.deepEqual(l.investments, { assets: [], snapshots: [], movements: [], targets: [] });
-  assert.equal(l.version, 3);
+  assert.equal(l.version, LEDGER_VERSION);
 });
 
 // ---- movements and flows ----

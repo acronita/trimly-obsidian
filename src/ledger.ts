@@ -1,5 +1,5 @@
 /**
- * Ledger data model and pure finance logic (balances, summaries, recurring).
+ * Ledger data model and pure finance logic (balances, summaries, recurring, obligations).
  *
  * All money values are integer cents to avoid floating-point drift. Dates are
  * local "YYYY-MM-DD" strings; months are "YYYY-MM".
@@ -9,7 +9,7 @@
 import { LANGUAGES, t } from "./i18n/index.ts";
 import type { Strings } from "./i18n/index.ts";
 
-export const LEDGER_VERSION = 3;
+export const LEDGER_VERSION = 4;
 
 export type AccountType = "checking" | "savings" | "credit" | "cash" | "investment" | "other";
 export type CategoryKind = "expense" | "income";
@@ -17,6 +17,7 @@ export type TxType = "expense" | "income" | "transfer";
 export type Frequency = "weekly" | "monthly" | "yearly";
 export type MovementType = "buy" | "sell" | "income" | "tax" | "amortization" | "transfer";
 export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
+export type ObligationKind = "payment" | "document";
 
 export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
   checking: "landmark",
@@ -130,6 +131,41 @@ export interface Recurring {
   endDate?: string;
   /** a service paid for regularly (streaming, apps, gym); listed apart with its yearly cost */
   subscription?: boolean;
+}
+
+/**
+ * Something to do by a due date every period, by hand: a bill to pay, a tax
+ * return to file, an invoice to issue. Unlike a recurring rule it moves no
+ * money by itself; each occurrence is marked done (optionally with the
+ * transaction that paid it) or skipped.
+ */
+export interface Obligation {
+  id: string;
+  name: string;
+  kind: ObligationKind;
+  frequency: Frequency;
+  /** first due date; its day of month anchors monthly/yearly ones */
+  startDate: string;
+  /** last allowed due date (inclusive), optional */
+  endDate?: string;
+  /** usual amount, payments only, in cents */
+  amount?: number;
+  /** remind this many days before the due date */
+  remindDays: number;
+  notes?: string;
+  /** occurrences dealt with */
+  settled: Settlement[];
+}
+
+export interface Settlement {
+  /** due date of the occurrence */
+  due: string;
+  /** done = paid or issued; skipped = nothing to do that period (no water bill this month) */
+  status: "done" | "skipped";
+  /** when it was marked */
+  date: string;
+  /** the transaction that paid it, optional */
+  transactionId?: string;
 }
 
 /** One investment position. Values are the latest known, in cents. */
@@ -278,6 +314,7 @@ export interface Ledger {
   transactions: Transaction[];
   budgets: Budget[];
   recurring: Recurring[];
+  obligations: Obligation[];
   investments: Investments;
   /** set when bank sync is configured */
   pluggy?: PluggyConfig;
@@ -332,6 +369,7 @@ export function defaultLedger(): Ledger {
     transactions: [],
     budgets: [],
     recurring: [],
+    obligations: [],
     investments: { assets: [], snapshots: [], movements: [], targets: [] },
   };
 }
@@ -357,6 +395,7 @@ export function parseLedger(json: string): Ledger {
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
+    obligations: raw.obligations ?? [],
     investments: {
       assets: raw.investments?.assets ?? [],
       snapshots: raw.investments?.snapshots ?? [],
@@ -932,6 +971,102 @@ export function postDueRecurring(ledger: Ledger, today: string): number {
     }
   }
   return posted;
+}
+
+// ---- obligations ----
+
+/** Days from `from` to `to`, negative when `to` is earlier. */
+export function daysUntil(from: string, to: string): number {
+  return Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
+}
+
+/**
+ * The period an occurrence belongs to: its month for monthly obligations, its
+ * year for yearly ones. Settlements match by period, so moving the due day of
+ * an obligation does not reopen the occurrences already dealt with.
+ */
+function periodOf(date: string, frequency: Frequency): string {
+  return frequency === "monthly" ? date.slice(0, 7) : frequency === "yearly" ? date.slice(0, 4) : date;
+}
+
+export function settlementFor(o: Obligation, due: string): Settlement | undefined {
+  const period = periodOf(due, o.frequency);
+  return o.settled.find((s) => periodOf(s.due, o.frequency) === period);
+}
+
+/** Due dates of an obligation on or before `until` not dealt with yet, oldest first. */
+export function openOccurrences(o: Obligation, until: string): string[] {
+  const anchorDay = Number(o.startDate.slice(8, 10));
+  const out: string[] = [];
+  let due = o.startDate;
+  // guard against a corrupted obligation looping forever
+  for (let i = 0; i < 1000 && due <= until; i++) {
+    if (o.endDate && due > o.endDate) break;
+    if (!settlementFor(o, due)) out.push(due);
+    due = nextOccurrence(due, o.frequency, anchorDay);
+  }
+  return out;
+}
+
+/** First due date after `after` (exclusive), or undefined once the obligation has ended. */
+export function nextDue(o: Obligation, after: string): string | undefined {
+  const anchorDay = Number(o.startDate.slice(8, 10));
+  let due = o.startDate;
+  for (let i = 0; i < 1000 && due <= after; i++) due = nextOccurrence(due, o.frequency, anchorDay);
+  return o.endDate && due > o.endDate ? undefined : due;
+}
+
+export interface DueObligation {
+  obligation: Obligation;
+  due: string;
+}
+
+/** Open occurrences of every obligation due on or before `until`, soonest first. */
+export function dueObligations(ledger: Ledger, until: string): DueObligation[] {
+  return ledger.obligations
+    .flatMap((obligation) => openOccurrences(obligation, until).map((due) => ({ obligation, due })))
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.obligation.name.localeCompare(b.obligation.name)));
+}
+
+/** Open occurrences inside their reminder window on `today`, overdue ones included. */
+export function obligationReminders(ledger: Ledger, today: string): DueObligation[] {
+  const horizon = Math.max(0, ...ledger.obligations.map((o) => o.remindDays));
+  const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + horizon * 86_400_000));
+  return dueObligations(ledger, until).filter((d) => daysUntil(today, d.due) <= d.obligation.remindDays);
+}
+
+/** Mark one occurrence as done or skipped, replacing an earlier mark for the same period. */
+export function settleObligation(o: Obligation, s: Settlement) {
+  const period = periodOf(s.due, o.frequency);
+  o.settled = o.settled.filter((x) => periodOf(x.due, o.frequency) !== period);
+  o.settled.push(s);
+}
+
+export function unsettleObligation(o: Obligation, due: string) {
+  const period = periodOf(due, o.frequency);
+  o.settled = o.settled.filter((x) => periodOf(x.due, o.frequency) !== period);
+}
+
+/** Days around a due date searched for the payment of an obligation. */
+const PAYMENT_SEARCH_DAYS = 15;
+
+/**
+ * Transactions that may be the payment of an occurrence: money going out
+ * (expenses and transfers, e.g. paying a card bill) near the due date and not
+ * linked to another obligation yet. Likeliest first: same name, then closest
+ * amount, then closest date.
+ */
+export function paymentCandidates(ledger: Ledger, o: Obligation, due: string): Transaction[] {
+  const taken = new Set(ledger.obligations.flatMap((x) => x.settled.map((s) => s.transactionId)));
+  const own = settlementFor(o, due)?.transactionId;
+  const nameWords = words(o.name);
+  const score = (tx: Transaction) =>
+    (words(tx.description).some((w) => nameWords.includes(w)) ? 0 : 1000) +
+    (o.amount ? (Math.abs(tx.amount - o.amount) / o.amount) * 100 : 0) +
+    daysBetween(tx.date, due);
+  return ledger.transactions
+    .filter((tx) => tx.type !== "income" && daysBetween(tx.date, due) <= PAYMENT_SEARCH_DAYS && (tx.id === own || !taken.has(tx.id)))
+    .sort((a, b) => score(a) - score(b));
 }
 
 /** Drop references to a deleted category so transactions show as uncategorized. */

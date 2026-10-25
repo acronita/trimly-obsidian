@@ -68,5 +68,16 @@ Trimly only pairs a move between two banks into a transfer when Pluggy categoriz
 same-person transfer (card bill payments are paired by amount and date). Without Pluggy's
 categorization, edit the two entries by hand: delete one and turn the other into a transfer.
 
+**Why didn't I get an obligation reminder on my phone?**
+Reminders come from Trimly itself, so they only fire while Obsidian is open and Trimly is
+unlocked (obligations live inside the encrypted ledger): on unlock and every hour after. A plugin
+can't send push notifications while the app is closed. Choose how they show in Settings →
+*Lembretes de obrigações*; the system notification works on desktop only and leaves the names out.
+
+**My subscription on the synced card shows twice.**
+Rules on synced accounts stopped posting their own transactions in 0.4.0; they link the charge
+from the bank instead. Copies posted before that stay: delete them by hand (the one without the
+bank's description).
+
 **Two devices edited at the same time. What happens?**
 The last save wins. Avoid editing on two devices before a sync completes.

@@ -21,6 +21,11 @@ passphrase that never leaves your device.
   charge imported from the bank is linked to the rule instead, so it is never counted twice.
 - **Subscriptions** — mark a recurring expense as a subscription to list it apart with its yearly
   cost, last charge and price changes, to judge whether it is still worth paying for.
+- **Obrigações (obligations)** — a checklist of what you must do by hand by a due date: bills to
+  pay (electricity, water, health plan, card bill, DAS MEI) and documents to issue or file (IRPF,
+  DASN-SIMEI, invoices). Mark each month (or year) as done, optionally linking the transaction that
+  paid it, or as "none this time". Overdue ones stay listed until dealt with. Reminders show as an
+  Obsidian notice, and optionally a system notification on desktop, while Trimly is unlocked.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
@@ -50,8 +55,8 @@ passphrase that never leaves your device.
 - The passphrase is **never** stored in the vault. With *Remember passphrase on this device* on
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
-- The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle
-  and the benchmarks toggle.
+- The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle,
+  the benchmarks toggle, the hide-values toggle and how obligation reminders are shown.
 - **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With

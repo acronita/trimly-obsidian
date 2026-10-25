@@ -44,6 +44,7 @@ export const en: Strings = {
     },
     frequency: { weekly: "Weekly", monthly: "Monthly", yearly: "Yearly" },
     txType: { expense: "Expense", income: "Income", transfer: "Transfer" },
+    obligationKind: { payment: "Payment", document: "Document" },
     assetClass: {
       fixed_income: "Fixed income",
       treasury: "Tesouro Direto",
@@ -120,6 +121,7 @@ export const en: Strings = {
     accounts: "Accounts",
     budgets: "Budgets",
     recurring: "Recurring",
+    obligations: "Obligations",
     categories: "Categories",
     portfolio: "Portfolio",
     performance: "Performance",
@@ -210,6 +212,35 @@ export const en: Strings = {
     awaitingCharge: (date: string) => `waiting for the ${date} charge`,
     priceUp: (from: string) => `up from ${from}`,
     priceDown: (from: string) => `down from ${from}`,
+  },
+
+  obligations: {
+    overdue: "Overdue",
+    dueSoon: "Due in 7 days",
+    toPay: "To pay this month",
+    pending: "Pending",
+    nothingPending: "Nothing pending in the next 30 days.",
+    all: "All obligations",
+    empty:
+      "Add the bills you pay by hand (electricity, water, health plan, card bill) " +
+      "and the documents with a deadline (tax return, MEI annual statement, invoices).",
+    add: "Add obligation",
+    dueToday: "due today",
+    dueTomorrow: "due tomorrow",
+    dueIn: (n: number) => `due in ${n} days`,
+    overdueBy: (n: number) => `${n} ${s(n, "day", "days")} overdue`,
+    next: (freq: string, date: string) => `${freq} · next due on ${date}`,
+    ended: (freq: string) => `${freq} · ended`,
+    history: "Recently done",
+    paidOn: (date: string) => `paid on ${date}`,
+    doneOn: (date: string) => `done on ${date}`,
+    skipped: "none this time",
+    linked: "with transaction",
+    markDone: "Mark as done",
+    deleteConfirm: (name: string) => `Delete the obligation "${name}"? Its history is deleted too.`,
+    reminder: (items: string) => `Obligations: ${items}`,
+    reminderItem: (name: string, when: string) => `${name} (${when})`,
+    systemReminder: (n: number) => `${n} ${s(n, "obligation is", "obligations are")} due soon or overdue. Open Trimly to see.`,
   },
 
   categories: {
@@ -401,6 +432,31 @@ export const en: Strings = {
       pickAccount: "Pick an account.",
       pickOtherAccount: "Pick a different destination account.",
     },
+    obligation: {
+      newTitle: "New obligation",
+      editTitle: "Edit obligation",
+      name: "Name",
+      namePlaceholder: "E.g. Electricity bill",
+      kind: "Type",
+      kindDesc: "Payment: a bill you pay. Document: something to issue or file, like the income tax return.",
+      repeats: "Repeats",
+      firstDue: "First due date",
+      amount: "Usual amount (optional)",
+      remindDays: "Remind this many days before",
+      endDate: "End date (optional)",
+      notes: "Notes",
+      remindInvalid: "Use a number of days from 0 to 60.",
+    },
+    settle: {
+      title: (name: string, date: string) => `${name} · due ${date}`,
+      transaction: "Payment transaction (optional)",
+      transactionDesc: "Links the payment to a transaction. The likeliest come first.",
+      none: "None",
+      date: "Done on",
+      done: "Mark as done",
+      skip: "None this time",
+      undo: "Undo",
+    },
     account: {
       newTitle: "New account",
       editTitle: "Edit account",
@@ -582,6 +638,12 @@ export const en: Strings = {
     disconnect: "Disconnect",
     disconnectDesc: "Stops syncing and removes the credentials. Imported accounts and transactions stay.",
     disconnectConfirm: "Disconnect bank sync and remove the Pluggy credentials?",
+    reminders: "Obligation reminders",
+    remindersDesc:
+      "Warns when an obligation is close to its due date or overdue: on unlocking Trimly and every hour while it stays unlocked. " +
+      "The system notification works on desktop only and just says how many obligations there are, without their names.",
+    remindersOptions: { off: "Off", app: "Obsidian notice", system: "Obsidian notice and system notification" },
+    remindersDenied: "The system blocked Obsidian's notifications. Allow them in the system settings to get them.",
   },
 
   errors: {
