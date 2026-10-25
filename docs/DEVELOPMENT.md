@@ -1,6 +1,6 @@
 # Development
 
-Requires Node 20+ (CI uses 20; local development tested on 24).
+Requires Node 22.6+ for `npm test` (Node's built-in TypeScript stripping); CI uses 22, local development tested on 24.
 
 ```bash
 npm ci
