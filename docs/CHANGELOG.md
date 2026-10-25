@@ -2,6 +2,11 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Positions open from everywhere they are listed. Rows in the Income tab (by position,
+  recent payments) and movements of synced positions now open the position details; before, they
+  did nothing, which is where real estate funds mostly show up. If the details fail to render, a
+  notice says why instead of the click doing nothing. Files touched: `src/view.ts`, `src/i18n/*`.
+
 - 2026-10-25 — More from brapi quotes, at no extra requests. Each quote request now also asks for 3
   months of daily history (allowed on the free plan) and keeps the 52-week low and high, P/E, EPS,
   market cap and logo. The position details show them, a 3-month price chart with the average price

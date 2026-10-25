@@ -933,6 +933,16 @@ export class TrimlyView extends ItemView {
     const ledger = this.plugin.ledger;
     const a = ledger?.investments.assets.find((x) => x.id === id);
     if (!ledger || !a) return;
+    try {
+      this.openAssetDetails(ledger, a);
+    } catch (e) {
+      // unexpected data must not make a click do nothing silently
+      console.error("Trimly: position details failed", e);
+      new Notice(t.notices.detailsFailed((e as Error).message));
+    }
+  }
+
+  private openAssetDetails(ledger: Ledger, a: Asset) {
     const modal = new Modal(this.app);
     modal.setTitle(a.name);
     const el = modal.contentEl;
@@ -1024,7 +1034,7 @@ export class TrimlyView extends ItemView {
     el.createDiv({ cls: "trimly-section-title", text: t.details.movements(moves.length) });
     const list = el.createDiv("trimly-card");
     if (moves.length === 0) this.empty(list, "arrow-left-right", a.pluggyId ? t.details.noSyncedMovements : t.details.noMovements);
-    for (const m of moves.slice(0, 6)) this.movementRow(list, ledger, m, true);
+    for (const m of moves.slice(0, 6)) this.movementRow(list, ledger, m, true, false);
 
     const actions = new Setting(el);
     if (moves.length > 6) {
@@ -1279,13 +1289,17 @@ export class TrimlyView extends ItemView {
     return t.labels.movement[m.type];
   }
 
-  private movementRow(parent: HTMLElement, ledger: Ledger, m: Movement, showDate: boolean) {
+  /** `linkAsset`: a synced movement opens its position (off inside that position's own details). */
+  private movementRow(parent: HTMLElement, ledger: Ledger, m: Movement, showDate: boolean, linkAsset = true) {
     const row = parent.createDiv("trimly-row");
     const asset = ledger.investments.assets.find((a) => a.id === m.assetId);
     // synced movements mirror Pluggy; only manual ones are edited here
     if (asset && !asset.pluggyId) {
       row.addClass("is-clickable");
       row.addEventListener("click", () => this.editMovement(m.id));
+    } else if (asset && linkAsset) {
+      row.addClass("is-clickable");
+      row.addEventListener("click", () => this.showAsset(asset.id));
     }
     const color: Record<MovementType, string> = {
       buy: "var(--interactive-accent)",
@@ -1440,6 +1454,10 @@ export class TrimlyView extends ItemView {
     for (const [assetId, amount] of [...perAsset.entries()].sort((a, b) => b[1] - a[1])) {
       const a = ledger.investments.assets.find((x) => x.id === assetId);
       const r = byAsset.createDiv("trimly-row");
+      if (a) {
+        r.addClass("is-clickable");
+        r.addEventListener("click", () => this.showAsset(a.id));
+      }
       if (a) this.iconTile(r, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
       const main = r.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: a?.name ?? "?" });

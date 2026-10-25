@@ -487,6 +487,7 @@ export const ptBR = {
     quotesFailed: (e: string) => `Trimly: as cotações não foram atualizadas: ${e}`,
     quotesUpdated: (n: number) => `Cotações: ${n} ${s(n, "ativo atualizado", "ativos atualizados")}.`,
     unlockFirst: "Desbloqueie o Trimly primeiro.",
+    detailsFailed: (e: string) => `Trimly: não foi possível abrir os detalhes do ativo: ${e}`,
     lockedWhileChanging: "O Trimly foi bloqueado.",
     reencryptFailed: (e: string) => `Não foi possível criptografar de novo: ${e}`,
     passphraseChanged: "Senha trocada. Guarde a nova num lugar seguro.",

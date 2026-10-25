@@ -482,6 +482,7 @@ export const en: Strings = {
     quotesFailed: (e: string) => `Trimly: quotes not updated: ${e}`,
     quotesUpdated: (n: number) => `Quotes: ${n} ${s(n, "position", "positions")} updated.`,
     unlockFirst: "Unlock Trimly first.",
+    detailsFailed: (e: string) => `Trimly: could not open the position details: ${e}`,
     lockedWhileChanging: "Trimly was locked.",
     reencryptFailed: (e: string) => `Could not re-encrypt: ${e}`,
     passphraseChanged: "Passphrase changed. Store the new one somewhere safe.",
