@@ -13,6 +13,7 @@ export type AccountType = "checking" | "savings" | "credit" | "cash" | "investme
 export type CategoryKind = "expense" | "income";
 export type TxType = "expense" | "income" | "transfer";
 export type Frequency = "weekly" | "monthly" | "yearly";
+export type MovementType = "buy" | "sell" | "income" | "tax" | "amortization" | "transfer";
 export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
@@ -64,6 +65,24 @@ export const ASSET_CLASS_ICONS: Record<AssetClass, string> = {
   fund: "briefcase",
   retirement: "umbrella",
   other: "coins",
+};
+
+export const MOVEMENT_LABELS: Record<MovementType, string> = {
+  buy: "Contribution",
+  sell: "Withdrawal",
+  income: "Income",
+  tax: "Tax",
+  amortization: "Amortization",
+  transfer: "Transfer",
+};
+
+export const MOVEMENT_ICONS: Record<MovementType, string> = {
+  buy: "arrow-down-left",
+  sell: "arrow-up-right",
+  income: "coins",
+  tax: "receipt",
+  amortization: "undo-2",
+  transfer: "arrow-left-right",
 };
 
 /** Lucide icon names offered for categories. */
@@ -178,17 +197,42 @@ export interface Asset {
   pluggyItemId?: string;
 }
 
+/** Money moving in or out of one position, in cents. */
+export interface Movement {
+  id: string;
+  assetId: string;
+  date: string;
+  type: MovementType;
+  /** always positive, net of fees; `type` (and `direction` for transfers) gives the direction */
+  amount: number;
+  quantity?: number;
+  description?: string;
+  /** transfers only */
+  direction?: "in" | "out";
+  pluggyId?: string;
+}
+
 /** Portfolio total on one day, recorded whenever positions change. */
 export interface PortfolioSnapshot {
   date: string;
   value: number;
   invested: number;
+  /**
+   * net money put in (+) or taken out (−) since the previous day's snapshot;
+   * missing on the first snapshot and on ones recorded before movements existed
+   */
+  flow?: number;
+  /** the part of `flow` estimated from changes in amount invested, for positions without movements */
+  estimated?: number;
+  /** dividends, interest and coupons paid out since the previous day's snapshot */
+  income?: number;
 }
 
 export interface Investments {
   assets: Asset[];
   /** oldest first, at most one per day */
   snapshots: PortfolioSnapshot[];
+  movements: Movement[];
 }
 
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
@@ -241,7 +285,7 @@ export function defaultLedger(): Ledger {
     transactions: [],
     budgets: [],
     recurring: [],
-    investments: { assets: [], snapshots: [] },
+    investments: { assets: [], snapshots: [], movements: [] },
   };
 }
 
@@ -263,7 +307,11 @@ export function parseLedger(json: string): Ledger {
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
-    investments: { assets: raw.investments?.assets ?? [], snapshots: raw.investments?.snapshots ?? [] },
+    investments: {
+      assets: raw.investments?.assets ?? [],
+      snapshots: raw.investments?.snapshots ?? [],
+      movements: raw.investments?.movements ?? [],
+    },
     pluggy: raw.pluggy,
   };
 }
@@ -413,6 +461,34 @@ export function portfolioInvested(ledger: Ledger): number {
   return openAssets(ledger).reduce((s, a) => s + (a.invested ?? a.value), 0);
 }
 
+/**
+ * Signed money into (+) or out of (−) a position. Income leaves the position as
+ * a payout and tax is a cost, so neither counts as a flow.
+ */
+export function movementFlow(m: Movement): number {
+  switch (m.type) {
+    case "buy":
+      return m.amount;
+    case "sell":
+    case "amortization":
+      return -m.amount;
+    case "transfer":
+      return m.direction === "out" ? -m.amount : m.amount;
+    default:
+      return 0;
+  }
+}
+
+/** Income paid per month ("YYYY-MM") between `from` and `to` (inclusive). */
+export function incomeByMonth(ledger: Ledger, from: string, to: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const m of ledger.investments.movements) {
+    if (m.type !== "income" || m.date < from || m.date > to) continue;
+    out.set(monthOf(m.date), (out.get(monthOf(m.date)) ?? 0) + m.amount);
+  }
+  return out;
+}
+
 /** Current value per asset class, largest first. */
 export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
   const out = new Map<AssetClass, number>();
@@ -421,9 +497,9 @@ export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
 }
 
 /** Record today's portfolio total, replacing an earlier snapshot of the same day. Mutates the ledger. */
-export function recordSnapshot(ledger: Ledger, today: string) {
+export function recordSnapshot(ledger: Ledger, today: string, flows?: Pick<PortfolioSnapshot, "flow" | "estimated" | "income">) {
   const snaps = ledger.investments.snapshots;
-  const snap = { date: today, value: portfolioValue(ledger), invested: portfolioInvested(ledger) };
+  const snap: PortfolioSnapshot = { date: today, value: portfolioValue(ledger), invested: portfolioInvested(ledger), ...flows };
   const last = snaps[snaps.length - 1];
   if (last?.date === today) snaps[snaps.length - 1] = snap;
   else if (!last || last.date < today) snaps.push(snap);

@@ -279,6 +279,7 @@ export default class TrimlyPlugin extends Plugin {
         r.removed && `${r.removed} removed`,
         inv.added && `${inv.added} new investment${inv.added === 1 ? "" : "s"}`,
         inv.closed && `${inv.closed} investment${inv.closed === 1 ? "" : "s"} closed`,
+        inv.movements && `${inv.movements} investment movement${inv.movements === 1 ? "" : "s"}`,
       ].filter(Boolean);
       // say when Pluggy reports no investments at all, so an empty Investments tab is explainable
       if (!quiet && !data.investments.errors.length && data.investments.investments.length === 0) {
@@ -288,7 +289,7 @@ export default class TrimlyPlugin extends Plugin {
     });
     if (summary) new Notice(summary);
     // investments are optional per item, but a failure must not pass silently
-    if (data.investments.errors.length) new Notice(`Trimly: investments not updated: ${data.investments.errors.join("; ")}`);
+    if (data.investments.errors.length) new Notice(`Trimly: some investment data could not be loaded: ${data.investments.errors.join("; ")}`);
   }
 
   /**

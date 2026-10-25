@@ -1,6 +1,6 @@
 import { RequestUrlResponse, requestUrl } from "obsidian";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "./bank-sync";
-import type { PluggyInvestment } from "./investment-sync";
+import type { PluggyInvestment, PluggyInvestmentTransaction } from "./investment-sync";
 import type { PluggyConfig } from "./ledger";
 
 /**
@@ -95,6 +95,21 @@ async function fetchInvestments(apiKey: string, itemId: string): Promise<PluggyI
   return out;
 }
 
+async function fetchInvestmentTransactions(apiKey: string, investment: PluggyInvestment): Promise<PluggyInvestmentTransaction[]> {
+  const out: PluggyInvestmentTransaction[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await get<{ results: PluggyInvestmentTransaction[]; totalPages?: number }>(
+      apiKey,
+      `/investments/${encodeURIComponent(investment.id)}/transactions`,
+      { page: String(page) },
+      `Loading movements of ${investment.name}`
+    );
+    out.push(...res.results);
+    if (!res.totalPages || page >= res.totalPages) break;
+  }
+  return out;
+}
+
 /**
  * Accounts of every configured item plus their transactions dated `dateFrom` or
  * later, and the items' investment positions. A failure loading investments
@@ -111,11 +126,23 @@ export async function fetchBankData(config: PluggyConfig, dateFrom: string): Pro
       accounts.push(acc);
       transactions.push(...(await fetchTransactions(apiKey, acc.id, dateFrom)));
     }
+    let positions: PluggyInvestment[];
     try {
-      investments.investments.push(...(await fetchInvestments(apiKey, itemId)));
+      positions = await fetchInvestments(apiKey, itemId);
       investments.itemIds.push(itemId);
     } catch (e) {
       investments.errors.push((e as Error).message);
+      continue;
+    }
+    for (const p of positions) {
+      // only the separately fetched list counts: missing movements fall back to estimates
+      delete p.transactions;
+      try {
+        p.transactions = await fetchInvestmentTransactions(apiKey, p);
+      } catch (e) {
+        investments.errors.push((e as Error).message);
+      }
+      investments.investments.push(p);
     }
   }
   return { bank: { accounts, transactions, categories: await fetchCategories(apiKey) }, investments };

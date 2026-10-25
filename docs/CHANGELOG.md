@@ -2,6 +2,21 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Investments mode, phase 3: movements and income. Bank sync also fetches each
+  position's movements from Pluggy (`/investments/{id}/transactions`: contributions, withdrawals,
+  dividends/JCP/interest/coupons, taxes, amortizations, transfers), re-linking ones that come back
+  with a new id. New Movements tab (filter by position, type and period; totals put in, taken out,
+  net, income) and Income tab (last 12 months, monthly average, yield, income per month, by
+  position, recent payments). Each snapshot now records the money moved and the income paid since
+  the previous day's snapshot, from real movements where Pluggy has them and estimated from the
+  amount invested otherwise, so returns include dividends and no longer guess flows; a position
+  first seen after history started counts as money in, not gain. Ledger v3 gains
+  `investments.movements[]` and snapshot `flow`/`estimated`/`income`. Why: dividends are part of
+  the return, and the cost-based estimate was off whenever a deposit and a market move fell between
+  the same two syncs. Files touched: `src/investment-sync.ts`, `src/pluggy.ts`, `src/ledger.ts`,
+  `src/returns.ts`, `src/charts.ts`, `src/main.ts`, `src/view.ts`, `test/investment-sync.test.ts`,
+  `test/ledger.test.ts`, `README.md`, `docs/`.
+
 - 2026-10-25 — Investments mode, phase 2: evolution and returns. The investments overview gets an
   Evolution chart (portfolio value vs amount invested over the daily snapshots) and a Performance
   card (this month, 12 months, since the first snapshot), and a new Performance tab adds a

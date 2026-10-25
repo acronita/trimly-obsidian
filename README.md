@@ -21,8 +21,9 @@ passphrase that never leaves your device.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
-  class, an evolution chart, and time-weighted returns (month by month, 12 months, since start)
-  compared with CDI and IPCA. Positions are imported by bank sync; net worth in the accounts view includes them.
+  class, an evolution chart, time-weighted returns (month by month, 12 months, since start)
+  compared with CDI and IPCA, every contribution, withdrawal and tax, and the income (dividends,
+  JCP, interest, coupons) per month and per position. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
   through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
   purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).
@@ -82,8 +83,9 @@ categorization.
 
 Bank sync also imports the investment positions of each item (fixed income, treasury, stocks, real
 estate funds, funds, ETFs, retirement plans) when the item includes Pluggy's investments product.
-Each sync overwrites their values and records the day's portfolio total, so the history starts with
-your first sync. A position the item stops reporting is shown as closed.
+Each sync overwrites their values, imports their movements, and records the day's portfolio total
+with the money moved and the income paid since the day before, so the history starts with your
+first sync. A position the item stops reporting is shown as closed.
 
 ## Development
 

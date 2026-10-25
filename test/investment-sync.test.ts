@@ -1,9 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyInvestments, assetClass } from "../src/investment-sync.ts";
-import type { PluggyInvestment } from "../src/investment-sync.ts";
+import type { PluggyInvestment, PluggyInvestmentTransaction } from "../src/investment-sync.ts";
 import { allocationByClass, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue } from "../src/ledger.ts";
 import type { Ledger } from "../src/ledger.ts";
+import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
 const TODAY = "2026-10-25";
 
@@ -141,6 +142,104 @@ test("allocation groups open positions by class, largest first", () => {
 
 test("ledgers from before investments existed load with an empty portfolio", () => {
   const l = parseLedger(JSON.stringify({ version: 2, accounts: [], categories: [], transactions: [], budgets: [], recurring: [] }));
-  assert.deepEqual(l.investments, { assets: [], snapshots: [] });
+  assert.deepEqual(l.investments, { assets: [], snapshots: [], movements: [] });
   assert.equal(l.version, 3);
+});
+
+// ---- movements and flows ----
+
+function mov(id: string, type: string, date: string, amount: number, extra: Partial<PluggyInvestmentTransaction> = {}): PluggyInvestmentTransaction {
+  return { id, type, date: `${date}T00:00:00.000Z`, amount, ...extra };
+}
+
+test("movements are imported once per Pluggy id and mapped to Trimly types", () => {
+  const l = defaultLedger();
+  const txs = [mov("b", "BUY", "2026-01-10", 900), mov("d", "INTEREST", "2026-09-15", 12.5), mov("t", "TRANSFER", "2026-09-20", 100, { movementType: "DEBIT" })];
+  const r = applyInvestments(l, [inv("a", { transactions: txs })], ["item-1"], "2026-10-24");
+  assert.equal(r.movements, 3);
+  applyInvestments(l, [inv("a", { transactions: txs })], ["item-1"], TODAY);
+  const ms = l.investments.movements;
+  assert.equal(ms.length, 3);
+  assert.deepEqual(ms.map((m) => [m.type, m.amount, m.direction]), [
+    ["buy", 900_00, undefined],
+    ["income", 12_50, undefined],
+    ["transfer", 100_00, "out"],
+  ]);
+  assert.ok(ms.every((m) => m.assetId === asset(l, "a").id));
+});
+
+test("a movement that comes back with a new id is re-linked, not duplicated", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { transactions: [mov("old", "BUY", "2026-10-20", 500)] })], ["item-1"], "2026-10-24");
+  applyInvestments(l, [inv("a", { transactions: [mov("new", "BUY", "2026-10-21", 500)] })], ["item-1"], TODAY);
+  assert.equal(l.investments.movements.length, 1);
+  assert.equal(l.investments.movements[0].pluggyId, "new");
+});
+
+test("fees in netAmount are part of the money moved", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { transactions: [mov("b", "BUY", "2026-10-20", 1000, { netAmount: 1002.5 })] })], ["item-1"], TODAY);
+  assert.equal(l.investments.movements[0].amount, 1002_50);
+});
+
+test("a contribution recorded as a movement is not counted as return", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { balance: 1000, amountOriginal: 1000, transactions: [] })], ["item-1"], "2026-10-01");
+  // +500 bought and the position grew 10 on top
+  applyInvestments(
+    l,
+    [inv("a", { balance: 1510, amountOriginal: 1500, transactions: [mov("b", "BUY", "2026-10-02", 500)] })],
+    ["item-1"],
+    "2026-10-02"
+  );
+  const snap = l.investments.snapshots[1];
+  assert.equal(snap.flow, 500_00);
+  assert.equal(snap.estimated, 0);
+  const idx = portfolioIndex(l.investments.snapshots);
+  assert.ok(Math.abs((periodReturn(idx, "2026-10-01", "2026-10-02") ?? 0) - 0.01) < 1e-9);
+});
+
+test("dividends paid out count as return even though the position's value doesn't grow", () => {
+  const l = defaultLedger();
+  const stock = { type: "EQUITY", subtype: "STOCK", balance: 1000, amountOriginal: 1000 };
+  applyInvestments(l, [inv("s", { ...stock, transactions: [] })], ["item-1"], "2026-10-01");
+  applyInvestments(l, [inv("s", { ...stock, transactions: [mov("d", "INTEREST", "2026-10-15", 20)] })], ["item-1"], "2026-10-31");
+  assert.equal(l.investments.snapshots[1].income, 20_00);
+  const idx = portfolioIndex(l.investments.snapshots);
+  assert.ok(Math.abs((periodReturn(idx, "2026-10-01", "2026-10-31") ?? 0) - 0.02) < 1e-9);
+});
+
+test("a second sync on the same day measures flows from the previous day, without double counting", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { balance: 1000, amountOriginal: 1000 })], ["item-1"], "2026-10-01");
+  // no movements for this position: estimated from the amount invested, twice on the same day
+  applyInvestments(l, [inv("a", { balance: 1200, amountOriginal: 1200 })], ["item-1"], "2026-10-02");
+  applyInvestments(l, [inv("a", { balance: 1500, amountOriginal: 1500 })], ["item-1"], "2026-10-02");
+  const snap = l.investments.snapshots[1];
+  assert.equal(l.investments.snapshots.length, 2);
+  assert.equal(snap.flow, 500_00);
+  assert.equal(snap.estimated, 500_00);
+});
+
+test("a position first seen after history started arrives as money in, not as gain", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a")], ["item-1", "item-2"], "2026-10-01");
+  // a second bank linked later reports a position bought long ago
+  applyInvestments(
+    l,
+    [inv("a"), inv("x", { itemId: "item-2", balance: 5000, transactions: [mov("old", "BUY", "2024-01-01", 4000)] })],
+    ["item-1", "item-2"],
+    "2026-10-02"
+  );
+  const idx = portfolioIndex(l.investments.snapshots);
+  assert.ok(Math.abs(periodReturn(idx, "2026-10-01", "2026-10-02") ?? 1) < 1e-9);
+});
+
+test("a position that disappears is treated as withdrawn at its value", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a"), inv("b")], ["item-1"], "2026-10-01");
+  applyInvestments(l, [inv("a")], ["item-1"], "2026-10-02");
+  assert.equal(l.investments.snapshots[1].flow, -1000_00);
+  const idx = portfolioIndex(l.investments.snapshots);
+  assert.ok(Math.abs(periodReturn(idx, "2026-10-01", "2026-10-02") ?? 1) < 1e-9);
 });

@@ -100,3 +100,23 @@ export function lineChart(parent: HTMLElement, xs: number[], series: LineSeries[
   foot.createSpan({ text: labels.start });
   foot.createSpan({ text: labels.end });
 }
+
+export interface Bar {
+  label: string;
+  value: number;
+  current?: boolean;
+}
+
+/** One bar per group, e.g. income per month. */
+export function bars(parent: HTMLElement, groups: Bar[], tooltip: (g: Bar) => string) {
+  const wrap = parent.createDiv("trimly-bars");
+  const max = Math.max(1, ...groups.map((g) => g.value));
+  for (const g of groups) {
+    const col = wrap.createDiv("trimly-bars-col");
+    if (g.current) col.addClass("is-current");
+    col.setAttr("aria-label", tooltip(g));
+    const pair = col.createDiv("trimly-bars-pair");
+    pair.createDiv("trimly-bars-bar is-income").setCssProps({ "--trimly-h": `${(g.value / max) * 100}%` });
+    col.createDiv({ cls: "trimly-bars-label", text: g.label });
+  }
+}

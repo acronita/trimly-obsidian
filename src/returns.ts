@@ -1,10 +1,11 @@
 /**
  * Portfolio returns from the daily snapshots, and CDI/IPCA benchmarks.
  *
- * Returns are time-weighted: money put in or taken out is not gain or loss.
- * Without individual movements, the change in amount invested between two
- * snapshots stands in for the net flow: contributions at cost, withdrawals
- * scaled by the portfolio's value/cost ratio.
+ * Returns are time-weighted: money put in or taken out is not gain or loss,
+ * and income paid out (dividends, coupons) is. Snapshots record their flows at
+ * sync time (see investment-sync.ts); older ones without them fall back to the
+ * change in amount invested: contributions at cost, withdrawals scaled by the
+ * portfolio's value/cost ratio.
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
@@ -37,10 +38,12 @@ export function portfolioIndex(snaps: PortfolioSnapshot[]): IndexPoint[] {
     const prev = snaps[i - 1];
     const cur = snaps[i];
     // flows land at the end of the period; from an empty portfolio there is nothing to grow.
-    // A withdrawal lowers the amount invested by its cost, but takes out its current value.
+    // Older snapshots carry no flow: a withdrawal lowers the amount invested by its cost,
+    // but takes out its current value.
     const change = cur.invested - prev.invested;
-    const flow = change < 0 && prev.invested > 0 ? (change * prev.value) / prev.invested : change;
-    const growth = prev.value > 0 ? (cur.value - flow) / prev.value : 1;
+    const flow = cur.flow ?? (change < 0 && prev.invested > 0 ? (change * prev.value) / prev.invested : change);
+    // payouts left the portfolio as gain
+    const growth = prev.value > 0 ? (cur.value - flow + (cur.income ?? 0)) / prev.value : 1;
     index *= Math.max(0, growth);
     out.push({ date: cur.date, index });
   }
