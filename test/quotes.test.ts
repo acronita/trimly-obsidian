@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultLedger, newId, saveAsset } from "../src/ledger.ts";
 import type { Asset } from "../src/ledger.ts";
-import { applyQuotes, quoteTickers, tickerOf } from "../src/quotes.ts";
+import { applyQuotes, averagePrice, quoteTickers, tickerOf } from "../src/quotes.ts";
 import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
 const asset = (extra: Partial<Asset>): Asset => ({ id: newId(), name: "x", assetClass: "stock", value: 0, updatedAt: "2026-10-01", ...extra });
@@ -52,4 +52,26 @@ test("a position without quantity only gets the quote", () => {
   applyQuotes(l, [{ symbol: "BOVA11", price: 120 }], "2026-10-02");
   assert.equal(l.investments.assets[0].value, 1000_00);
   assert.equal(l.investments.snapshots.length, 0);
+});
+
+test("quote stats and the 3-month history are stored in cents, history by day", () => {
+  const l = defaultLedger();
+  l.investments.assets.push(asset({ code: "PETR4", value: 1000_00, pluggyId: "p" }));
+  const day = (iso: string) => new Date(`${iso}T12:00:00`).getTime() / 1000;
+  applyQuotes(
+    l,
+    [{ symbol: "PETR4", price: 58.68, low52: 29.53, high52: 59.79, pe: 5.67, eps: 10.35, marketCap: 788886152374, history: [[day("2026-10-22"), 57.83], [day("2026-10-23"), 58.68]] }],
+    "2026-10-25"
+  );
+  const q = l.investments.assets[0].quote;
+  assert.equal(q?.low52, 29_53);
+  assert.equal(q?.high52, 59_79);
+  assert.equal(q?.eps, 10_35);
+  assert.deepEqual(q?.history, [["2026-10-22", 57_83], ["2026-10-23", 58_68]]);
+});
+
+test("average price is cost per share; unknown without quantity or cost", () => {
+  assert.equal(averagePrice({ invested: 3000_00, quantity: 100 }), 30_00);
+  assert.equal(averagePrice({ invested: 3000_00 }), null);
+  assert.equal(averagePrice({ quantity: 100 }), null);
 });

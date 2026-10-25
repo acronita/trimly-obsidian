@@ -187,6 +187,19 @@ export interface Quote {
   time?: string;
   /** company or fund name */
   longName?: string;
+  /** 52-week range, cents */
+  low52?: number;
+  high52?: number;
+  /** price/earnings ratio */
+  pe?: number;
+  /** earnings per share, cents */
+  eps?: number;
+  /** market value of the company, in currency units */
+  marketCap?: number;
+  /** logo image URL */
+  logo?: string;
+  /** daily closes of the last 3 months, oldest first: [YYYY-MM-DD, cents] */
+  history?: [string, number][];
 }
 
 /** Money moving in or out of one position, in cents. */

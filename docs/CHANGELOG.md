@@ -2,6 +2,15 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — More from brapi quotes, at no extra requests. Each quote request now also asks for 3
+  months of daily history (allowed on the free plan) and keeps the 52-week low and high, P/E, EPS,
+  market cap and logo. The position details show them, a 3-month price chart with the average price
+  as a dashed line, and the average price paid (amount invested ÷ quantity) against the quote. Rows
+  of positions named by their ticker show the company name. `Asset.quote` gains `low52`, `high52`,
+  `pe`, `eps`, `marketCap`, `logo` and `history`. Why: a ticker alone didn't say what the position
+  was or how it was doing. Files touched: `src/brapi.ts`, `src/quotes.ts`, `src/ledger.ts`,
+  `src/view.ts`, `src/main.ts`, `src/i18n/*`, `src/styles/index.css`, `test/quotes.test.ts`.
+
 - 2026-10-25 — Fewer positions without an institution. A position Pluggy reports without one takes
   the institution most other positions of the same Pluggy item report (an item is one bank
   connection), before falling back to the issuer. Synced positions can now have their institution

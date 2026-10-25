@@ -7,19 +7,51 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { recordSnapshot } from "./ledger.ts";
-import type { Asset, Ledger } from "./ledger.ts";
+import { recordSnapshot, toISODate } from "./ledger.ts";
+import type { Asset, Ledger, Quote } from "./ledger.ts";
 
 /** B3 ticker: four letters and one or two digits (PETR4, HGLG11, BOVA11, AAPL34); a trailing F is the fractional market. */
 const TICKER = /^([A-Z]{4}\d{1,2})F?$/;
 
+/** A quote as brapi reports it; prices in currency units. */
 export interface QuoteData {
   symbol: string;
-  /** price per share, in currency units */
   price: number;
   changePct?: number | null;
   time?: string | null;
   longName?: string | null;
+  low52?: number | null;
+  high52?: number | null;
+  pe?: number | null;
+  eps?: number | null;
+  marketCap?: number | null;
+  logo?: string | null;
+  /** daily closes: [unix seconds, price] */
+  history?: [number, number][];
+}
+
+const num = (v: number | null | undefined): v is number => typeof v === "number" && Number.isFinite(v);
+const cents = (v: number) => Math.round(v * 100);
+
+function toQuote(q: QuoteData): Quote {
+  const out: Quote = { price: cents(q.price) };
+  if (num(q.changePct)) out.changePct = q.changePct;
+  if (q.time) out.time = q.time;
+  if (q.longName) out.longName = q.longName;
+  if (num(q.low52)) out.low52 = cents(q.low52);
+  if (num(q.high52)) out.high52 = cents(q.high52);
+  if (num(q.pe)) out.pe = q.pe;
+  if (num(q.eps)) out.eps = cents(q.eps);
+  if (num(q.marketCap)) out.marketCap = q.marketCap;
+  if (q.logo) out.logo = q.logo;
+  const history = (q.history ?? []).filter(([d, p]) => num(d) && num(p)).map(([d, p]): [string, number] => [toISODate(new Date(d * 1000)), cents(p)]);
+  if (history.length) out.history = history;
+  return out;
+}
+
+/** Average price paid per share, in cents; null without quantity or cost. */
+export function averagePrice(a: Pick<Asset, "invested" | "quantity">): number | null {
+  return a.invested && a.quantity ? Math.round(a.invested / a.quantity) : null;
 }
 
 /** The ticker to quote for a position, or null when its code is not a B3 ticker. */
@@ -48,10 +80,7 @@ export function applyQuotes(ledger: Ledger, quotes: QuoteData[], today: string):
     const q = ticker ? bySymbol.get(ticker) : undefined;
     if (!q || !Number.isFinite(q.price)) continue;
     const before = JSON.stringify(a);
-    a.quote = { price: Math.round(q.price * 100) };
-    if (typeof q.changePct === "number" && Number.isFinite(q.changePct)) a.quote.changePct = q.changePct;
-    if (q.time) a.quote.time = q.time;
-    if (q.longName) a.quote.longName = q.longName;
+    a.quote = toQuote(q);
     if (!a.pluggyId && a.quantity) {
       const value = Math.round(q.price * 100 * a.quantity);
       if (value !== a.value) {

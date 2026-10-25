@@ -1191,3 +1191,11 @@ input.trimly-amount-input:focus {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.trimly-detail-logo {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: var(--background-modifier-hover);
+}

@@ -15,6 +15,13 @@ interface BrapiResult {
   regularMarketTime?: string | null;
   longName?: string | null;
   shortName?: string | null;
+  fiftyTwoWeekLow?: number | null;
+  fiftyTwoWeekHigh?: number | null;
+  priceEarnings?: number | null;
+  earningsPerShare?: number | null;
+  marketCap?: number | null;
+  logourl?: string | null;
+  historicalDataPrice?: { date: number; close: number | null }[] | null;
 }
 
 export interface QuoteFetch {
@@ -27,7 +34,8 @@ export async function fetchQuotes(token: string, tickers: string[]): Promise<Quo
   const out: QuoteFetch = { quotes: [], errors: [] };
   for (const ticker of tickers) {
     const res = await requestUrl({
-      url: `${BASE}/${encodeURIComponent(ticker)}`,
+      // the free plan allows 3 months of daily history; it comes in the same request
+      url: `${BASE}/${encodeURIComponent(ticker)}?range=3mo&interval=1d`,
       headers: { Authorization: `Bearer ${token}` },
       throw: false,
     });
@@ -55,6 +63,13 @@ export async function fetchQuotes(token: string, tickers: string[]): Promise<Quo
       changePct: r.regularMarketChangePercent,
       time: r.regularMarketTime,
       longName: r.longName || r.shortName,
+      low52: r.fiftyTwoWeekLow,
+      high52: r.fiftyTwoWeekHigh,
+      pe: r.priceEarnings,
+      eps: r.earningsPerShare,
+      marketCap: r.marketCap,
+      logo: r.logourl,
+      history: (r.historicalDataPrice ?? []).flatMap((h) => (typeof h.close === "number" ? [[h.date, h.close] as [number, number]] : [])),
     });
   }
   return out;

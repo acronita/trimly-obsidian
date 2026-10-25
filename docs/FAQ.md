@@ -36,7 +36,9 @@ names change after restarting Obsidian.
 Create a token at brapi.dev and paste it in *Settings → Trimly → Cotações*. Positions whose code is a
 B3 ticker (PETR4, HGLG11, BOVA11…) get their price on every sync. For a manual position, fill in the
 ticker and the quantity and its value follows the quote. Synced positions keep the value their bank
-reports. brapi's free plan quotes one ticker per request and has a monthly limit; when it is
+reports. The details of a quoted position also show its 3-month chart, 52-week range, P/E, EPS,
+market cap and your average price against the quote. The company logo is loaded from
+icons.brapi.dev when you open the details. brapi's free plan quotes one ticker per request and has a monthly limit; when it is
 reached, the sync says so.
 
 **How do I add an investment bank sync doesn't see (crypto, a foreign broker)?**

@@ -122,6 +122,20 @@ export default class TrimlyPlugin extends Plugin {
     return formatMoney(cents, this.settings.currency, localeForCurrency(this.settings.currency, this.locale()));
   }
 
+  /** Large amounts in currency units, abbreviated (R$ 788,9 bi). */
+  formatCompactMoney(units: number): string {
+    try {
+      return new Intl.NumberFormat(localeForCurrency(this.settings.currency, this.locale()), {
+        style: "currency",
+        currency: this.settings.currency,
+        notation: "compact",
+        maximumFractionDigits: 1,
+      }).format(units);
+    } catch {
+      return `${units} ${this.settings.currency}`;
+    }
+  }
+
   formatDateTime(iso: string): string {
     return new Date(iso).toLocaleString(this.locale());
   }

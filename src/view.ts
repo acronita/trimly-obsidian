@@ -1,6 +1,6 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
-import { bars, cashFlowBars, donut, lineChart } from "./charts";
+import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
 import { AccountModal, AssetModal, CategoryModal, ConfirmModal, MovementModal, RecurringModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
@@ -47,6 +47,7 @@ import {
 } from "./ledger";
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
+import { averagePrice, tickerOf } from "./quotes";
 import { IndexPoint, cdiReturn, ipcaReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
@@ -886,6 +887,7 @@ export class TrimlyView extends ItemView {
     const sub = [a.institution, this.rateLabel(a), a.dueDate && t.inv.due(this.longDate(a.dueDate))].filter(Boolean);
     if (a.quantity && (a.assetClass === "stock" || a.assetClass === "reit" || a.assetClass === "etf")) sub.unshift(t.inv.units(a.quantity));
     if (a.code && !a.name.includes(a.code)) sub.unshift(a.code);
+    if (a.quote?.longName && tickerOf({ code: a.name })) sub.unshift(a.quote.longName);
     if (a.quote?.changePct !== undefined) sub.push(this.signedPct(a.quote.changePct / 100));
     main.createDiv({ cls: "trimly-row-sub", text: sub.join(" · ") || t.labels.assetClass[a.assetClass] });
     const end = row.createDiv("trimly-row-end");
@@ -937,7 +939,8 @@ export class TrimlyView extends ItemView {
     el.addClass("trimly-modal", "trimly-asset-details");
 
     const head = el.createDiv("trimly-detail-head");
-    this.iconTile(head, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
+    if (a.quote?.logo) head.createEl("img", { cls: "trimly-detail-logo", attr: { src: a.quote.logo, alt: "" } });
+    else this.iconTile(head, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
     const tags = head.createDiv("trimly-detail-tags");
     tags.createSpan({ cls: "trimly-tile-tag", text: t.labels.assetClass[a.assetClass] });
     tags.createSpan({ cls: "trimly-tile-tag", text: a.pluggyId ? t.details.bankSync : t.details.manual });
@@ -971,11 +974,20 @@ export class TrimlyView extends ItemView {
       const days = Math.round((this.ts(a.dueDate) - this.ts(today)) / 86_400_000);
       item(t.details.maturity, `${this.longDate(a.dueDate)} · ${days >= 0 ? t.details.inDays(days) : t.details.matured}`);
     }
-    item(t.details.company, a.quote?.longName);
-    if (a.quote) {
-      const change = a.quote.changePct !== undefined ? this.signedPct(a.quote.changePct / 100) : "—";
-      const when = a.quote.time ? this.plugin.formatDateTime(a.quote.time) : "";
-      item(t.details.quote, t.details.quoteValue(this.money(a.quote.price), change, when));
+    const q = a.quote;
+    const avg = averagePrice(a);
+    item(t.details.company, q?.longName);
+    if (q) {
+      const change = q.changePct !== undefined ? this.signedPct(q.changePct / 100) : "—";
+      const when = q.time ? this.plugin.formatDateTime(q.time) : "";
+      item(t.details.quote, t.details.quoteValue(this.money(q.price), change, when));
+    }
+    if (avg) item(t.details.avgPrice, this.money(avg) + (q ? ` · ${t.details.quoteVsAvg(this.signedPct(q.price / avg - 1))}` : ""));
+    if (q) {
+      item(t.details.range52, q.low52 !== undefined && q.high52 !== undefined && `${this.money(q.low52)} – ${this.money(q.high52)}`);
+      item(t.details.pe, q.pe !== undefined && new Intl.NumberFormat(this.plugin.locale(), { maximumFractionDigits: 2 }).format(q.pe));
+      item(t.details.eps, q.eps !== undefined && this.money(q.eps));
+      item(t.details.marketCap, q.marketCap !== undefined && this.plugin.formatCompactMoney(q.marketCap));
     }
     item(t.details.institution, a.institution);
     item(t.details.issuer, a.issuer);
@@ -988,6 +1000,23 @@ export class TrimlyView extends ItemView {
       .filter((m) => m.assetId === a.id && m.type === "income" && m.date > this.yearAgo())
       .reduce((s, m) => s + m.amount, 0);
     item(t.details.income12, income12 > 0 && this.money(income12));
+
+    if (q?.history && q.history.length >= 2) {
+      const history = q.history;
+      el.createDiv({ cls: "trimly-section-title", text: t.details.history });
+      const chart = el.createDiv("trimly-card");
+      const legend = chart.createDiv("trimly-legend-inline");
+      legend.createSpan("trimly-key is-accent").createSpan({ text: t.details.price });
+      const series: LineSeries[] = [{ values: history.map(([, p]) => p / 100), cls: "is-accent", area: true }];
+      if (avg) {
+        legend.createSpan("trimly-key is-muted").createSpan({ text: t.details.avgPrice });
+        series.push({ values: history.map(() => avg / 100), cls: "is-muted", dashed: true });
+      }
+      lineChart(chart, history.map(([d]) => this.ts(d)), series, {
+        start: this.longDate(history[0][0]),
+        end: this.longDate(history[history.length - 1][0]),
+      });
+    }
 
     const moves = ledger.investments.movements
       .filter((m) => m.assetId === a.id)
