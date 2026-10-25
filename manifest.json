@@ -1,0 +1,9 @@
+{
+  "id": "trimly",
+  "name": "Trimly",
+  "version": "0.1.0",
+  "minAppVersion": "1.6.6",
+  "description": "Personal finance manager: accounts, transactions, budgets and recurring bills, stored encrypted in your vault.",
+  "author": "is-cout",
+  "isDesktopOnly": false
+}
