@@ -1,7 +1,7 @@
-import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Menu, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, CategoryModal, ConfirmModal, RecurringModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, MovementModal, RecurringModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ACCOUNT_TYPE_LABELS,
@@ -37,6 +37,10 @@ import {
   portfolioValue,
   postDueRecurring,
   removeCategory,
+  removeManualAsset,
+  removeManualMovement,
+  saveAsset,
+  saveManualMovement,
   shiftMonth,
   sortTransactions,
   spendingByCategory,
@@ -302,11 +306,19 @@ export class TrimlyView extends ItemView {
     const lock = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Lock Trimly" } });
     setIcon(lock, "lock");
     lock.addEventListener("click", () => this.plugin.lock());
+    const add = actions.createEl("button", { cls: "mod-cta trimly-add" });
+    setIcon(add.createSpan("trimly-add-icon"), "plus");
     if (this.mode === "accounts") {
-      const add = actions.createEl("button", { cls: "mod-cta trimly-add" });
-      setIcon(add.createSpan("trimly-add-icon"), "plus");
       add.createSpan({ text: "New transaction" });
       add.addEventListener("click", () => this.plugin.openTransactionModal(null));
+    } else {
+      add.createSpan({ text: "Add" });
+      add.addEventListener("click", (e) => {
+        new Menu()
+          .addItem((i) => i.setTitle("New position").setIcon("briefcase").onClick(() => this.editAsset(null)))
+          .addItem((i) => i.setTitle("New movement").setIcon("arrow-left-right").onClick(() => this.editMovement(null)))
+          .showAtMouseEvent(e);
+      });
     }
 
     const tabs = page.createDiv("trimly-tabs");
@@ -857,7 +869,8 @@ export class TrimlyView extends ItemView {
   }
 
   private assetRow(parent: HTMLElement, a: Asset) {
-    const row = parent.createDiv("trimly-row");
+    const row = parent.createDiv("trimly-row is-clickable");
+    row.addEventListener("click", () => this.editAsset(a.id));
     if (a.closed) row.addClass("is-archived");
     this.iconTile(row, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
     const main = row.createDiv("trimly-row-main");
@@ -882,9 +895,51 @@ export class TrimlyView extends ItemView {
       card,
       "trending-up",
       this.plugin.ledger?.pluggy
-        ? "No investments found. Bank sync imports them when the connected Pluggy items include the investments product."
-        : "Investments are imported by bank sync. Set up Pluggy in Trimly's settings to bring them in."
+        ? "No investments yet. Bank sync imports them when the connected Pluggy items include the investments product, or add one by hand."
+        : "No investments yet. Add them by hand, or set up bank sync in Trimly's settings to import them.",
+      { label: "Add position", onClick: () => this.editAsset(null) }
     );
+  }
+
+  private editAsset(id: string | null) {
+    const ledger = this.plugin.ledger;
+    if (!ledger) return;
+    const existing = ledger.investments.assets.find((a) => a.id === id) ?? null;
+    new AssetModal(
+      this.app,
+      existing,
+      (asset) => void this.plugin.mutate((l) => saveAsset(l, asset, todayISO())),
+      existing && !existing.pluggyId
+        ? (asset) =>
+            new ConfirmModal(this.app, `Delete "${asset.name}" and its movements?`, "Delete", () =>
+              void this.plugin.mutate((l) => removeManualAsset(l, asset.id, todayISO()))
+            ).open()
+        : null
+    ).open();
+  }
+
+  private editMovement(id: string | null) {
+    const ledger = this.plugin.ledger;
+    if (!ledger) return;
+    if (!id && !ledger.investments.assets.some((a) => !a.pluggyId && !a.closed)) {
+      new Notice("Add a manual position first. Movements of synced positions come from bank sync.");
+      return;
+    }
+    const existing = ledger.investments.movements.find((m) => m.id === id) ?? null;
+    const assetId = this.movementFilter.assetId || undefined;
+    new MovementModal(
+      this.app,
+      ledger,
+      existing,
+      (m) => void this.plugin.mutate((l) => saveManualMovement(l, m, todayISO())),
+      existing
+        ? (m) =>
+            new ConfirmModal(this.app, "Delete this movement? Its effect on the position is undone.", "Delete", () =>
+              void this.plugin.mutate((l) => removeManualMovement(l, m.id, todayISO()))
+            ).open()
+        : null,
+      ledger.investments.assets.some((a) => a.id === assetId && !a.pluggyId) ? assetId : undefined
+    ).open();
   }
 
   private renderInvestmentsOverview(body: HTMLElement, ledger: Ledger) {
@@ -1090,6 +1145,12 @@ export class TrimlyView extends ItemView {
 
   private movementRow(parent: HTMLElement, ledger: Ledger, m: Movement, showDate: boolean) {
     const row = parent.createDiv("trimly-row");
+    const asset = ledger.investments.assets.find((a) => a.id === m.assetId);
+    // synced movements mirror Pluggy; only manual ones are edited here
+    if (asset && !asset.pluggyId) {
+      row.addClass("is-clickable");
+      row.addEventListener("click", () => this.editMovement(m.id));
+    }
     const color: Record<MovementType, string> = {
       buy: "var(--interactive-accent)",
       sell: NEUTRAL,
@@ -1100,7 +1161,7 @@ export class TrimlyView extends ItemView {
     };
     this.iconTile(row, MOVEMENT_ICONS[m.type], color[m.type]);
     const main = row.createDiv("trimly-row-main");
-    main.createDiv({ cls: "trimly-row-title", text: ledger.investments.assets.find((a) => a.id === m.assetId)?.name ?? "?" });
+    main.createDiv({ cls: "trimly-row-title", text: asset?.name ?? "?" });
     const sub = [this.movementLabel(m)];
     if (showDate) sub.push(this.shortDate(m.date));
     if (m.quantity) sub.push(`${m.quantity} units`);

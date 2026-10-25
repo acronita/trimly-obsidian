@@ -12,7 +12,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { movementFlow, newId, recordSnapshot } from "./ledger.ts";
+import { flowWindowStart, newId, recordSnapshot } from "./ledger.ts";
 import type { Asset, AssetClass, Ledger, Movement, MovementType } from "./ledger.ts";
 
 export interface PluggyInvestmentTransaction {
@@ -186,18 +186,6 @@ function mergeMovements(ledger: Ledger, asset: Asset, txs: PluggyInvestmentTrans
   return added;
 }
 
-/** Net flow and income of `assetId` in (`since`, `today`]. */
-function windowFlows(ledger: Ledger, assetId: string, since: string, today: string): { flow: number; income: number } {
-  let flow = 0;
-  let income = 0;
-  for (const m of ledger.investments.movements) {
-    if (m.assetId !== assetId || m.date <= since || m.date > today) continue;
-    flow += movementFlow(m);
-    if (m.type === "income") income += m.amount;
-  }
-  return { flow, income };
-}
-
 /**
  * Upsert the positions of the items in `itemIds` and their movements, and close
  * the positions those items no longer report. Positions of other items and
@@ -207,14 +195,9 @@ function windowFlows(ledger: Ledger, assetId: string, since: string, today: stri
 export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[], itemIds: string[], today: string): InvestmentSyncResult {
   const result: InvestmentSyncResult = { added: 0, updated: 0, closed: 0, movements: 0 };
   const assets = ledger.investments.assets;
-  const snaps = ledger.investments.snapshots;
-  const last = snaps[snaps.length - 1];
-  // flows are measured from the last snapshot of an earlier day; a second sync on the same day replaces today's
-  const since = [...snaps].reverse().find((s) => s.date < today)?.date;
-  const sameDay = last?.date === today ? last : undefined;
-  let moved = 0;
-  let estimated = 0;
-  let income = 0;
+  const since = flowWindowStart(ledger, today);
+  // money moved that the positions' movements don't explain
+  let untracked = 0;
 
   const seen = new Set<string>();
   for (const p of investments) {
@@ -231,17 +214,13 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
       result.updated++;
     }
     if (p.transactions) result.movements += mergeMovements(ledger, asset, p.transactions);
-    if (since === undefined) continue;
+    asset.movementsSynced = !!p.transactions;
     if (newlyTracked) {
+      asset.addedOn = today;
       // e.g. a bank linked later: its old purchases are outside the window, so its value arrives as money in, not gain
-      if (!asset.closed) moved += asset.value;
-      if (p.transactions) income += windowFlows(ledger, asset.id, since, today).income;
-    } else if (p.transactions) {
-      const w = windowFlows(ledger, asset.id, since, today);
-      moved += w.flow;
-      income += w.income;
-    } else {
-      estimated += estimatedFlow(before, asset);
+      if (since !== undefined && !asset.closed) untracked += asset.value;
+    } else if (!p.transactions && since !== undefined) {
+      untracked += estimatedFlow(before, asset);
     }
   }
   for (const a of assets) {
@@ -250,14 +229,8 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
     a.closed = true;
     result.closed++;
     // gone without a word: assume it was withdrawn at its last value
-    if (since !== undefined) estimated += estimatedFlow(before, a);
+    if (since !== undefined) untracked += estimatedFlow(before, a);
   }
-
-  if (since === undefined) recordSnapshot(ledger, today);
-  else {
-    // movement flows cover the whole window each time; estimates only cover this sync's change
-    const est = estimated + (sameDay?.estimated ?? 0);
-    recordSnapshot(ledger, today, { flow: moved + est, estimated: est, income });
-  }
+  recordSnapshot(ledger, today, untracked);
   return result;
 }

@@ -28,6 +28,11 @@ They come from bank sync. The connected Pluggy item must include the investments
 loading them fails, the sync shows a notice with Pluggy's error. Positions only have history from
 your first sync on, since Pluggy reports current values only.
 
+**How do I add an investment bank sync doesn't see (crypto, a foreign broker)?**
+In investments mode, *Add → New position* with its current value, then record contributions,
+withdrawals and income with *Add → New movement*. Update the position's value from time to time
+by clicking it; that change counts as gain or loss, while movements count as money moved.
+
 **How are investment returns calculated?**
 Time-weighted, from the daily snapshots each sync records: deposits and withdrawals don't count as
 gains or losses, and dividends, JCP, interest and coupons paid out do count as gains. The money

@@ -2,6 +2,21 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Investments mode, phase 4: manual entry. An *Add* button in investments mode opens
+  a new position (name, class, code, institution, current value, amount invested, quantity, index,
+  percent of index, fixed rate, maturity) or a new movement on a manual position (contribution,
+  withdrawal, income, tax, amortization, transfer in/out). Movements update the position's value,
+  amount invested (withdrawals at average cost) and quantity; editing or deleting one reverts that.
+  Clicking any position edits it (synced ones: name and class only); clicking a manual movement
+  edits it. Snapshot flows are now rebuilt the same way by the sync and by manual edits: movements
+  of every position whose movements are known, plus a stored part for money they don't explain
+  (estimates, newly tracked positions, closing or deleting a manual one), so the two don't
+  overwrite each other on the same day; a backdated manual movement counts as money moved today.
+  Ledger v3 gains `Asset.movementsSynced`/`addedOn` and `Movement.cost`. Why: assets outside Open
+  Finance (crypto, foreign brokers) had no way in. Files touched: `src/ledger.ts`,
+  `src/investment-sync.ts`, `src/modals.ts`, `src/view.ts`, `test/manual-investments.test.ts`,
+  `README.md`, `docs/`.
+
 - 2026-10-25 — Investments mode, phase 3: movements and income. Bank sync also fetches each
   position's movements from Pluggy (`/investments/{id}/transactions`: contributions, withdrawals,
   dividends/JCP/interest/coupons, taxes, amortizations, transfers), re-linking ones that come back

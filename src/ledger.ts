@@ -195,6 +195,10 @@ export interface Asset {
   /** Pluggy investment this one mirrors, and the item it belongs to */
   pluggyId?: string;
   pluggyItemId?: string;
+  /** synced positions: whether the last sync loaded its movements (manual positions always have them) */
+  movementsSynced?: boolean;
+  /** day Trimly started tracking it (YYYY-MM-DD) */
+  addedOn?: string;
 }
 
 /** Money moving in or out of one position, in cents. */
@@ -209,6 +213,8 @@ export interface Movement {
   description?: string;
   /** transfers only */
   direction?: "in" | "out";
+  /** manual withdrawals: cost taken off the position, so deleting the movement can put it back */
+  cost?: number;
   pluggyId?: string;
 }
 
@@ -222,7 +228,10 @@ export interface PortfolioSnapshot {
    * missing on the first snapshot and on ones recorded before movements existed
    */
   flow?: number;
-  /** the part of `flow` estimated from changes in amount invested, for positions without movements */
+  /**
+   * the part of `flow` that movements don't explain: estimates from changes in
+   * amount invested, and positions that started being tracked
+   */
   estimated?: number;
   /** dividends, interest and coupons paid out since the previous day's snapshot */
   income?: number;
@@ -496,13 +505,149 @@ export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
   return [...out.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
 }
 
-/** Record today's portfolio total, replacing an earlier snapshot of the same day. Mutates the ledger. */
-export function recordSnapshot(ledger: Ledger, today: string, flows?: Pick<PortfolioSnapshot, "flow" | "estimated" | "income">) {
+/** Date of the last snapshot before `today`: flows on today's snapshot count from the day after it. */
+export function flowWindowStart(ledger: Ledger, today: string): string | undefined {
   const snaps = ledger.investments.snapshots;
-  const snap: PortfolioSnapshot = { date: today, value: portfolioValue(ledger), invested: portfolioInvested(ledger), ...flows };
+  for (let i = snaps.length - 1; i >= 0; i--) if (snaps[i].date < today) return snaps[i].date;
+  return undefined;
+}
+
+/**
+ * Record today's portfolio total, replacing an earlier snapshot of the same day,
+ * with the money moved and the income paid since the previous day's snapshot.
+ * Those come from the movements of every position whose movements are known,
+ * plus `untracked`: money moved that movements don't explain (estimates, a
+ * position that starts being tracked). `untracked` adds up over the day's calls,
+ * so a sync and a manual edit on the same day don't overwrite each other.
+ * Mutates the ledger.
+ */
+export function recordSnapshot(ledger: Ledger, today: string, untracked = 0) {
+  const snaps = ledger.investments.snapshots;
   const last = snaps[snaps.length - 1];
+  if (last && last.date > today) return;
+  const snap: PortfolioSnapshot = { date: today, value: portfolioValue(ledger), invested: portfolioInvested(ledger) };
+  const since = flowWindowStart(ledger, today);
+  if (since !== undefined) {
+    const estimated = (last?.date === today ? (last.estimated ?? 0) : 0) + untracked;
+    // a synced position tracked since inside the window already arrived at its value; its older buys must not count again
+    const tracked = new Set(
+      ledger.investments.assets
+        .filter((a) => (!a.pluggyId || a.movementsSynced) && !(a.pluggyId && a.addedOn && a.addedOn > since))
+        .map((a) => a.id)
+    );
+    let moved = 0;
+    let income = 0;
+    for (const m of ledger.investments.movements) {
+      if (m.date <= since || m.date > today || !tracked.has(m.assetId)) continue;
+      moved += movementFlow(m);
+      if (m.type === "income") income += m.amount;
+    }
+    Object.assign(snap, { flow: moved + estimated, estimated, income });
+  }
   if (last?.date === today) snaps[snaps.length - 1] = snap;
-  else if (!last || last.date < today) snaps.push(snap);
+  else snaps.push(snap);
+}
+
+// ---- manual investments ----
+
+function outsideWindow(ledger: Ledger, date: string, today: string): boolean {
+  const since = flowWindowStart(ledger, today);
+  return since !== undefined && date <= since;
+}
+
+/**
+ * Apply (or undo) a manual movement to its position's value, cost and quantity.
+ * Withdrawals take cost off at the position's average cost.
+ */
+function applyMovement(a: Asset, m: Movement, undo: boolean) {
+  const s = undo ? -1 : 1;
+  const cost = a.invested ?? a.value;
+  const q = (m.quantity ?? 0) * s;
+  const out = m.type === "sell" || m.type === "amortization" || (m.type === "transfer" && m.direction === "out");
+  if (m.type === "buy" || (m.type === "transfer" && !out)) {
+    a.value += s * m.amount;
+    a.invested = cost + s * m.amount;
+    if (q) a.quantity = (a.quantity ?? 0) + q;
+  } else if (out) {
+    if (!undo) m.cost = a.value > 0 ? Math.min(cost, Math.round((cost * m.amount) / a.value)) : 0;
+    a.value -= s * m.amount;
+    a.invested = cost - s * (m.cost ?? 0);
+    if (q && m.type !== "amortization") a.quantity = (a.quantity ?? 0) - q;
+  } else if (m.type === "tax") {
+    a.value -= s * m.amount;
+  }
+  a.value = Math.max(0, a.value);
+  if (a.invested !== undefined) a.invested = Math.max(0, a.invested);
+}
+
+/**
+ * Create or update a position. A new open position arrives as money in at its
+ * value; closing one counts as withdrawing it, reopening as putting it back.
+ * Any other value change is gain or loss. Mutates the ledger.
+ */
+export function saveAsset(ledger: Ledger, asset: Asset, today: string) {
+  const assets = ledger.investments.assets;
+  const i = assets.findIndex((a) => a.id === asset.id);
+  const before = i >= 0 ? assets[i] : null;
+  if (!asset.pluggyId) asset.updatedAt = today;
+  let untracked = 0;
+  if (!before) {
+    asset.addedOn = today;
+    if (!asset.closed) untracked = asset.value;
+    assets.push(asset);
+  } else {
+    if (!before.closed && asset.closed) untracked = -before.value;
+    else if (before.closed && !asset.closed) untracked = asset.value;
+    assets[i] = asset;
+  }
+  recordSnapshot(ledger, today, untracked);
+}
+
+/** Delete a manual position and its movements; its value leaves as money out, not as loss. Mutates the ledger. */
+export function removeManualAsset(ledger: Ledger, assetId: string, today: string) {
+  const a = ledger.investments.assets.find((x) => x.id === assetId);
+  if (!a || a.pluggyId) return;
+  ledger.investments.assets = ledger.investments.assets.filter((x) => x.id !== assetId);
+  ledger.investments.movements = ledger.investments.movements.filter((m) => m.assetId !== assetId);
+  recordSnapshot(ledger, today, a.closed ? 0 : -a.value);
+}
+
+/**
+ * Create or update a movement on a manual position, applying it to the
+ * position (an edit first undoes the old version). A movement dated before the
+ * current flow window still changed the value today, so it counts as money
+ * moved today. Mutates the ledger.
+ */
+export function saveManualMovement(ledger: Ledger, m: Movement, today: string) {
+  const movements = ledger.investments.movements;
+  const asset = (id: string) => ledger.investments.assets.find((a) => a.id === id && !a.pluggyId);
+  let untracked = 0;
+  const i = movements.findIndex((x) => x.id === m.id);
+  if (i >= 0) {
+    const old = movements[i];
+    const oldAsset = asset(old.assetId);
+    if (oldAsset) applyMovement(oldAsset, old, true);
+    if (outsideWindow(ledger, old.date, today)) untracked -= movementFlow(old);
+    movements.splice(i, 1);
+  }
+  const target = asset(m.assetId);
+  if (!target) return;
+  applyMovement(target, m, false);
+  target.updatedAt = today;
+  movements.push(m);
+  if (outsideWindow(ledger, m.date, today)) untracked += movementFlow(m);
+  recordSnapshot(ledger, today, untracked);
+}
+
+/** Delete a manual movement, undoing its effect on the position. Mutates the ledger. */
+export function removeManualMovement(ledger: Ledger, id: string, today: string) {
+  const m = ledger.investments.movements.find((x) => x.id === id);
+  const a = m && ledger.investments.assets.find((x) => x.id === m.assetId && !x.pluggyId);
+  if (!m || !a) return;
+  applyMovement(a, m, true);
+  a.updatedAt = today;
+  ledger.investments.movements = ledger.investments.movements.filter((x) => x.id !== id);
+  recordSnapshot(ledger, today, outsideWindow(ledger, m.date, today) ? -movementFlow(m) : 0);
 }
 
 export interface MonthSummary {

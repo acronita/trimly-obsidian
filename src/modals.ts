@@ -1,7 +1,10 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
 import {
   ACCOUNT_TYPE_LABELS,
+  ASSET_CLASS_LABELS,
   Account,
+  Asset,
+  AssetClass,
   CATEGORY_ICONS,
   AccountType,
   Category,
@@ -9,6 +12,9 @@ import {
   FREQUENCY_LABELS,
   Frequency,
   Ledger,
+  MOVEMENT_LABELS,
+  Movement,
+  MovementType,
   Recurring,
   Transaction,
   TxType,
@@ -448,6 +454,250 @@ export class AccountModal extends Modal {
         return null;
       },
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+const RATE_TYPES: Record<string, string> = { "": "None", CDI: "CDI", SELIC: "Selic", IPCA: "IPCA", IGPM: "IGP-M", DOLAR: "Dollar" };
+
+/** Plain decimal like "110", "5,5" or "0.25"; undefined when empty, null when not a number. */
+function parseDecimal(input: string): number | undefined | null {
+  const s = input.trim().replace(",", ".");
+  if (!s) return undefined;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
+function decimalSetting(
+  container: HTMLElement,
+  name: string,
+  desc: string,
+  initial: number | undefined,
+  onChange: (v: number | undefined | null) => void
+) {
+  new Setting(container)
+    .setName(name)
+    .setDesc(desc)
+    .addText((t) => {
+      t.inputEl.inputMode = "decimal";
+      t.setValue(initial === undefined ? "" : String(initial)).onChange((v) => onChange(parseDecimal(v)));
+    });
+}
+
+function moneySetting(
+  container: HTMLElement,
+  name: string,
+  desc: string,
+  initial: number | undefined,
+  onChange: (cents: number | undefined | null) => void
+) {
+  new Setting(container)
+    .setName(name)
+    .setDesc(desc)
+    .addText((t) => {
+      t.inputEl.inputMode = "decimal";
+      t.setPlaceholder("0,00");
+      t.setValue(initial === undefined ? "" : centsToInput(initial)).onChange((v) => onChange(v.trim() ? parseAmount(v) : undefined));
+    });
+}
+
+/** Edits a position. Synced positions only allow renaming and reclassifying; their numbers come from bank sync. */
+export class AssetModal extends Modal {
+  private draft: Asset;
+  /** fields whose text is not a valid number */
+  private invalid = new Set<string>();
+
+  constructor(
+    app: App,
+    existing: Asset | null,
+    private onSave: (a: Asset) => void,
+    private onDelete: ((a: Asset) => void) | null
+  ) {
+    super(app);
+    this.draft = existing ? { ...existing } : { id: newId(), name: "", assetClass: "fixed_income", value: 0, updatedAt: todayISO() };
+  }
+
+  private field<T>(key: string, v: T | null, set: (v: T) => void) {
+    if (v === null) this.invalid.add(key);
+    else {
+      this.invalid.delete(key);
+      set(v);
+    }
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const d = this.draft;
+    const synced = !!d.pluggyId;
+    this.setTitle(this.onDelete || synced ? "Edit position" : "New position");
+    new Setting(contentEl)
+      .setName("Name")
+      .addText((t) => t.setPlaceholder("Name of the investment").setValue(d.name).onChange((v) => (d.name = v)));
+    new Setting(contentEl).setName("Class").addDropdown((dd) =>
+      dd
+        .addOptions(ASSET_CLASS_LABELS)
+        .setValue(d.assetClass)
+        .onChange((v) => (d.assetClass = v as AssetClass))
+    );
+    if (synced) {
+      contentEl.createEl("p", {
+        cls: "setting-item-description",
+        text: "This position comes from bank sync: its values and movements are updated on every sync.",
+      });
+    } else {
+      new Setting(contentEl)
+        .setName("Ticker or code")
+        .addText((t) => t.setPlaceholder("Optional").setValue(d.code ?? "").onChange((v) => (d.code = v.trim() || undefined)));
+      new Setting(contentEl)
+        .setName("Institution")
+        .addText((t) => t.setPlaceholder("Broker or bank").setValue(d.institution ?? "").onChange((v) => (d.institution = v.trim() || undefined)));
+      moneySetting(contentEl, "Current value", "What the position is worth now, net of taxes.", this.onDelete ? d.value : undefined, (c) =>
+        this.field("value", c === undefined ? null : c, (v) => (d.value = Math.abs(v)))
+      );
+      moneySetting(contentEl, "Amount invested", "What you paid for it. Leave empty if unknown.", d.invested, (c) =>
+        this.field("invested", c, (v) => (d.invested = v === undefined ? undefined : Math.abs(v)))
+      );
+      decimalSetting(contentEl, "Quantity", "Shares or units, optional.", d.quantity, (n) => this.field("quantity", n, (v) => (d.quantity = v)));
+      new Setting(contentEl)
+        .setName("Index")
+        .setDesc("Benchmark of a fixed-income product, optional.")
+        .addDropdown((dd) =>
+          dd
+            .addOptions(RATE_TYPES)
+            .setValue(d.rateType ?? "")
+            .onChange((v) => (d.rateType = v || undefined))
+        );
+      decimalSetting(contentEl, "Percent of index", "For example 110 for 110% of CDI.", d.rate, (n) => this.field("rate", n, (v) => (d.rate = v)));
+      decimalSetting(contentEl, "Fixed rate (% a year)", "For example 6 for IPCA + 6%, or 12 for a 12% prefixed bond.", d.fixedRate, (n) =>
+        this.field("fixedRate", n, (v) => (d.fixedRate = v))
+      );
+      dateSetting(contentEl, "Maturity date (optional)", d.dueDate ?? "", (v) => (d.dueDate = v || undefined));
+      if (this.onDelete) {
+        new Setting(contentEl)
+          .setName("Closed")
+          .setDesc("Fully withdrawn. Kept for history, left out of totals.")
+          .addToggle((t) => t.setValue(!!d.closed).onChange((v) => (d.closed = v || undefined)));
+      }
+    }
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!d.name.trim()) return "Add a name.";
+        if (this.invalid.size) return "Fix the fields that are not valid numbers.";
+        if (!synced && !this.onDelete && !(d.value > 0)) return "Enter the current value.";
+        d.name = d.name.trim();
+        this.onSave(d);
+        return null;
+      },
+      this.onDelete ? () => this.onDelete?.(d) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/** Records a movement on a manual position. */
+export class MovementModal extends Modal {
+  private draft: Movement;
+
+  constructor(
+    app: App,
+    private ledger: Ledger,
+    existing: Movement | null,
+    private onSave: (m: Movement) => void,
+    private onDelete: ((m: Movement) => void) | null,
+    assetId?: string
+  ) {
+    super(app);
+    const first = assetId ?? ledger.investments.assets.find((a) => !a.pluggyId && !a.closed)?.id ?? "";
+    this.draft = existing ? { ...existing } : { id: newId(), assetId: first, date: todayISO(), type: "buy", amount: 0 };
+  }
+
+  onOpen() {
+    this.setTitle(this.onDelete ? "Edit movement" : "New movement");
+    this.render();
+  }
+
+  private render() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("trimly-modal");
+    const d = this.draft;
+    const positions: Record<string, string> = {};
+    for (const a of this.ledger.investments.assets) if (!a.pluggyId && (!a.closed || a.id === d.assetId)) positions[a.id] = a.name;
+    new Setting(contentEl).setName("Position").addDropdown((dd) =>
+      dd
+        .addOptions(positions)
+        .setValue(d.assetId)
+        .onChange((v) => (d.assetId = v))
+    );
+    new Setting(contentEl).setName("Type").addDropdown((dd) =>
+      dd
+        .addOptions(MOVEMENT_LABELS)
+        .setValue(d.type)
+        .onChange((v) => {
+          d.type = v as MovementType;
+          if (d.type === "transfer") d.direction = d.direction ?? "in";
+          else delete d.direction;
+          this.render();
+        })
+    );
+    if (d.type === "transfer") {
+      new Setting(contentEl).setName("Direction").addDropdown((dd) =>
+        dd
+          .addOptions({ in: "Into the position", out: "Out of the position" })
+          .setValue(d.direction ?? "in")
+          .onChange((v) => (d.direction = v as "in" | "out"))
+      );
+    }
+    let amountInvalid = false;
+    moneySetting(contentEl, "Amount", "Net of fees.", d.amount || undefined, (c) => {
+      amountInvalid = c === null;
+      if (c) d.amount = Math.abs(c);
+    });
+    let quantityInvalid = false;
+    if (d.type !== "income" && d.type !== "tax") {
+      decimalSetting(contentEl, "Quantity", "Shares or units, optional.", d.quantity, (n) => {
+        quantityInvalid = n === null;
+        if (n !== null) d.quantity = n === undefined ? undefined : Math.abs(n);
+      });
+    }
+    dateSetting(contentEl, "Date", d.date, (v) => (d.date = v));
+    new Setting(contentEl)
+      .setName("Description")
+      .addText((t) => t.setValue(d.description ?? "").onChange((v) => (d.description = v.trim() || undefined)));
+    contentEl.createEl("p", {
+      cls: "setting-item-description",
+      text:
+        d.type === "income"
+          ? "Income is recorded as paid out: it does not change the position's value."
+          : "Updates the position's value, amount invested and quantity. Editing or deleting the movement reverts that.",
+    });
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!d.assetId) return "Add a manual position first.";
+        if (amountInvalid || quantityInvalid) return "Fix the fields that are not valid numbers.";
+        if (!(d.amount > 0)) return "Amount must be greater than zero.";
+        if (!d.date) return "Pick a date.";
+        if (d.type === "income" || d.type === "tax") delete d.quantity;
+        this.onSave(d);
+        return null;
+      },
+      this.onDelete ? () => this.onDelete?.(d) : null,
       () => this.close()
     );
   }
