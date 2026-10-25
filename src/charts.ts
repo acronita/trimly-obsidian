@@ -58,3 +58,45 @@ export function cashFlowBars(parent: HTMLElement, groups: BarGroup[], tooltip: (
     col.createDiv({ cls: "trimly-bars-label", text: g.label });
   }
 }
+
+export interface LineSeries {
+  values: number[];
+  /** CSS class giving the color, e.g. "is-accent" */
+  cls: string;
+  /** fill the area under the line */
+  area?: boolean;
+  /** dashed line */
+  dashed?: boolean;
+}
+
+/** Lines over time; `xs` holds one timestamp per value, so gaps between points keep their width. */
+export function lineChart(parent: HTMLElement, xs: number[], series: LineSeries[], labels: { start: string; end: string }) {
+  const wrap = parent.createDiv("trimly-line");
+  const W = 300;
+  const H = 100;
+  const svg = wrap.createSvg("svg", { attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" } });
+  const all = series.flatMap((s) => s.values);
+  let min = Math.min(...all);
+  let max = Math.max(...all);
+  if (min === max) {
+    min -= 1;
+    max += 1;
+  }
+  const pad = (max - min) * 0.08;
+  min -= pad;
+  max += pad;
+  const x0 = xs[0];
+  const span = Math.max(1, xs[xs.length - 1] - x0);
+  const x = (i: number) => ((xs[i] - x0) / span) * W;
+  const y = (v: number) => H - ((v - min) / (max - min)) * H;
+  // zero line, when the range crosses it (returns going negative)
+  if (min < 0 && max > 0) svg.createSvg("line", { cls: "trimly-line-zero", attr: { x1: 0, x2: W, y1: y(0), y2: y(0) } });
+  for (const s of series) {
+    const pts = s.values.map((v, i) => `${x(i).toFixed(2)},${y(v).toFixed(2)}`).join(" ");
+    if (s.area) svg.createSvg("polygon", { cls: `trimly-line-area ${s.cls}`, attr: { points: `0,${H} ${pts} ${x(s.values.length - 1).toFixed(2)},${H}` } });
+    svg.createSvg("polyline", { cls: `trimly-line-stroke ${s.cls}${s.dashed ? " is-dashed" : ""}`, attr: { points: pts } });
+  }
+  const foot = wrap.createDiv("trimly-line-labels");
+  foot.createSpan({ text: labels.start });
+  foot.createSpan({ text: labels.end });
+}

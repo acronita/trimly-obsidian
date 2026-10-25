@@ -1,11 +1,13 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, moment } from "obsidian";
 import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
+import { fetchBenchmarks } from "./bcb";
 import { applyInvestments } from "./investment-sync";
 import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, toISODate, todayISO } from "./ledger";
 import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
+import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
 import { TrimlyView, VIEW_TYPE_TRIMLY, openTransactionModal } from "./view";
 
@@ -17,15 +19,22 @@ export interface TrimlySettings {
   currency: string;
   /** keep the passphrase in this device's local storage (outside the vault) */
   rememberPassphrase: boolean;
+  /** fetch public CDI/IPCA series from the Central Bank to compare investments with */
+  benchmarks: boolean;
 }
 
 /** Unlocking syncs the bank again only when the last sync is older than this. */
 const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+/** After a failed benchmark fetch, wait this long before trying again. */
+const BENCHMARK_RETRY_MS = 60 * 60 * 1000;
+/** The daily CDI series accepts at most 10 years per request. */
+const BENCHMARK_MAX_DAYS = 3650;
 
 const DEFAULT_SETTINGS: TrimlySettings = {
   folder: "Trimly",
   currency: "BRL",
   rememberPassphrase: true,
+  benchmarks: true,
 };
 
 export default class TrimlyPlugin extends Plugin {
@@ -35,6 +44,11 @@ export default class TrimlyPlugin extends Plugin {
   store!: EncryptedStore;
   private unlocking: Promise<boolean> | null = null;
   private syncing: Promise<void> | null = null;
+  /** public data, so it is only cached in memory for the day */
+  private benchmarkCache: { from: string; day: string; data: Benchmarks } | null = null;
+  private benchmarkLoading = false;
+  private benchmarkFailedAt = 0;
+  benchmarkError: string | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -277,6 +291,35 @@ export default class TrimlyPlugin extends Plugin {
     if (data.investments.errors.length) new Notice(`Trimly: investments not updated: ${data.investments.errors.join("; ")}`);
   }
 
+  /**
+   * CDI/IPCA since `from`, cached for the day. When missing, starts a fetch that
+   * re-renders the views when it lands, and returns what it has meanwhile (null
+   * when turned off or never loaded).
+   */
+  benchmarks(from: string): Benchmarks | null {
+    if (!this.settings.benchmarks) return null;
+    const today = todayISO();
+    const cached = this.benchmarkCache;
+    if (cached && cached.day === today && cached.from <= from) return cached.data;
+    if (!this.benchmarkLoading && Date.now() - this.benchmarkFailedAt > BENCHMARK_RETRY_MS) void this.loadBenchmarks(from, today);
+    return cached?.data ?? null;
+  }
+
+  private async loadBenchmarks(from: string, today: string) {
+    this.benchmarkLoading = true;
+    const floor = toISODate(new Date(Date.now() - BENCHMARK_MAX_DAYS * 86_400_000));
+    try {
+      this.benchmarkCache = { from, day: today, data: await fetchBenchmarks(from < floor ? floor : from, today) };
+      this.benchmarkError = null;
+    } catch (e) {
+      this.benchmarkFailedAt = Date.now();
+      this.benchmarkError = (e as Error).message;
+    } finally {
+      this.benchmarkLoading = false;
+      this.refreshViews();
+    }
+  }
+
   changePassphrase() {
     if (!this.ledger) {
       new Notice("Unlock Trimly first.");
@@ -391,6 +434,21 @@ class TrimlySettingTab extends PluginSettingTab {
           const code = v.trim().toUpperCase();
           if (!/^[A-Z]{3}$/.test(code)) return;
           p.settings.currency = code;
+          await p.saveSettings();
+          p.refreshViews();
+        })
+      );
+
+    new Setting(containerEl).setName("Investments").setHeading();
+    new Setting(containerEl)
+      .setName("Compare with benchmarks")
+      .setDesc(
+        "Fetches the public CDI and IPCA series from the Central Bank of Brazil (api.bcb.gov.br) when you open the investments view. " +
+          "Only the series and a date range are requested; nothing about you or your portfolio is sent."
+      )
+      .addToggle((t) =>
+        t.setValue(p.settings.benchmarks).onChange(async (v) => {
+          p.settings.benchmarks = v;
           await p.saveSettings();
           p.refreshViews();
         })

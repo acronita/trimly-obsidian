@@ -28,6 +28,13 @@ They come from bank sync. The connected Pluggy item must include the investments
 loading them fails, the sync shows a notice with Pluggy's error. Positions only have history from
 your first sync on, since Pluggy reports current values only.
 
+**How are investment returns calculated?**
+Time-weighted, from the daily snapshots each sync records: deposits and withdrawals don't count as
+gains or losses. Until Trimly tracks individual movements, the change in amount invested between
+two snapshots is taken as the money moved in or out, so a sync with both a deposit and a market
+move on the same day is an approximation. CDI and IPCA come from the Central Bank of Brazil; IPCA
+only counts months that are over and published.
+
 **I deleted an imported transaction and it came back.**
 Synced accounts mirror the bank for the last 90 days, so the next sync restores anything the bank
 still lists. Recategorize or edit the description instead; those changes are kept.

@@ -2,6 +2,19 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Investments mode, phase 2: evolution and returns. The investments overview gets an
+  Evolution chart (portfolio value vs amount invested over the daily snapshots) and a Performance
+  card (this month, 12 months, since the first snapshot), and a new Performance tab adds a
+  cumulative return chart and month-by-month returns. Returns are time-weighted from the snapshots:
+  the change in amount invested stands in for deposits and withdrawals (withdrawals scaled by
+  value/cost) until individual movements arrive in phase 3. Each figure is compared with CDI and
+  IPCA from the Central Bank of Brazil's public SGS API (series 12 and 433), fetched only when the
+  investments view has history to compare, cached in memory for the day, retried after an hour on
+  failure. New setting *Compare with benchmarks* (on by default) turns those requests off. Why:
+  a portfolio value alone doesn't say whether it is doing well. Files touched: `src/returns.ts`,
+  `src/bcb.ts`, `src/charts.ts`, `src/main.ts`, `src/view.ts`, `src/styles/index.css`,
+  `test/returns.test.ts`, `test/encryption-rule.test.ts`, `README.md`, `docs/`.
+
 - 2026-10-25 — Unlocking syncs right away when investments were never synced, instead of waiting
   for the 6-hour interval; a manual sync that finds no investments says so. Why: after upgrading,
   the Investments tab stayed empty until the next scheduled sync. Files touched: `src/main.ts`.

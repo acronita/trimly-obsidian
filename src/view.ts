@@ -1,6 +1,6 @@
 import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
-import { cashFlowBars, donut } from "./charts";
+import { cashFlowBars, donut, lineChart } from "./charts";
 import { AccountModal, CategoryModal, ConfirmModal, RecurringModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
@@ -38,11 +38,12 @@ import {
   toISODate,
   upcomingRecurring,
 } from "./ledger";
+import { IndexPoint, cdiReturn, ipcaReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
 type Mode = "accounts" | "investments";
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "categories" | "inv-overview" | "portfolio";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "categories" | "inv-overview" | "portfolio" | "performance";
 
 const MODES: { id: Mode; label: string; icon: string }[] = [
   { id: "accounts", label: "Accounts", icon: "wallet" },
@@ -61,6 +62,7 @@ const TABS: Record<Mode, { id: Tab; label: string; icon: string }[]> = {
   investments: [
     { id: "inv-overview", label: "Overview", icon: "layout-dashboard" },
     { id: "portfolio", label: "Portfolio", icon: "briefcase" },
+    { id: "performance", label: "Performance", icon: "line-chart" },
   ],
 };
 
@@ -140,6 +142,9 @@ export class TrimlyView extends ItemView {
         break;
       case "portfolio":
         this.renderPortfolio(body, ledger);
+        break;
+      case "performance":
+        this.renderPerformance(body, ledger);
         break;
     }
     root.scrollTop = scroll;
@@ -888,6 +893,10 @@ export class TrimlyView extends ItemView {
     const taxes = assets.reduce((s, a) => s + (a.grossValue !== undefined ? Math.max(0, a.grossValue - a.value) : 0), 0);
     this.heroStat(stats, "Taxes and fees due", taxes, "receipt", "is-expense");
 
+    const row0 = body.createDiv("trimly-grid");
+    this.renderEvolutionCard(row0, ledger);
+    this.renderPeriodsCard(row0, ledger, { label: "Details", onClick: () => this.goTab("performance") });
+
     const row1 = body.createDiv("trimly-grid");
     this.renderAllocationCard(row1, ledger, total);
     const instCard = this.card(row1, "By institution");
@@ -917,6 +926,139 @@ export class TrimlyView extends ItemView {
       .sort((x, y) => (x.dueDate < y.dueDate ? -1 : 1));
     if (due.length === 0) this.empty(dueCard, "calendar", "Nothing matures in the next 12 months.");
     for (const a of due.slice(0, 6)) this.assetRow(dueCard, a);
+  }
+
+  /** "+1,23%" from a fraction; "—" when unknown. */
+  private signedPct(fraction: number | null) {
+    if (fraction === null || !Number.isFinite(fraction)) return "—";
+    return `${fraction >= 0 ? "+" : "−"}${this.pct(Math.abs(fraction) * 100, 2)}`;
+  }
+
+  private ts(iso: string) {
+    return this.parseDate(iso).getTime();
+  }
+
+  /** History needs two snapshots; until then explain why the card is empty. Returns false when empty. */
+  private needsHistory(card: HTMLElement, points: IndexPoint[]) {
+    if (points.length >= 2) return true;
+    this.empty(card, "line-chart", "History builds up with each bank sync. Check back after the next one.");
+    return false;
+  }
+
+  /** Where the CDI/IPCA columns stand, when they are not shown. */
+  private benchmarkNote(parent: HTMLElement, loaded: boolean) {
+    if (loaded) return;
+    const text = !this.plugin.settings.benchmarks
+      ? "Turn on Compare with benchmarks in settings to see CDI and IPCA."
+      : this.plugin.benchmarkError
+        ? `CDI and IPCA unavailable: ${this.plugin.benchmarkError}`
+        : "Loading CDI and IPCA…";
+    parent.createDiv({ cls: "trimly-muted trimly-card-foot", text });
+  }
+
+  private renderEvolutionCard(parent: HTMLElement, ledger: Ledger) {
+    const card = this.card(parent, "Evolution");
+    const snaps = ledger.investments.snapshots;
+    if (!this.needsHistory(card, portfolioIndex(snaps))) return;
+    const legend = card.createDiv("trimly-legend-inline");
+    legend.createSpan("trimly-key is-accent").createSpan({ text: "Value" });
+    legend.createSpan("trimly-key is-muted").createSpan({ text: "Invested" });
+    lineChart(
+      card,
+      snaps.map((s) => this.ts(s.date)),
+      [
+        { values: snaps.map((s) => s.value / 100), cls: "is-accent", area: true },
+        { values: snaps.map((s) => s.invested / 100), cls: "is-muted", dashed: true },
+      ],
+      { start: this.longDate(snaps[0].date), end: this.longDate(snaps[snaps.length - 1].date) }
+    );
+  }
+
+  /** Portfolio vs CDI and IPCA over this month, 12 months and since the first snapshot. */
+  private renderPeriodsCard(parent: HTMLElement, ledger: Ledger, link?: { label: string; onClick: () => void }) {
+    const card = this.card(parent, "Performance", link);
+    const points = portfolioIndex(ledger.investments.snapshots);
+    if (!this.needsHistory(card, points)) return;
+    const first = points[0].date;
+    const today = todayISO();
+    const bench = this.plugin.benchmarks(first);
+    const now = new Date();
+    const periods: [string, string][] = [["This month", toISODate(new Date(now.getFullYear(), now.getMonth(), 0))]];
+    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+    if (first <= yearAgo) periods.push(["12 months", yearAgo]);
+    periods.push([`Since ${this.longDate(first)}`, first]);
+
+    const table = card.createDiv("trimly-perf-table");
+    this.perfRow(table, ["", "Portfolio", "CDI", "IPCA"], true);
+    for (const [label, start] of periods) {
+      const from = start < first ? first : start;
+      this.perfRow(table, [
+        label,
+        periodReturn(points, from, today),
+        bench ? cdiReturn(bench.cdi, from, today) : null,
+        bench ? ipcaReturn(bench.ipca, from, today) : null,
+      ]);
+    }
+    this.benchmarkNote(card, !!bench);
+  }
+
+  /** A row of the performance table; numbers are fractions, shown as signed percentages. */
+  private perfRow(table: HTMLElement, cells: (string | number | null)[], head = false) {
+    const row = table.createDiv(`trimly-perf-row${head ? " is-head" : ""}`);
+    for (const [i, c] of cells.entries()) {
+      if (typeof c === "string") {
+        row.createDiv({ cls: i === 0 ? "trimly-perf-label" : "trimly-perf-cell", text: c });
+        continue;
+      }
+      const cell = row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.signedPct(c) });
+      if (c !== null && i === 1) cell.addClass(c >= 0 ? "is-income" : "is-expense");
+    }
+  }
+
+  private renderPerformance(body: HTMLElement, ledger: Ledger) {
+    if (ledger.investments.assets.length === 0) return this.emptyInvestments(body);
+    const points = portfolioIndex(ledger.investments.snapshots);
+
+    const chartCard = this.card(body, "Cumulative return");
+    if (this.needsHistory(chartCard, points)) {
+      const first = points[0].date;
+      const bench = this.plugin.benchmarks(first);
+      const legend = chartCard.createDiv("trimly-legend-inline");
+      legend.createSpan("trimly-key is-accent").createSpan({ text: "Portfolio" });
+      const series = [{ values: points.map((p) => (p.index - 1) * 100), cls: "is-accent" }];
+      if (bench) {
+        legend.createSpan("trimly-key is-cdi").createSpan({ text: "CDI" });
+        legend.createSpan("trimly-key is-ipca").createSpan({ text: "IPCA" });
+        series.push({ values: points.map((p) => cdiReturn(bench.cdi, first, p.date) * 100), cls: "is-cdi" });
+        series.push({ values: points.map((p) => ipcaReturn(bench.ipca, first, p.date) * 100), cls: "is-ipca" });
+      }
+      lineChart(
+        chartCard,
+        points.map((p) => this.ts(p.date)),
+        series,
+        { start: this.longDate(first), end: this.longDate(points[points.length - 1].date) }
+      );
+      this.benchmarkNote(chartCard, !!bench);
+    }
+
+    const row = body.createDiv("trimly-grid");
+    this.renderPeriodsCard(row, ledger);
+    const monthCard = this.card(row, "Month by month");
+    if (this.needsHistory(monthCard, points)) {
+      const bench = this.plugin.benchmarks(points[0].date);
+      const table = monthCard.createDiv("trimly-perf-table");
+      this.perfRow(table, ["", "Portfolio", "CDI", "IPCA"], true);
+      for (const m of monthlyReturns(points, bench, todayISO()).reverse()) {
+        this.perfRow(table, [this.monthLabel(m.month), m.portfolio, m.cdi, m.ipca]);
+      }
+      this.benchmarkNote(monthCard, !!bench);
+    }
+    body.createDiv({
+      cls: "trimly-muted",
+      text:
+        "Returns are time-weighted from the daily snapshots, so deposits and withdrawals don't count as gains or losses. " +
+        "They start with your first sync.",
+    });
   }
 
   private renderAllocationCard(parent: HTMLElement, ledger: Ledger, total: number) {

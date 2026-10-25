@@ -429,6 +429,93 @@ button.trimly-add {
 .trimly-key.is-expense::before {
   background: var(--trimly-expense);
 }
+.trimly-key.is-accent::before {
+  background: var(--interactive-accent);
+}
+.trimly-key.is-muted::before {
+  background: var(--text-faint);
+}
+.trimly-key.is-cdi::before {
+  background: var(--color-orange);
+}
+.trimly-key.is-ipca::before {
+  background: var(--color-purple);
+}
+.trimly-line svg {
+  display: block;
+  width: 100%;
+  height: 160px;
+  overflow: visible;
+}
+.trimly-line-stroke {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.trimly-line-stroke.is-dashed {
+  stroke-dasharray: 4 3;
+}
+.trimly-line-stroke.is-accent {
+  stroke: var(--interactive-accent);
+}
+.trimly-line-stroke.is-muted {
+  stroke: var(--text-faint);
+}
+.trimly-line-stroke.is-cdi {
+  stroke: var(--color-orange);
+}
+.trimly-line-stroke.is-ipca {
+  stroke: var(--color-purple);
+}
+.trimly-line-area {
+  stroke: none;
+  opacity: 0.12;
+}
+.trimly-line-area.is-accent {
+  fill: var(--interactive-accent);
+}
+.trimly-line-zero {
+  stroke: var(--background-modifier-border);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.trimly-line-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.trimly-perf-table {
+  display: flex;
+  flex-direction: column;
+}
+.trimly-perf-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--trimly-card-border);
+  font-size: var(--font-ui-small);
+}
+.trimly-perf-row:last-child {
+  border-bottom: none;
+}
+.trimly-perf-row.is-head {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  font-weight: var(--font-semibold);
+}
+.trimly-perf-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: capitalize;
+}
+.trimly-perf-cell {
+  text-align: right;
+}
 .trimly-bars {
   display: flex;
   align-items: stretch;
