@@ -13,11 +13,22 @@ passphrase that never leaves your device.
   by month.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
   and notes. Search and filter by account, category, type and month.
-- **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones
+- **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
+  grouped into accounts, credit cards and investments; credit cards show their current bill and
+  limit, and their transactions are browsed bill by bill (closing and due day)
   without losing history.
 - **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
-  posted automatically when their date arrives.
+  posted automatically when their date arrives. On bank-synced accounts nothing is posted: the
+  charge imported from the bank is linked to the rule instead, so it is never counted twice.
+  *Tornar recorrente* in a transaction's editor turns it into a rule, linked as its first occurrence.
+- **Subscriptions** — mark a recurring expense as a subscription to list it apart with its yearly
+  cost, last charge and price changes, to judge whether it is still worth paying for.
+- **Obrigações (obligations)** — a checklist of what you must do by hand by a due date: bills to
+  pay (electricity, water, health plan, card bill, DAS MEI) and documents to issue or file (IRPF,
+  DASN-SIMEI, invoices). Mark each month (or year) as done, optionally linking the transaction that
+  paid it, or as "none this time". Overdue ones stay listed until dealt with. Reminders show as an
+  Obsidian notice, and optionally a system notification on desktop, while Trimly is unlocked.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
@@ -27,6 +38,8 @@ passphrase that never leaves your device.
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.
+- **Hide values** — the eye button in the header masks every amount on screen; click again to show
+  them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
   through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
   purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).
@@ -45,8 +58,8 @@ passphrase that never leaves your device.
 - The passphrase is **never** stored in the vault. With *Remember passphrase on this device* on
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
-- The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle
-  and the benchmarks toggle.
+- The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle,
+  the benchmarks toggle, the hide-values toggle and how obligation reminders are shown.
 - **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With

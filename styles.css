@@ -847,6 +847,40 @@ button.trimly-add {
   gap: 6px;
   margin-top: 6px;
 }
+.trimly-tile-foot.is-split {
+  justify-content: space-between;
+  font-size: var(--font-ui-smaller);
+}
+.trimly-card-row {
+  padding: 0 8px 8px;
+  margin: 0 -8px;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.trimly-card-row:hover {
+  background: var(--background-modifier-hover);
+}
+.trimly-card-row .trimly-progress {
+  height: 5px;
+  margin: 0 0 0 48px;
+}
+.trimly-bill-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.trimly-bill-title {
+  font-size: 1.2em;
+  font-weight: var(--font-bold);
+}
+.trimly-bill-status.is-paid {
+  color: var(--color-green);
+}
+.trimly-bill-status.is-overdue {
+  color: var(--color-red);
+}
 .trimly-tile-add {
   align-items: center;
   justify-content: center;

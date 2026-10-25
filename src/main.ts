@@ -5,14 +5,27 @@ import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { fetchBenchmarks } from "./bcb";
 import { LANGUAGES, LANGUAGE_NAMES, Language, setLanguage, t } from "./i18n";
 import { applyInvestments } from "./investment-sync";
-import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, toISODate, todayISO, translateDefaults } from "./ledger";
+import {
+  Ledger,
+  Transaction,
+  defaultLedger,
+  formatMoney,
+  localeForCurrency,
+  obligationReminders,
+  postDueRecurring,
+  toISODate,
+  todayISO,
+  translateDefaults,
+} from "./ledger";
 import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
 import { applyQuotes, quoteTickers } from "./quotes";
 import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
-import { TrimlyView, VIEW_TYPE_TRIMLY, openTransactionModal } from "./view";
+import { TrimlyView, VIEW_TYPE_TRIMLY, dueWhen, openTransactionModal } from "./view";
+
+export type ReminderMode = "off" | "app" | "system";
 
 /** Non-sensitive preferences only: this file (data.json) lives inside the vault. */
 export interface TrimlySettings {
@@ -26,12 +39,18 @@ export interface TrimlySettings {
   benchmarks: boolean;
   /** interface language; Brazilian Portuguese first */
   language: Language;
+  /** mask money amounts on screen (eye button in the header) */
+  hideValues: boolean;
+  /** how obligation reminders are shown */
+  reminders: ReminderMode;
 }
 
 /** Unlocking syncs the bank again only when the last sync is older than this. */
 const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
 /** Unlocking refreshes quotes only when the last update is older than this. */
 const QUOTES_INTERVAL_MS = 60 * 60 * 1000;
+/** While unlocked, obligation reminders are checked this often. */
+const REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 /** After a failed benchmark fetch, wait this long before trying again. */
 const BENCHMARK_RETRY_MS = 60 * 60 * 1000;
 /** The daily CDI series accepts at most 10 years per request. */
@@ -43,6 +62,8 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   rememberPassphrase: true,
   benchmarks: true,
   language: "pt-BR",
+  hideValues: false,
+  reminders: "app",
 };
 
 function olderThan(iso: string | undefined, ms: number): boolean {
@@ -63,6 +84,8 @@ export default class TrimlyPlugin extends Plugin {
   benchmarkError: string | null = null;
   /** set when data.json predates the language setting: the ledger's starter names are still English */
   private translateOnUnlock = false;
+  /** day each obligation occurrence was last reminded of ("id:due" → YYYY-MM-DD); memory only */
+  private reminded = new Map<string, string>();
 
   async onload() {
     await this.loadSettings();
@@ -90,6 +113,7 @@ export default class TrimlyPlugin extends Plugin {
     });
     this.addCommand({ id: "lock", name: t.commands.lock, callback: () => this.lock() });
     this.addSettingTab(new TrimlySettingTab(this.app, this));
+    this.registerInterval(window.setInterval(() => this.remind(), REMINDER_INTERVAL_MS));
 
     // the ledger changed on disk without us (vault sync, git pull): reload it
     this.registerEvent(
@@ -287,6 +311,37 @@ export default class TrimlyPlugin extends Plugin {
       await this.saveSettings();
     }
     this.autoSync();
+    this.remind();
+  }
+
+  /**
+   * Warn about obligations due soon or overdue, once a day per occurrence while
+   * Obsidian runs. Needs the ledger unlocked: obligations live inside it. The
+   * system notification leaves names out, since it shows outside Obsidian.
+   */
+  private remind() {
+    if (!this.ledger || this.settings.reminders === "off") return;
+    const today = todayISO();
+    const items = obligationReminders(this.ledger, today).filter((d) => this.reminded.get(`${d.obligation.id}:${d.due}`) !== today);
+    if (!items.length) return;
+    for (const d of items) this.reminded.set(`${d.obligation.id}:${d.due}`, today);
+    const o = t.obligations;
+    const notice = new Notice(o.reminder(items.map((d) => o.reminderItem(d.obligation.name, dueWhen(today, d.due))).join(", ")), 15000);
+    // messageEl is missing before Obsidian 1.8: the reminder then just can't be clicked
+    notice.messageEl?.addEventListener("click", () => void this.openObligations());
+    if (this.settings.reminders === "system" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+      const n = new Notification("Trimly", { body: o.systemReminder(items.length) });
+      n.onclick = () => {
+        window.focus();
+        void this.openObligations();
+      };
+    }
+  }
+
+  async openObligations() {
+    await this.openDashboard();
+    const view = this.app.workspace.getLeavesOfType(VIEW_TYPE_TRIMLY)[0]?.view;
+    if (view instanceof TrimlyView) view.showObligations();
   }
 
   private autoSync() {
@@ -309,13 +364,14 @@ export default class TrimlyPlugin extends Plugin {
           new Notice(t.notices.setupSyncFirst);
           return;
         }
-        this.refreshViews();
         if (bank && this.ledger?.pluggy) await this.syncBank(quiet);
         if (this.ledger?.brapi) await this.refreshQuotes(quiet);
       })().finally(() => {
         this.syncing = null;
         this.refreshViews();
       });
+      // render only once `this.syncing` is set, so the button starts spinning right away
+      this.refreshViews();
     }
     return this.syncing;
   }
@@ -342,6 +398,8 @@ export default class TrimlyPlugin extends Plugin {
       const r = applyBankData(ledger, data.bank, windowStart, todayISO(now));
       const inv = applyInvestments(ledger, data.investments.investments, data.investments.itemIds, todayISO(now));
       ledger.pluggy.lastSync = now.toISOString();
+      // link the charges just imported to the recurring rules on synced accounts
+      postDueRecurring(ledger, todayISO(now));
       const n = t.notices;
       const parts = [
         r.accountsCreated && n.newAccounts(r.accountsCreated),
@@ -537,6 +595,23 @@ class TrimlySettingTab extends PluginSettingTab {
           await p.saveSettings();
           p.refreshViews();
         })
+      );
+
+    new Setting(containerEl)
+      .setName(s.reminders)
+      .setDesc(s.remindersDesc)
+      .addDropdown((d) =>
+        d
+          .addOptions(s.remindersOptions)
+          .setValue(p.settings.reminders)
+          .onChange(async (v) => {
+            const mode = v as ReminderMode;
+            if (mode === "system" && typeof Notification !== "undefined" && (await Notification.requestPermission()) !== "granted") {
+              new Notice(s.remindersDenied);
+            }
+            p.settings.reminders = mode;
+            await p.saveSettings();
+          })
       );
 
     new Setting(containerEl).setName(s.investments).setHeading();

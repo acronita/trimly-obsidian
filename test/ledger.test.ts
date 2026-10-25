@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   accountBalance,
   formatMoney,
+  linkToRule,
   localeForCurrency,
   monthSummary,
   netWorth,
@@ -34,6 +35,7 @@ function ledger(): Ledger {
     ],
     budgets: [],
     recurring: [],
+    obligations: [],
     investments: { assets: [], snapshots: [], movements: [], targets: [] },
   };
 }
@@ -124,4 +126,27 @@ test("money uses the currency's own format, not the UI language's", () => {
   const brl = formatMoney(123456, "BRL", localeForCurrency("BRL", "en"));
   assert.match(brl, /1\.234,56/);
   assert.equal(localeForCurrency("XYZ", "en"), "en");
+});
+
+test("turning a transaction into a recurring rule links it and does not post it again", () => {
+  const l = ledger();
+  // "Lunch" on 2026-10-03 becomes a monthly rule starting that day
+  const rule = {
+    id: "lunch",
+    description: "Lunch",
+    type: "expense" as const,
+    amount: 50_00,
+    accountId: "card",
+    categoryId: "food",
+    frequency: "monthly" as const,
+    startDate: "2026-10-03",
+    nextDate: "2026-10-03",
+  };
+  l.recurring.push(rule);
+  linkToRule(l, rule, "2");
+  assert.equal(l.transactions.find((x) => x.id === "2")?.recurringId, "lunch");
+  assert.equal(rule.nextDate, "2026-11-03");
+  const before = l.transactions.length;
+  assert.equal(postDueRecurring(l, "2026-10-24"), 0);
+  assert.equal(l.transactions.length, before);
 });

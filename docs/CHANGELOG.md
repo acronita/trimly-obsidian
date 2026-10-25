@@ -1,6 +1,95 @@
 # Changelog
 
+## 0.8.0 — 2026-10-25
+
+- 2026-10-25 — *Tornar recorrente* in the transaction editor: an existing transaction can become a
+  recurring rule in one step. It saves the transaction, opens the recurring editor prefilled from it
+  (description, type, amount, account, category, its date as the first date, monthly), and on save
+  links the transaction as the first occurrence (`recurringId`) and moves the rule past its date, so
+  that occurrence is neither posted again nor matched to another synced charge. A transaction that
+  already belongs to a rule shows *Ver recorrente* instead. Why: subscriptions and bills usually
+  show up as a transaction first, and recreating them by hand was tedious. Files touched:
+  `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/*`, `test/ledger.test.ts`, `README.md`.
+
+## 0.7.0 — 2026-10-25
+
+- 2026-10-25 — Credit cards get their own views. The Accounts tab is split into *Contas*,
+  *Cartões de crédito* and *Investimentos* groups. A card tile is now compact: current bill, when it
+  closes, a bar of the limit used with what is available, and one line for a closed bill still
+  unpaid (red when overdue). Transactions filtered by a card show one bill at a time instead of a
+  month: arrows step through bills, a status (open, closed, paid, overdue), total / paid / to pay /
+  due date, the bill's purchases by day and, for closed bills, the payments that paid it. The
+  account modal gets a *Limite* field and shows *Ver faturas* for cards. Synced cards take the
+  limit from Pluggy's `creditData.creditLimit` on every sync (the bank raises limits, so its value
+  wins). New `cardBill(ledger, card, today, offset)` returns any bill; payments made after a bill
+  closes, until the next closing, pay that bill, and the excess goes to the next one. New optional
+  `creditLimit` on accounts (no format bump). The overview gets a *Cartões de crédito* card: per
+  card the current bill, a closed bill still unpaid (red when overdue) or when the current one
+  closes, and the limit bar; clicking a card opens its bills. Cards left the overview's *Contas*
+  card. Files touched: `src/ledger.ts`, `src/bank-sync.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/*`, `test/card-bills.test.ts`,
+  `test/bank-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
+## 0.6.0 — 2026-10-25
+
+- 2026-10-25 — Credit cards show bills instead of a balance. A card's balance added up its whole
+  history and stayed negative, so it said nothing about what is due. Cards now have an optional
+  closing day and due day (account modal; filled from Pluggy's `creditData` on sync when blank, a
+  day set by hand stays): the card tile shows the open bill and its closing date, the last closed
+  bill with what is left to pay and its due date (or *paga*), and the total owed; the overview's
+  account list shows the open bill. Card payments (transfers into the card) after the closing pay
+  the closed bill first, the rest goes to the open one; refunds lower their own cycle. Without a
+  closing day a bill follows the calendar month. Net worth still subtracts the full card debt.
+  New optional `closingDay` / `dueDay` on accounts (no format bump). The account modal also gets
+  *Ver transações*, which opens Transactions filtered by that account across all months, and the
+  Accounts tab gets an *Investimentos* tile (value, number of positions) that opens the
+  investments mode. Files touched: `src/ledger.ts`, `src/bank-sync.ts`, `src/modals.ts`,
+  `src/view.ts`, `src/i18n/*`, `test/card-bills.test.ts`, `test/bank-sync.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
+## 0.5.0 — 2026-10-25
+
+- 2026-10-25 — New *Obrigações* tab: a checklist of what has to be done by hand by a due date,
+  bills to pay (electricity, water, health plan, card bill, DAS MEI) and documents to issue or file
+  (IRPF, DASN-SIMEI, invoices). Each obligation repeats weekly, monthly or yearly; each occurrence
+  is marked done (optionally linking the transaction that paid it, picked from suggestions near the
+  due date) or "none this time" (no water bill that month), and can be undone. Overdue ones stay
+  listed until dealt with. The tab shows overdue / due in 7 days / amount to pay this month, the
+  pending list, every obligation and what was done recently. Reminders: an Obsidian notice on
+  unlock and every hour while unlocked, once a day per occurrence, starting `remindDays` before the
+  due date; optionally also a system notification on desktop, which only says how many there are,
+  since it shows outside Obsidian. New setting *Lembretes de obrigações* (`reminders` in
+  `data.json`: `off`, `app` (default) or `system`). There is no push with Obsidian closed: a plugin
+  can't send one without a server. Ledger format bumped to version 4 (new `obligations`): older
+  plugin versions refuse the ledger instead of dropping them on save, so update Trimly on every
+  device. Files touched: `src/ledger.ts`, `src/main.ts`, `src/modals.ts`, `src/view.ts`,
+  `src/i18n/*`, `test/obligations.test.ts`, `test/ledger.test.ts`, `test/investment-sync.test.ts`,
+  `test/encryption-rule.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
+## 0.4.0 — 2026-10-25
+
+- 2026-10-25 — Subscriptions, and recurring rules that no longer double-count on synced accounts.
+  A recurring rule on a bank-synced account used to post its own transaction while sync imported
+  the real charge, so it counted twice. Now such a rule posts nothing: the imported charge closest
+  to the due date (within 7 days, same name or amount within 20%) is linked to it, takes the rule's
+  category, and the rule follows the charge's amount, so a price increase is matched next time.
+  A month with no charge 7 days past the due date, counted up to the last sync, is skipped.
+  Duplicates already posted before this change are not removed; delete them by hand. Recurring
+  expenses can be marked as a subscription (`Recurring.subscription`, optional): the Recurring tab
+  lists them apart with their yearly cost, last charge and price change, and the total per month
+  and per year. Why: seeing what services cost per year helps decide whether to keep them, and the
+  card they are charged to is usually synced. Files touched: `src/ledger.ts`, `src/bank-sync.ts`,
+  `src/main.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/*`, `test/bank-sync.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`.
+
 ## 0.3.0 — 2026-10-25
+
+- 2026-10-25 — Eye button in the dashboard header hides every money amount (shown as `••••••`,
+  charts and tooltips included; percentages stay), for using Trimly with someone looking at the
+  screen. The choice is kept in `data.json` (`hideValues`, off by default) — a display preference,
+  not financial data. The sync button now spins as soon as it is clicked: the view re-rendered
+  before the sync was marked as running, so it only spun after switching tabs. Files touched:
+  `src/main.ts`, `src/view.ts`, `src/i18n/*`, `test/encryption-rule.test.ts`.
 
 - 2026-10-25 — Line charts show the value under the pointer: hovering or touching a chart (evolution,
   cumulative return, a position's 3 months) draws a guide line, a dot on each series and a tooltip

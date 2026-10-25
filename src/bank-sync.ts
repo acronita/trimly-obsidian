@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, defaultCategoryKey, newId } from "./ledger.ts";
+import { accountBalance, daysBetween, defaultCategoryKey, newId } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync fetches and reconciles. */
@@ -27,6 +27,8 @@ export interface PluggyAccount {
   marketingName?: string | null;
   /** bank: signed balance; credit card: amount owed */
   balance: number;
+  /** credit cards: ISO dates of the current bill's closing and due day, and the limit */
+  creditData?: { balanceCloseDate?: string | null; balanceDueDate?: string | null; creditLimit?: number | null } | null;
 }
 
 export interface PluggyTransaction {
@@ -114,10 +116,6 @@ interface Rec {
 
 function cents(value: number): number {
   return Math.round(Math.abs(value) * 100);
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
 }
 
 function accountType(p: PluggyAccount): AccountType {
@@ -237,6 +235,13 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
       ledger.accounts.push(acc);
       result.accountsCreated++;
     }
+    // the bank's days only fill in blanks, so a day the user set by hand stays
+    const closeDay = Number(p.creditData?.balanceCloseDate?.slice(8, 10));
+    const dueDay = Number(p.creditData?.balanceDueDate?.slice(8, 10));
+    if (acc.type === "credit" && !acc.closingDay && closeDay) acc.closingDay = closeDay;
+    if (acc.type === "credit" && !acc.dueDay && dueDay) acc.dueDay = dueDay;
+    // the limit changes on the bank's side (raises), so the bank's value always wins
+    if (acc.type === "credit" && p.creditData?.creditLimit) acc.creditLimit = cents(p.creditData.creditLimit);
     byPluggyId.set(p.id, acc);
   }
 

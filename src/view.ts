@@ -1,11 +1,12 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, MovementModal, RecurringModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
   ASSET_CLASS_ICONS,
+  Account,
   Asset,
   AssetClass,
   Category,
@@ -14,11 +15,16 @@ import {
   MOVEMENT_ICONS,
   Movement,
   MovementType,
+  Obligation,
+  ObligationKind,
   Recurring,
   Transaction,
   TxType,
   accountBalance,
   accountInUse,
+  cardBill,
+  cardBills,
+  isCardPayment,
   allocationByClass,
   applyInstitutionToConnection,
   centsToInput,
@@ -26,6 +32,7 @@ import {
   movementFlow,
   monthOf,
   monthSummary,
+  monthlyAmount,
   monthlyHistory,
   netWorth,
   openAssets,
@@ -34,6 +41,15 @@ import {
   portfolioValue,
   rebalance,
   postDueRecurring,
+  linkToRule,
+  newId,
+  ruleTransactions,
+  daysUntil,
+  dueObligations,
+  nextDue,
+  paymentCandidates,
+  settleObligation,
+  unsettleObligation,
   removeCategory,
   removeManualAsset,
   removeManualMovement,
@@ -54,7 +70,7 @@ import { IndexPoint, cdiReturn, ipcaReturn, monthlyReturns, periodReturn, portfo
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
 type Mode = "accounts" | "investments";
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets";
 
 const MODES: { id: Mode; label: () => string; icon: string }[] = [
   { id: "accounts", label: () => t.header.modeAccounts, icon: "wallet" },
@@ -69,6 +85,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "accounts", label: "accounts", icon: "landmark" },
     { id: "budgets", label: "budgets", icon: "target" },
     { id: "recurring", label: "recurring", icon: "repeat" },
+    { id: "obligations", label: "obligations", icon: "clipboard-check" },
     { id: "categories", label: "categories", icon: "tags" },
   ],
   investments: [
@@ -85,6 +102,19 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
 const MATURITY_HORIZON_DAYS = 365;
 
 const NEUTRAL = "#8a8a8a";
+const OVERDUE = "#cc4125";
+
+const OBLIGATION_ICONS: Record<ObligationKind, string> = { payment: "receipt", document: "file-text" };
+
+/** "vence amanhã", "atrasada há 3 dias", … */
+export function dueWhen(today: string, due: string): string {
+  const days = daysUntil(today, due);
+  const o = t.obligations;
+  if (days < 0) return o.overdueBy(-days);
+  if (days === 0) return o.dueToday;
+  if (days === 1) return o.dueTomorrow;
+  return o.dueIn(days);
+}
 
 interface TxFilter {
   text: string;
@@ -107,6 +137,8 @@ export class TrimlyView extends ItemView {
   private tabs: Record<Mode, Tab> = { accounts: "overview", investments: "inv-overview" };
   private month = monthOf(todayISO());
   private filter: TxFilter = { text: "", accountId: "", categoryId: "", type: "", allMonths: false };
+  /** card bill shown in Transactions when a card is filtered: 0 = open, -1 = last closed, … */
+  private billOffset = 0;
   private movementFilter: MovementFilter = { assetId: "", type: "", allTime: false };
   /** amount typed in the Targets tab to plan a contribution, in cents; not saved */
   private contribution = 0;
@@ -159,6 +191,9 @@ export class TrimlyView extends ItemView {
       case "recurring":
         this.renderRecurring(body, ledger);
         break;
+      case "obligations":
+        this.renderObligations(body, ledger);
+        break;
       case "categories":
         this.renderCategories(body, ledger);
         break;
@@ -187,7 +222,7 @@ export class TrimlyView extends ItemView {
   // ---- shared bits ----
 
   private money(cents: number) {
-    return this.plugin.formatMoney(cents);
+    return this.plugin.settings.hideValues ? "••••••" : this.plugin.formatMoney(cents);
   }
 
   private signedMoney(cents: number, type: TxType) {
@@ -261,6 +296,12 @@ export class TrimlyView extends ItemView {
     }
   }
 
+  /** Opened from an obligation reminder. */
+  showObligations() {
+    this.mode = "accounts";
+    this.goTab("obligations");
+  }
+
   private goTab(t: Tab) {
     this.tabs[this.mode] = t;
     this.contentEl.scrollTop = 0;
@@ -300,6 +341,17 @@ export class TrimlyView extends ItemView {
     if (this.mode === "accounts") this.renderMonthNav(left);
 
     const actions = top.createDiv("trimly-top-actions");
+    const hidden = this.plugin.settings.hideValues;
+    const eye = actions.createEl("button", {
+      cls: "clickable-icon",
+      attr: { "aria-label": hidden ? t.header.showValues : t.header.hideValues },
+    });
+    setIcon(eye, hidden ? "eye-off" : "eye");
+    eye.addEventListener("click", () => {
+      this.plugin.settings.hideValues = !hidden;
+      void this.plugin.saveSettings();
+      this.plugin.refreshViews();
+    });
     if (this.plugin.canSync()) {
       const syncing = this.plugin.isSyncing();
       const sync = actions.createEl("button", {
@@ -401,7 +453,7 @@ export class TrimlyView extends ItemView {
     const row2 = body.createDiv("trimly-grid trimly-grid-3");
     const accCard = this.card(row2, t.overview.accounts, { label: t.overview.manage, onClick: () => this.goTab("accounts") });
     if (activeAccounts.length === 0) this.empty(accCard, "landmark", t.overview.noAccounts);
-    for (const a of activeAccounts) {
+    for (const a of activeAccounts.filter((a) => a.type !== "credit")) {
       const row = accCard.createDiv("trimly-row is-clickable");
       this.iconTile(row, ACCOUNT_TYPE_ICONS[a.type], "var(--interactive-accent)");
       const main = row.createDiv("trimly-row-main");
@@ -421,6 +473,12 @@ export class TrimlyView extends ItemView {
       row.addEventListener("click", () => this.setMode("investments"));
     }
 
+    const cards = activeAccounts.filter((a) => a.type === "credit");
+    if (cards.length) {
+      const cardsCard = this.card(row2, t.accounts.groupCards, { label: t.overview.manage, onClick: () => this.goTab("accounts") });
+      for (const a of cards) this.cardRow(cardsCard, ledger, a);
+    }
+
     const recentCard = this.card(row2, t.overview.recent, { label: t.overview.seeAll, onClick: () => this.goTab("transactions") });
     const recent = sortTransactions(ledger.transactions.filter((t) => monthOf(t.date) === this.month)).slice(0, 6);
     if (recent.length === 0) {
@@ -437,6 +495,27 @@ export class TrimlyView extends ItemView {
     const upcoming = upcomingRecurring(ledger, today, horizon).slice(0, 6);
     if (upcoming.length === 0) this.empty(upCard, "calendar", t.overview.nothingUpcoming);
     for (const r of upcoming) this.recurringRow(upCard, ledger, r);
+  }
+
+  /** Overview row of a card: current bill, a closed bill still unpaid, limit used. Opens its bills. */
+  private cardRow(parent: HTMLElement, ledger: Ledger, a: Account) {
+    const today = todayISO();
+    const { closed, open } = cardBills(ledger, a.id, today);
+    const wrap = parent.createDiv("trimly-card-row is-clickable");
+    const row = wrap.createDiv("trimly-row");
+    this.iconTile(row, ACCOUNT_TYPE_ICONS.credit, "var(--interactive-accent)");
+    const main = row.createDiv("trimly-row-main");
+    main.createDiv({ cls: "trimly-row-title", text: a.name });
+    if (closed.remaining > 0) {
+      const overdue = !!closed.due && closed.due < today;
+      const due = closed.due ? ` · ${t.accounts.dueOn(this.shortDate(closed.due))}` : "";
+      main.createDiv({ cls: `trimly-row-sub ${overdue ? "is-expense" : ""}`, text: t.accounts.closedToPay(this.money(closed.remaining)) + due });
+    } else {
+      main.createDiv({ cls: "trimly-row-sub", text: t.accounts.openBill(this.shortDate(open.close)) });
+    }
+    row.createDiv({ cls: "trimly-amount", text: this.money(open.remaining) });
+    if (a.creditLimit) this.progress(wrap, Math.max(0, -accountBalance(ledger, a.id)), a.creditLimit, "var(--interactive-accent)");
+    wrap.addEventListener("click", () => this.showAccountTransactions(a.id));
   }
 
   private heroStat(parent: HTMLElement, label: string, cents: number, icon: string, cls: string) {
@@ -557,37 +636,54 @@ export class TrimlyView extends ItemView {
       this.filter.text = search.value;
       renderList();
     });
-    select(accounts, this.filter.accountId, (v) => ((this.filter.accountId = v), renderList()));
+    select(accounts, this.filter.accountId, (v) => {
+      this.filter.accountId = v;
+      this.billOffset = 0;
+      this.render();
+    });
     select(categories, this.filter.categoryId, (v) => ((this.filter.categoryId = v), renderList()));
     select(
       { "": t.tx.allTypes, expense: t.common.expenses, income: t.common.income, transfer: t.common.transfers },
       this.filter.type,
       (v) => ((this.filter.type = v), renderList())
     );
-    const allLabel = bar.createEl("label", { cls: "trimly-toggle-pill" });
-    const all = allLabel.createEl("input", { type: "checkbox" });
-    all.checked = this.filter.allMonths;
-    allLabel.createSpan({ text: t.tx.allMonths });
-    all.addEventListener("change", () => ((this.filter.allMonths = all.checked), renderList()));
+    // a card's transactions are browsed by bill, not by month
+    if (!this.filteredCard(ledger)) {
+      const allLabel = bar.createEl("label", { cls: "trimly-toggle-pill" });
+      const all = allLabel.createEl("input", { type: "checkbox" });
+      all.checked = this.filter.allMonths;
+      allLabel.createSpan({ text: t.tx.allMonths });
+      all.addEventListener("change", () => ((this.filter.allMonths = all.checked), renderList()));
+    }
     renderList();
+  }
+
+  private filteredCard(ledger: Ledger): Account | undefined {
+    return ledger.accounts.find((a) => a.id === this.filter.accountId && a.type === "credit");
+  }
+
+  /** Filters other than the month. */
+  private matchesFilter(tx: Transaction): boolean {
+    const f = this.filter;
+    const q = f.text.trim().toLowerCase();
+    if (f.accountId && tx.accountId !== f.accountId && tx.toAccountId !== f.accountId) return false;
+    if (f.categoryId === "none" ? tx.type === "transfer" || !!tx.categoryId : f.categoryId && tx.categoryId !== f.categoryId) {
+      return false;
+    }
+    if (f.type && tx.type !== f.type) return false;
+    if (q && !`${tx.description} ${tx.notes ?? ""}`.toLowerCase().includes(q)) return false;
+    return true;
   }
 
   private renderTxList(wrap: HTMLElement, ledger: Ledger) {
     wrap.empty();
+    const card = this.filteredCard(ledger);
+    if (card) {
+      this.renderBill(wrap, ledger, card);
+      return;
+    }
     const f = this.filter;
-    const q = f.text.trim().toLowerCase();
-    const txs = sortTransactions(
-      ledger.transactions.filter((t) => {
-        if (!f.allMonths && monthOf(t.date) !== this.month) return false;
-        if (f.accountId && t.accountId !== f.accountId && t.toAccountId !== f.accountId) return false;
-        if (f.categoryId === "none" ? t.type === "transfer" || !!t.categoryId : f.categoryId && t.categoryId !== f.categoryId) {
-          return false;
-        }
-        if (f.type && t.type !== f.type) return false;
-        if (q && !`${t.description} ${t.notes ?? ""}`.toLowerCase().includes(q)) return false;
-        return true;
-      })
-    );
+    const txs = sortTransactions(ledger.transactions.filter((t) => (f.allMonths || monthOf(t.date) === this.month) && this.matchesFilter(t)));
     let income = 0;
     let expense = 0;
     for (const t of txs) {
@@ -610,6 +706,11 @@ export class TrimlyView extends ItemView {
       this.empty(card, "search-x", t.tx.noMatch);
       return;
     }
+    this.renderDays(wrap, ledger, txs);
+  }
+
+  /** Transactions grouped under day headings, newest 500. */
+  private renderDays(wrap: HTMLElement, ledger: Ledger, txs: Transaction[]) {
     const shown = txs.slice(0, 500);
     let currentDay = "";
     let group: HTMLElement | null = null;
@@ -632,6 +733,59 @@ export class TrimlyView extends ItemView {
     }
   }
 
+  /** A card's transactions, one bill at a time. */
+  private renderBill(wrap: HTMLElement, ledger: Ledger, card: Account) {
+    const today = todayISO();
+    const bill = cardBill(ledger, card.id, today, this.billOffset);
+    const go = (offset: number) => {
+      this.billOffset = offset;
+      this.renderTxList(wrap, ledger);
+    };
+
+    const head = wrap.createDiv("trimly-bill-head");
+    const nav = head.createDiv("trimly-month-nav");
+    const prev = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.accounts.previousBill } });
+    setIcon(prev, "chevron-left");
+    prev.addEventListener("click", () => go(this.billOffset - 1));
+    const label = nav.createDiv();
+    label.createDiv({ cls: "trimly-bill-title", text: t.accounts.billOf(this.monthLabel(monthOf(bill.close))) });
+    label.createDiv({ cls: "trimly-muted", text: t.accounts.billPeriod(this.shortDate(bill.start), this.shortDate(bill.close)) });
+    const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.accounts.nextBill } });
+    setIcon(next, "chevron-right");
+    if (this.billOffset >= 0) next.disabled = true;
+    else next.addEventListener("click", () => go(this.billOffset + 1));
+    if (this.billOffset < 0) nav.createEl("button", { cls: "trimly-pill", text: t.accounts.currentBill }).addEventListener("click", () => go(0));
+    const status = this.billOffset >= 0 ? "open" : bill.remaining === 0 ? "paid" : bill.due && bill.due < today ? "overdue" : "closed";
+    head.createDiv({ cls: `trimly-tile-tag trimly-bill-status is-${status}`, text: t.accounts.billStatus[status] });
+
+    const summary = wrap.createDiv("trimly-summary-chips");
+    const chip = (label: string, value: string, cls = "") => {
+      const c = summary.createDiv(`trimly-summary-chip ${cls}`);
+      c.createDiv({ cls: "trimly-eyebrow", text: label });
+      c.createDiv({ cls: "trimly-summary-value", text: value });
+    };
+    chip(t.accounts.billTotal, this.money(bill.total));
+    chip(t.accounts.billPaid, this.money(bill.paid), bill.paid ? "is-income" : "");
+    chip(t.accounts.billRemaining, this.money(bill.remaining), bill.remaining ? "is-expense" : "");
+    chip(t.accounts.billDue, bill.due ? this.shortDate(bill.due) : "—");
+
+    const charges = sortTransactions(
+      ledger.transactions.filter((tx) => tx.date >= bill.start && tx.date <= bill.close && !isCardPayment(tx, card.id) && this.matchesFilter(tx))
+    );
+    if (charges.length) this.renderDays(wrap, ledger, charges);
+    else this.empty(wrap.createDiv("trimly-card"), "credit-card", t.accounts.billEmpty);
+
+    if (this.billOffset < 0) {
+      const until = cardBill(ledger, card.id, today, this.billOffset + 1).close;
+      const payments = sortTransactions(ledger.transactions.filter((tx) => isCardPayment(tx, card.id) && tx.date > bill.close && tx.date <= until));
+      if (payments.length) {
+        wrap.createDiv({ cls: "trimly-section-title", text: t.accounts.billPayments });
+        const box = wrap.createDiv("trimly-card trimly-day-card");
+        for (const tx of payments) this.txRow(box, ledger, tx, true);
+      }
+    }
+  }
+
   // ---- accounts ----
 
   private renderAccounts(body: HTMLElement, ledger: Ledger) {
@@ -642,9 +796,14 @@ export class TrimlyView extends ItemView {
     const invested = portfolioValue(ledger);
     if (invested) h.createDiv({ cls: "trimly-muted", text: t.accounts.includesInvestments(this.money(invested)) });
 
-    const grid = body.createDiv("trimly-tiles");
     const sorted = [...ledger.accounts].sort((a, b) => Number(!!a.archived) - Number(!!b.archived));
-    for (const a of sorted) {
+    const cards = sorted.filter((a) => a.type === "credit");
+    const plain = sorted.filter((a) => a.type !== "credit");
+
+    const cash = plain.filter((a) => !a.archived).reduce((sum, a) => sum + accountBalance(ledger, a.id), 0);
+    body.createDiv({ cls: "trimly-section-title", text: `${t.accounts.groupAccounts} · ${this.money(cash)}` });
+    const grid = body.createDiv("trimly-tiles");
+    for (const a of plain) {
       const tile = grid.createDiv("trimly-tile is-clickable");
       if (a.archived) tile.addClass("is-archived");
       const top = tile.createDiv("trimly-tile-top");
@@ -658,6 +817,52 @@ export class TrimlyView extends ItemView {
       tile.addEventListener("click", () => this.editAccount(a.id));
     }
     this.addTile(grid, t.accounts.add, () => this.editAccount(null));
+
+    if (cards.length) {
+      body.createDiv({ cls: "trimly-section-title", text: t.accounts.groupCards });
+      const cardGrid = body.createDiv("trimly-tiles");
+      for (const a of cards) this.cardTile(cardGrid, ledger, a);
+    }
+
+    const positions = openAssets(ledger).length;
+    if (positions) {
+      body.createDiv({ cls: "trimly-section-title", text: `${t.accounts.groupInvestments} · ${this.money(invested)}` });
+      const invGrid = body.createDiv("trimly-tiles");
+      const tile = invGrid.createDiv("trimly-tile is-clickable");
+      const top = tile.createDiv("trimly-tile-top");
+      this.iconTile(top, "trending-up", "var(--interactive-accent)");
+      top.createDiv({ cls: "trimly-tile-tag", text: t.overview.positions(positions) });
+      tile.createDiv({ cls: "trimly-tile-name", text: t.overview.investments });
+      tile.createDiv({ cls: "trimly-tile-value", text: this.money(invested) });
+      tile.addEventListener("click", () => this.setMode("investments"));
+    }
+  }
+
+  /** A card shows its current bill and limit instead of a balance that adds up its whole history. */
+  private cardTile(grid: HTMLElement, ledger: Ledger, a: Account) {
+    const today = todayISO();
+    const { closed, open } = cardBills(ledger, a.id, today);
+    const tile = grid.createDiv("trimly-tile is-clickable");
+    if (a.archived) tile.addClass("is-archived");
+    const top = tile.createDiv("trimly-tile-top");
+    this.iconTile(top, ACCOUNT_TYPE_ICONS.credit, "var(--interactive-accent)");
+    top.createDiv({ cls: "trimly-tile-tag", text: a.archived ? t.accounts.archived : t.accounts.closesOn(this.shortDate(open.close)) });
+    tile.createDiv({ cls: "trimly-tile-name", text: a.name });
+    tile.createDiv({ cls: "trimly-eyebrow", text: t.accounts.currentBill });
+    tile.createDiv({ cls: "trimly-tile-value", text: this.money(open.remaining) });
+    if (a.creditLimit) {
+      const used = Math.max(0, -accountBalance(ledger, a.id));
+      this.progress(tile, used, a.creditLimit, "var(--interactive-accent)");
+      const foot = tile.createDiv("trimly-tile-foot is-split");
+      foot.createSpan({ cls: "trimly-muted", text: t.accounts.available(this.money(Math.max(0, a.creditLimit - used))) });
+      foot.createSpan({ cls: "trimly-muted", text: t.accounts.limit(this.money(a.creditLimit)) });
+    }
+    if (closed.remaining > 0) {
+      const overdue = !!closed.due && closed.due < today;
+      const due = closed.due ? ` · ${t.accounts.dueOn(this.shortDate(closed.due))}` : "";
+      tile.createDiv({ cls: `trimly-muted ${overdue ? "is-expense" : ""}`, text: t.accounts.closedToPay(this.money(closed.remaining)) + due });
+    }
+    tile.addEventListener("click", () => this.editAccount(a.id));
   }
 
   private addTile(grid: HTMLElement, label: string, onClick: () => void) {
@@ -692,8 +897,16 @@ export class TrimlyView extends ItemView {
               })
             ).open();
           }
-        : null
+        : null,
+      existing ? () => this.showAccountTransactions(existing.id) : null
     ).open();
+  }
+
+  private showAccountTransactions(accountId: string) {
+    this.filter = { text: "", accountId, categoryId: "", type: "", allMonths: true };
+    this.billOffset = 0;
+    this.mode = "accounts";
+    this.goTab("transactions");
   }
 
   // ---- budgets ----
@@ -800,9 +1013,8 @@ export class TrimlyView extends ItemView {
     let monthlyIn = 0;
     for (const r of ledger.recurring) {
       if (r.endDate && r.nextDate > r.endDate) continue;
-      const factor = r.frequency === "weekly" ? 52 / 12 : r.frequency === "yearly" ? 1 / 12 : 1;
-      if (r.type === "expense") monthlyOut += r.amount * factor;
-      if (r.type === "income") monthlyIn += r.amount * factor;
+      if (r.type === "expense") monthlyOut += monthlyAmount(r);
+      if (r.type === "income") monthlyIn += monthlyAmount(r);
     }
     const summary = body.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
@@ -822,38 +1034,179 @@ export class TrimlyView extends ItemView {
       });
     }
     const sorted = [...ledger.recurring].sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
-    for (const r of sorted) this.recurringRow(card, ledger, r);
+    for (const r of sorted) if (!r.subscription) this.recurringRow(card, ledger, r);
+
+    this.renderSubscriptions(body, ledger, sorted.filter((r) => r.subscription));
+  }
+
+  /** What each subscription costs per year and how its price moved, to judge whether it is worth keeping. */
+  private renderSubscriptions(body: HTMLElement, ledger: Ledger, subs: Recurring[]) {
+    const card = this.card(body, t.recurring.subscriptions);
+    if (subs.length === 0) {
+      this.empty(card, "clapperboard", t.recurring.subscriptionsEmpty);
+      return;
+    }
+    const today = todayISO();
+    let monthly = 0;
+    for (const r of [...subs].sort((a, b) => monthlyAmount(b) - monthlyAmount(a))) {
+      const ended = !!r.endDate && r.nextDate > r.endDate;
+      if (!ended) monthly += monthlyAmount(r);
+      const row = card.createDiv("trimly-row is-clickable");
+      const cat = this.category(ledger, r.categoryId);
+      this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
+      if (ended) row.addClass("is-archived");
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: r.description });
+      const charges = ruleTransactions(ledger, r.id);
+      const last = charges[charges.length - 1];
+      const prev = charges[charges.length - 2];
+      const parts = [
+        ended ? t.recurring.ended(t.labels.frequency[r.frequency]) : t.labels.frequency[r.frequency],
+        t.recurring.perYear(this.money(Math.round(monthlyAmount(r) * 12))),
+      ];
+      if (!ended && r.nextDate < today) parts.push(t.recurring.awaitingCharge(this.shortDate(r.nextDate)));
+      else if (last) parts.push(t.recurring.lastCharge(this.shortDate(last.date)));
+      if (last && prev && last.amount !== prev.amount) {
+        parts.push((last.amount > prev.amount ? t.recurring.priceUp : t.recurring.priceDown)(this.money(prev.amount)));
+      }
+      main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
+      row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(r.amount, r.type) });
+      row.addEventListener("click", () => this.editRecurring(r.id));
+    }
+    card.createDiv({
+      cls: "trimly-muted trimly-card-foot",
+      text: t.recurring.subscriptionsTotal(this.money(Math.round(monthly)), this.money(Math.round(monthly * 12))),
+    });
   }
 
   private editRecurring(id: string | null) {
+    openRecurringModal(this.plugin, this.plugin.ledger?.recurring.find((r) => r.id === id) ?? null);
+  }
+
+  // ---- obligations ----
+
+  private renderObligations(body: HTMLElement, ledger: Ledger) {
+    const today = todayISO();
+    const days = (n: number) => toISODate(new Date(Date.now() + n * 86400000));
+    const open = dueObligations(ledger, days(30));
+    const overdue = open.filter((d) => d.due < today);
+    const soon = open.filter((d) => d.due >= today && d.due <= days(7));
+    const endOfMonth = `${monthOf(today)}-31`;
+    const toPay = dueObligations(ledger, endOfMonth).reduce((s, d) => s + (d.obligation.amount ?? 0), 0);
+
+    const summary = body.createDiv("trimly-summary-chips");
+    const chip = (label: string, value: string, cls: string) => {
+      const c = summary.createDiv(`trimly-summary-chip ${cls}`);
+      c.createDiv({ cls: "trimly-eyebrow", text: label });
+      c.createDiv({ cls: "trimly-summary-value", text: value });
+    };
+    chip(t.obligations.overdue, String(overdue.length), overdue.length ? "is-expense" : "");
+    chip(t.obligations.dueSoon, String(soon.length), "");
+    chip(t.obligations.toPay, this.money(toPay), "is-expense");
+
+    const pending = this.card(body, t.obligations.pending);
+    if (ledger.obligations.length === 0) {
+      this.empty(pending, "clipboard-check", t.obligations.empty, { label: t.obligations.add, onClick: () => this.editObligation(null) });
+    } else if (open.length === 0) {
+      this.empty(pending, "check-circle", t.obligations.nothingPending);
+    }
+    for (const { obligation: o, due } of open) {
+      const row = pending.createDiv("trimly-row is-clickable");
+      this.iconTile(row, OBLIGATION_ICONS[o.kind], due < today ? OVERDUE : NEUTRAL);
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: o.name });
+      main.createDiv({ cls: "trimly-row-sub", text: `${dueWhen(today, due)} · ${this.shortDate(due)}` });
+      if (o.amount) row.createDiv({ cls: "trimly-amount is-expense", text: this.money(o.amount) });
+      const done = row.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.obligations.markDone } });
+      setIcon(done, "check");
+      done.addEventListener("click", (e) => {
+        e.stopPropagation();
+        void this.plugin.mutate((l) => {
+          const target = l.obligations.find((x) => x.id === o.id);
+          if (target) settleObligation(target, { due, status: "done", date: todayISO() });
+        });
+      });
+      row.addEventListener("click", () => this.settle(o, due));
+    }
+
+    const all = this.card(body, t.obligations.all, { label: t.common.add, onClick: () => this.editObligation(null) });
+    for (const o of [...ledger.obligations].sort((a, b) => a.name.localeCompare(b.name))) {
+      const next = nextDue(o, toISODate(new Date(Date.now() - 86400000)));
+      const row = all.createDiv("trimly-row is-clickable");
+      this.iconTile(row, OBLIGATION_ICONS[o.kind], NEUTRAL);
+      if (!next) row.addClass("is-archived");
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: o.name });
+      const freq = t.labels.frequency[o.frequency];
+      main.createDiv({ cls: "trimly-row-sub", text: next ? t.obligations.next(freq, this.shortDate(next)) : t.obligations.ended(freq) });
+      if (o.amount) row.createDiv({ cls: "trimly-amount", text: this.money(o.amount) });
+      row.addEventListener("click", () => this.editObligation(o.id));
+    }
+
+    const history = ledger.obligations
+      .flatMap((o) => o.settled.map((s) => ({ o, s })))
+      .sort((a, b) => (a.s.date === b.s.date ? (a.s.due < b.s.due ? 1 : -1) : a.s.date < b.s.date ? 1 : -1))
+      .slice(0, 10);
+    if (history.length === 0) return;
+    const hist = this.card(body, t.obligations.history);
+    for (const { o, s } of history) {
+      const row = hist.createDiv("trimly-row is-clickable");
+      if (s.status === "skipped") row.addClass("is-archived");
+      this.iconTile(row, s.status === "skipped" ? "minus" : "check", NEUTRAL);
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: o.name });
+      const tx = s.transactionId ? ledger.transactions.find((x) => x.id === s.transactionId) : undefined;
+      const parts = [
+        this.shortDate(s.due),
+        s.status === "skipped" ? t.obligations.skipped : (o.kind === "payment" ? t.obligations.paidOn : t.obligations.doneOn)(this.shortDate(s.date)),
+      ];
+      if (tx) parts.push(t.obligations.linked);
+      main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
+      if (tx) row.createDiv({ cls: `trimly-amount is-${tx.type}`, text: this.signedMoney(tx.amount, tx.type) });
+      row.addEventListener("click", () => this.settle(o, s.due));
+    }
+  }
+
+  private settle(o: Obligation, due: string) {
     const ledger = this.plugin.ledger;
     if (!ledger) return;
-    if (!ledger.accounts.some((a) => !a.archived)) {
-      new Notice(t.common.addAccountFirst);
-      return;
-    }
-    const existing = ledger.recurring.find((r) => r.id === id) ?? null;
-    new RecurringModal(
+    new SettleModal(
       this.app,
-      ledger,
-      existing,
-      (rec) =>
+      o,
+      due,
+      this.shortDate(due),
+      paymentCandidates(ledger, o, due),
+      (tx) => `${this.shortDate(tx.date)} · ${tx.description} · ${this.money(tx.amount)}`,
+      (s) =>
         void this.plugin.mutate((l) => {
-          const i = l.recurring.findIndex((r) => r.id === rec.id);
-          if (i >= 0) l.recurring[i] = rec;
-          else l.recurring.push(rec);
-          const posted = postDueRecurring(l, todayISO());
-          if (posted) new Notice(t.recurring.posted(posted));
+          const target = l.obligations.find((x) => x.id === o.id);
+          if (!target) return;
+          if (s) settleObligation(target, s);
+          else unsettleObligation(target, due);
+        })
+    ).open();
+  }
+
+  private editObligation(id: string | null) {
+    const existing = this.plugin.ledger?.obligations.find((o) => o.id === id) ?? null;
+    new ObligationModal(
+      this.app,
+      existing,
+      (ob) =>
+        void this.plugin.mutate((l) => {
+          const i = l.obligations.findIndex((o) => o.id === ob.id);
+          if (i >= 0) l.obligations[i] = ob;
+          else l.obligations.push(ob);
         }),
       existing
-        ? (rec) =>
+        ? (ob) =>
             new ConfirmModal(
               this.app,
-              t.recurring.deleteConfirm(rec.description),
+              t.obligations.deleteConfirm(ob.name),
               t.common.delete,
               () =>
                 void this.plugin.mutate((l) => {
-                  l.recurring = l.recurring.filter((r) => r.id !== rec.id);
+                  l.obligations = l.obligations.filter((o) => o.id !== ob.id);
                 })
             ).open()
         : null
@@ -1747,6 +2100,65 @@ export function openTransactionModal(plugin: TrimlyPlugin, tx: Transaction | nul
             void plugin.mutate((l) => {
               l.transactions = l.transactions.filter((t) => t.id !== del.id);
             })
+          ).open()
+      : null,
+    tx
+      ? (saved) => {
+          const rule = plugin.ledger?.recurring.find((r) => r.id === saved.recurringId);
+          openRecurringModal(plugin, rule ?? null, rule ? undefined : saved);
+        }
+      : null
+  ).open();
+}
+
+/**
+ * Edit a recurring rule, or create one. `fromTx` prefills a new rule from that
+ * transaction and, on save, links the transaction as its first occurrence.
+ */
+function openRecurringModal(plugin: TrimlyPlugin, existing: Recurring | null, fromTx?: Transaction) {
+  const ledger = plugin.ledger;
+  if (!ledger) return;
+  if (!ledger.accounts.some((a) => !a.archived)) {
+    new Notice(t.common.addAccountFirst);
+    return;
+  }
+  const template: Recurring | null = fromTx
+    ? {
+        id: newId(),
+        description: fromTx.description,
+        type: fromTx.type,
+        amount: fromTx.amount,
+        accountId: fromTx.accountId,
+        toAccountId: fromTx.toAccountId,
+        categoryId: fromTx.categoryId,
+        frequency: "monthly",
+        startDate: fromTx.date,
+        nextDate: fromTx.date,
+      }
+    : existing;
+  new RecurringModal(
+    plugin.app,
+    ledger,
+    template,
+    (rec) =>
+      void plugin.mutate((l) => {
+        const i = l.recurring.findIndex((r) => r.id === rec.id);
+        if (i >= 0) l.recurring[i] = rec;
+        else l.recurring.push(rec);
+        if (fromTx) linkToRule(l, rec, fromTx.id);
+        const posted = postDueRecurring(l, todayISO());
+        if (posted) new Notice(t.recurring.posted(posted));
+      }),
+    existing
+      ? (rec) =>
+          new ConfirmModal(
+            plugin.app,
+            t.recurring.deleteConfirm(rec.description),
+            t.common.delete,
+            () =>
+              void plugin.mutate((l) => {
+                l.recurring = l.recurring.filter((r) => r.id !== rec.id);
+              })
           ).open()
       : null
   ).open();

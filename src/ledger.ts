@@ -1,5 +1,5 @@
 /**
- * Ledger data model and pure finance logic (balances, summaries, recurring).
+ * Ledger data model and pure finance logic (balances, summaries, recurring, obligations).
  *
  * All money values are integer cents to avoid floating-point drift. Dates are
  * local "YYYY-MM-DD" strings; months are "YYYY-MM".
@@ -9,7 +9,7 @@
 import { LANGUAGES, t } from "./i18n/index.ts";
 import type { Strings } from "./i18n/index.ts";
 
-export const LEDGER_VERSION = 3;
+export const LEDGER_VERSION = 4;
 
 export type AccountType = "checking" | "savings" | "credit" | "cash" | "investment" | "other";
 export type CategoryKind = "expense" | "income";
@@ -17,6 +17,7 @@ export type TxType = "expense" | "income" | "transfer";
 export type Frequency = "weekly" | "monthly" | "yearly";
 export type MovementType = "buy" | "sell" | "income" | "tax" | "amortization" | "transfer";
 export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
+export type ObligationKind = "payment" | "document";
 
 export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
   checking: "landmark",
@@ -75,6 +76,12 @@ export interface Account {
   archived?: boolean;
   /** Pluggy account this one mirrors; its balance and transactions come from bank sync */
   pluggyId?: string;
+  /** credit cards: day of month the bill closes (last day of a cycle); month end when unset */
+  closingDay?: number;
+  /** credit cards: day of month the closed bill is due */
+  dueDay?: number;
+  /** credit cards: credit limit, in cents */
+  creditLimit?: number;
 }
 
 export interface Category {
@@ -128,6 +135,43 @@ export interface Recurring {
   nextDate: string;
   /** last allowed occurrence (inclusive), optional */
   endDate?: string;
+  /** a service paid for regularly (streaming, apps, gym); listed apart with its yearly cost */
+  subscription?: boolean;
+}
+
+/**
+ * Something to do by a due date every period, by hand: a bill to pay, a tax
+ * return to file, an invoice to issue. Unlike a recurring rule it moves no
+ * money by itself; each occurrence is marked done (optionally with the
+ * transaction that paid it) or skipped.
+ */
+export interface Obligation {
+  id: string;
+  name: string;
+  kind: ObligationKind;
+  frequency: Frequency;
+  /** first due date; its day of month anchors monthly/yearly ones */
+  startDate: string;
+  /** last allowed due date (inclusive), optional */
+  endDate?: string;
+  /** usual amount, payments only, in cents */
+  amount?: number;
+  /** remind this many days before the due date */
+  remindDays: number;
+  notes?: string;
+  /** occurrences dealt with */
+  settled: Settlement[];
+}
+
+export interface Settlement {
+  /** due date of the occurrence */
+  due: string;
+  /** done = paid or issued; skipped = nothing to do that period (no water bill this month) */
+  status: "done" | "skipped";
+  /** when it was marked */
+  date: string;
+  /** the transaction that paid it, optional */
+  transactionId?: string;
 }
 
 /** One investment position. Values are the latest known, in cents. */
@@ -276,6 +320,7 @@ export interface Ledger {
   transactions: Transaction[];
   budgets: Budget[];
   recurring: Recurring[];
+  obligations: Obligation[];
   investments: Investments;
   /** set when bank sync is configured */
   pluggy?: PluggyConfig;
@@ -330,6 +375,7 @@ export function defaultLedger(): Ledger {
     transactions: [],
     budgets: [],
     recurring: [],
+    obligations: [],
     investments: { assets: [], snapshots: [], movements: [], targets: [] },
   };
 }
@@ -355,6 +401,7 @@ export function parseLedger(json: string): Ledger {
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
+    obligations: raw.obligations ?? [],
     investments: {
       assets: raw.investments?.assets ?? [],
       snapshots: raw.investments?.snapshots ?? [],
@@ -446,6 +493,10 @@ export function shiftMonth(month: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
 }
 
+export function daysBetween(a: string, b: string): number {
+  return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
+}
+
 function daysInMonth(y: number, m0: number): number {
   return new Date(y, m0 + 1, 0).getDate();
 }
@@ -479,6 +530,88 @@ export function accountBalance(ledger: Ledger, accountId: string, upTo?: string)
     bal += effectOn(tx, accountId);
   }
   return bal;
+}
+
+/** One credit card bill: the charges of a cycle and what is still unpaid. */
+export interface CardBill {
+  /** first day of the cycle */
+  start: string;
+  /** closing date, last day of the cycle (inclusive) */
+  close: string;
+  /** undefined when the card has no due day */
+  due?: string;
+  /** charges minus refunds in the cycle, in cents (positive = owed) */
+  total: number;
+  /** payments counted toward this bill */
+  paid: number;
+  /** part of `total` not paid yet */
+  remaining: number;
+}
+
+/** The card's closing date in a month (0-based), clamped to short months. */
+function closingIn(year: number, month: number, closingDay?: number): string {
+  const d = new Date(year, month, 1);
+  const last = daysInMonth(d.getFullYear(), d.getMonth());
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), Math.min(closingDay ?? last, last)));
+}
+
+/** First date on `dueDay` after `close`. */
+function dueAfter(close: string, dueDay: number): string {
+  const [y, m] = close.split("-").map(Number);
+  const same = closingIn(y, m - 1, dueDay);
+  return same > close ? same : closingIn(y, m, dueDay);
+}
+
+/** A transfer into the card: paying its bill. */
+export function isCardPayment(tx: Transaction, accountId: string): boolean {
+  return tx.type === "transfer" && tx.toAccountId === accountId;
+}
+
+/**
+ * A credit card bill on `today`: offset 0 is the open one, -1 the last closed,
+ * -2 the one before, and so on. A card's balance adds up its whole history;
+ * bills split it by cycle instead. Payments (transfers into the card) made
+ * after a bill closes, until the next closing, pay that bill; what exceeds it
+ * goes to the following one. Refunds and other credits lower the bill of their
+ * own cycle.
+ */
+export function cardBill(ledger: Ledger, accountId: string, today: string, offset = 0): CardBill {
+  const acc = ledger.accounts.find((a) => a.id === accountId);
+  const [y, m] = today.split("-").map(Number);
+  // the cycle includes its closing day, so a bill closing today is still open
+  let k = 0;
+  while (closingIn(y, m - 1 + k, acc?.closingDay) < today) k++;
+  const closeAt = (j: number) => closingIn(y, m - 1 + k + offset + j, acc?.closingDay);
+  const [before, prev, close, next] = [closeAt(-2), closeAt(-1), closeAt(0), closeAt(1)];
+
+  let total = 0;
+  let prevTotal = 0;
+  let paid = 0;
+  let prevPaid = 0;
+  for (const tx of ledger.transactions) {
+    const v = effectOn(tx, accountId);
+    if (v === 0 || tx.date <= before || tx.date > next) continue;
+    if (isCardPayment(tx, accountId)) {
+      if (tx.date > close) paid += v;
+      else if (tx.date > prev) prevPaid += v;
+    } else if (tx.date > prev && tx.date <= close) total -= v;
+    else if (tx.date <= prev) prevTotal -= v;
+  }
+  paid += Math.max(0, prevPaid - Math.max(0, prevTotal));
+  const start = toISODate(new Date(Date.parse(`${prev}T12:00:00`) + 86_400_000));
+  return {
+    start,
+    close,
+    due: acc?.dueDay ? dueAfter(close, acc.dueDay) : undefined,
+    total,
+    paid,
+    remaining: Math.max(0, total - paid),
+  };
+}
+
+/** The last closed bill and the open one of a credit card on `today`. */
+export function cardBills(ledger: Ledger, accountId: string, today: string): { closed: CardBill; open: CardBill } {
+  return { closed: cardBill(ledger, accountId, today, -1), open: cardBill(ledger, accountId, today, 0) };
 }
 
 /** Accounts plus investments. */
@@ -815,14 +948,110 @@ export function sortTransactions(txs: Transaction[]): Transaction[] {
   return [...txs].sort((a, b) => (a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1));
 }
 
+/** Max days between a rule's due date and the synced charge linked to it. */
+const LINK_DAYS = 7;
+/** How far a synced charge's amount may be from the rule's and still match without a matching description. */
+const LINK_AMOUNT_TOLERANCE = 0.2;
+
+/** Average cost of a rule per month, in cents (weekly × 52/12, yearly ÷ 12). */
+export function monthlyAmount(r: Recurring): number {
+  const factor = r.frequency === "weekly" ? 52 / 12 : r.frequency === "yearly" ? 1 / 12 : 1;
+  return r.amount * factor;
+}
+
+/**
+ * Whether a rule's transactions come from bank sync: it is on an account
+ * Pluggy mirrors, so posting it too would count every charge twice.
+ */
+export function isSyncedRule(ledger: Ledger, r: Recurring): boolean {
+  const synced = (id?: string) => !!ledger.accounts.find((a) => a.id === id)?.pluggyId;
+  return !!ledger.pluggy && (synced(r.accountId) || (r.type === "transfer" && synced(r.toAccountId)));
+}
+
+/** Transactions posted by or linked to a rule, oldest first. */
+/**
+ * Make an existing transaction an occurrence of `rule`: link it, and move the
+ * rule past its date so that occurrence is not posted (or matched) again.
+ */
+export function linkToRule(ledger: Ledger, rule: Recurring, txId: string) {
+  const tx = ledger.transactions.find((x) => x.id === txId);
+  if (!tx) return;
+  tx.recurringId = rule.id;
+  const anchorDay = Number(rule.startDate.slice(8, 10));
+  for (let i = 0; i < 1000 && rule.nextDate <= tx.date; i++) rule.nextDate = nextOccurrence(rule.nextDate, rule.frequency, anchorDay);
+}
+
+export function ruleTransactions(ledger: Ledger, ruleId: string): Transaction[] {
+  return ledger.transactions.filter((tx) => tx.recurringId === ruleId).sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+function words(s: string): string[] {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3);
+}
+
+/** The imported transaction that best fits the rule's next occurrence, if any. */
+function syncedCharge(ledger: Ledger, r: Recurring): Transaction | undefined {
+  const ruleWords = words(r.description);
+  let best: Transaction | undefined;
+  let bestScore = Infinity;
+  for (const tx of ledger.transactions) {
+    if (!tx.pluggyIds?.length || tx.recurringId || tx.type !== r.type || tx.accountId !== r.accountId) continue;
+    if (r.type === "transfer" && tx.toAccountId !== r.toAccountId) continue;
+    const days = daysBetween(tx.date, r.nextDate);
+    if (days > LINK_DAYS) continue;
+    const named = words(tx.description).some((w) => ruleWords.includes(w));
+    const drift = Math.abs(tx.amount - r.amount) / r.amount;
+    if (!named && drift > LINK_AMOUNT_TOLERANCE) continue;
+    // a matching name beats any amount; then the closest amount, then the closest date
+    const score = (named ? 0 : 1000) + drift * 100 + days;
+    if (score < bestScore) {
+      best = tx;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/**
+ * Link a synced rule's occurrences to the charges bank sync imported. A rule
+ * advances when its charge is found, or when sync has gone LINK_DAYS past the
+ * due date without one (a month the service was not charged). The rule takes
+ * the latest charge's amount, so a price change is matched next time too.
+ */
+function linkSyncedRule(ledger: Ledger, r: Recurring, anchorDay: number) {
+  const syncedUpTo = ledger.pluggy?.lastSync?.slice(0, 10);
+  for (let i = 0; i < 1000; i++) {
+    if (r.endDate && r.nextDate > r.endDate) break;
+    const tx = syncedCharge(ledger, r);
+    if (tx) {
+      tx.recurringId = r.id;
+      if (r.categoryId && r.type !== "transfer") tx.categoryId = r.categoryId;
+      r.amount = tx.amount;
+    } else if (!syncedUpTo || r.nextDate >= syncedUpTo || daysBetween(r.nextDate, syncedUpTo) <= LINK_DAYS) {
+      break;
+    }
+    r.nextDate = nextOccurrence(r.nextDate, r.frequency, anchorDay);
+  }
+}
+
 /**
  * Post every recurring occurrence due on or before `today`, advancing each
- * rule's nextDate. Mutates the ledger; returns how many transactions were added.
+ * rule's nextDate. Rules on synced accounts are linked to the imported charges
+ * instead of posted. Mutates the ledger; returns how many transactions were added.
  */
 export function postDueRecurring(ledger: Ledger, today: string): number {
   let posted = 0;
   for (const r of ledger.recurring) {
     const anchorDay = Number(r.startDate.slice(8, 10));
+    if (isSyncedRule(ledger, r)) {
+      linkSyncedRule(ledger, r, anchorDay);
+      continue;
+    }
     // guard against a corrupted rule looping forever
     for (let i = 0; i < 1000 && r.nextDate <= today; i++) {
       if (r.endDate && r.nextDate > r.endDate) break;
@@ -842,6 +1071,102 @@ export function postDueRecurring(ledger: Ledger, today: string): number {
     }
   }
   return posted;
+}
+
+// ---- obligations ----
+
+/** Days from `from` to `to`, negative when `to` is earlier. */
+export function daysUntil(from: string, to: string): number {
+  return Math.round((Date.parse(to) - Date.parse(from)) / 86_400_000);
+}
+
+/**
+ * The period an occurrence belongs to: its month for monthly obligations, its
+ * year for yearly ones. Settlements match by period, so moving the due day of
+ * an obligation does not reopen the occurrences already dealt with.
+ */
+function periodOf(date: string, frequency: Frequency): string {
+  return frequency === "monthly" ? date.slice(0, 7) : frequency === "yearly" ? date.slice(0, 4) : date;
+}
+
+export function settlementFor(o: Obligation, due: string): Settlement | undefined {
+  const period = periodOf(due, o.frequency);
+  return o.settled.find((s) => periodOf(s.due, o.frequency) === period);
+}
+
+/** Due dates of an obligation on or before `until` not dealt with yet, oldest first. */
+export function openOccurrences(o: Obligation, until: string): string[] {
+  const anchorDay = Number(o.startDate.slice(8, 10));
+  const out: string[] = [];
+  let due = o.startDate;
+  // guard against a corrupted obligation looping forever
+  for (let i = 0; i < 1000 && due <= until; i++) {
+    if (o.endDate && due > o.endDate) break;
+    if (!settlementFor(o, due)) out.push(due);
+    due = nextOccurrence(due, o.frequency, anchorDay);
+  }
+  return out;
+}
+
+/** First due date after `after` (exclusive), or undefined once the obligation has ended. */
+export function nextDue(o: Obligation, after: string): string | undefined {
+  const anchorDay = Number(o.startDate.slice(8, 10));
+  let due = o.startDate;
+  for (let i = 0; i < 1000 && due <= after; i++) due = nextOccurrence(due, o.frequency, anchorDay);
+  return o.endDate && due > o.endDate ? undefined : due;
+}
+
+export interface DueObligation {
+  obligation: Obligation;
+  due: string;
+}
+
+/** Open occurrences of every obligation due on or before `until`, soonest first. */
+export function dueObligations(ledger: Ledger, until: string): DueObligation[] {
+  return ledger.obligations
+    .flatMap((obligation) => openOccurrences(obligation, until).map((due) => ({ obligation, due })))
+    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.obligation.name.localeCompare(b.obligation.name)));
+}
+
+/** Open occurrences inside their reminder window on `today`, overdue ones included. */
+export function obligationReminders(ledger: Ledger, today: string): DueObligation[] {
+  const horizon = Math.max(0, ...ledger.obligations.map((o) => o.remindDays));
+  const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + horizon * 86_400_000));
+  return dueObligations(ledger, until).filter((d) => daysUntil(today, d.due) <= d.obligation.remindDays);
+}
+
+/** Mark one occurrence as done or skipped, replacing an earlier mark for the same period. */
+export function settleObligation(o: Obligation, s: Settlement) {
+  const period = periodOf(s.due, o.frequency);
+  o.settled = o.settled.filter((x) => periodOf(x.due, o.frequency) !== period);
+  o.settled.push(s);
+}
+
+export function unsettleObligation(o: Obligation, due: string) {
+  const period = periodOf(due, o.frequency);
+  o.settled = o.settled.filter((x) => periodOf(x.due, o.frequency) !== period);
+}
+
+/** Days around a due date searched for the payment of an obligation. */
+const PAYMENT_SEARCH_DAYS = 15;
+
+/**
+ * Transactions that may be the payment of an occurrence: money going out
+ * (expenses and transfers, e.g. paying a card bill) near the due date and not
+ * linked to another obligation yet. Likeliest first: same name, then closest
+ * amount, then closest date.
+ */
+export function paymentCandidates(ledger: Ledger, o: Obligation, due: string): Transaction[] {
+  const taken = new Set(ledger.obligations.flatMap((x) => x.settled.map((s) => s.transactionId)));
+  const own = settlementFor(o, due)?.transactionId;
+  const nameWords = words(o.name);
+  const score = (tx: Transaction) =>
+    (words(tx.description).some((w) => nameWords.includes(w)) ? 0 : 1000) +
+    (o.amount ? (Math.abs(tx.amount - o.amount) / o.amount) * 100 : 0) +
+    daysBetween(tx.date, due);
+  return ledger.transactions
+    .filter((tx) => tx.type !== "income" && daysBetween(tx.date, due) <= PAYMENT_SEARCH_DAYS && (tx.id === own || !taken.has(tx.id)))
+    .sort((a, b) => score(a) - score(b));
 }
 
 /** Drop references to a deleted category so transactions show as uncategorized. */
