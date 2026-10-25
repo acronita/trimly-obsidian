@@ -1,8 +1,10 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, moment } from "obsidian";
+import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
-import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, todayISO } from "./ledger";
+import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, toISODate, todayISO } from "./ledger";
 import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
+import { fetchBankData } from "./pluggy";
 import { EncryptedStore } from "./store";
 import { TrimlyView, VIEW_TYPE_TRIMLY, openTransactionModal } from "./view";
 
@@ -16,6 +18,9 @@ export interface TrimlySettings {
   rememberPassphrase: boolean;
 }
 
+/** Unlocking syncs the bank again only when the last sync is older than this. */
+const AUTO_SYNC_INTERVAL_MS = 6 * 60 * 60 * 1000;
+
 const DEFAULT_SETTINGS: TrimlySettings = {
   folder: "Trimly",
   currency: "BRL",
@@ -28,6 +33,7 @@ export default class TrimlyPlugin extends Plugin {
   passphrases!: PassphraseManager;
   store!: EncryptedStore;
   private unlocking: Promise<boolean> | null = null;
+  private syncing: Promise<void> | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -42,6 +48,13 @@ export default class TrimlyPlugin extends Plugin {
       name: "Add transaction",
       callback: async () => {
         if (await this.unlock()) this.openTransactionModal(null);
+      },
+    });
+    this.addCommand({
+      id: "sync-bank",
+      name: "Sync bank accounts",
+      callback: async () => {
+        if (await this.unlock()) await this.syncBank();
       },
     });
     this.addCommand({ id: "lock", name: "Lock", callback: () => this.lock() });
@@ -100,6 +113,7 @@ export default class TrimlyPlugin extends Plugin {
       this.unlocking = this.doUnlock().finally(() => {
         this.unlocking = null;
         this.refreshViews();
+        if (this.ledger) this.autoSyncBank();
       });
     }
     return this.unlocking;
@@ -197,6 +211,58 @@ export default class TrimlyPlugin extends Plugin {
     } catch (e) {
       new Notice(`Trimly: could not save: ${(e as Error).message}`);
     }
+  }
+
+  private autoSyncBank() {
+    const last = this.ledger?.pluggy?.lastSync;
+    if (this.ledger?.pluggy && (!last || Date.now() - Date.parse(last) > AUTO_SYNC_INTERVAL_MS)) void this.syncBank(true);
+  }
+
+  /** Pull accounts and transactions from Pluggy. `quiet` skips the notice when nothing changed. */
+  syncBank(quiet = false): Promise<void> {
+    if (!this.syncing) {
+      this.syncing = this.doSyncBank(quiet).finally(() => {
+        this.syncing = null;
+        this.refreshViews();
+      });
+    }
+    return this.syncing;
+  }
+
+  isSyncing(): boolean {
+    return this.syncing !== null;
+  }
+
+  private async doSyncBank(quiet: boolean) {
+    const config = this.ledger?.pluggy;
+    if (!config) {
+      new Notice("Set up bank sync in Trimly's settings first.");
+      return;
+    }
+    this.refreshViews();
+    const now = new Date();
+    const windowStart = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - SYNC_WINDOW_DAYS));
+    let data;
+    try {
+      data = await fetchBankData(config, windowStart);
+    } catch (e) {
+      new Notice(`Trimly: bank sync failed: ${(e as Error).message}`);
+      return;
+    }
+    let summary = "";
+    await this.mutate((ledger) => {
+      if (!ledger.pluggy) return;
+      const r = applyBankData(ledger, data, windowStart, todayISO(now));
+      ledger.pluggy.lastSync = now.toISOString();
+      const parts = [
+        r.accountsCreated && `${r.accountsCreated} new account${r.accountsCreated === 1 ? "" : "s"}`,
+        r.added && `${r.added} new`,
+        r.updated && `${r.updated} updated`,
+        r.removed && `${r.removed} removed`,
+      ].filter(Boolean);
+      summary = parts.length ? `Bank sync: ${parts.join(", ")}.` : quiet ? "" : "Bank sync: everything up to date.";
+    });
+    if (summary) new Notice(summary);
   }
 
   changePassphrase() {
@@ -316,6 +382,86 @@ class TrimlySettingTab extends PluginSettingTab {
           await p.saveSettings();
           p.refreshViews();
         })
+      );
+
+    this.displayBankSync();
+  }
+
+  private displayBankSync() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    new Setting(containerEl).setName("Bank sync (optional)").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text:
+        "Imports accounts and transactions from your banks through Pluggy (pluggy.ai), so you don't have to type them in. " +
+        "Optional: without it Trimly works fully offline and makes no network requests. When on, Trimly contacts " +
+        "api.pluggy.ai to fetch your data; the credentials are stored inside the encrypted ledger.",
+    });
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc("Unlock Trimly to set up bank sync.");
+      return;
+    }
+
+    const config = p.ledger.pluggy;
+    const draft = {
+      clientId: config?.clientId ?? "",
+      clientSecret: config?.clientSecret ?? "",
+      itemIds: config?.itemIds.join(", ") ?? "",
+    };
+    new Setting(containerEl)
+      .setName("Client ID")
+      .setDesc("Shown when you create an application in the dashboard at pluggy.ai.")
+      .addText((t) => t.setValue(draft.clientId).onChange((v) => (draft.clientId = v.trim())));
+    new Setting(containerEl).setName("Client secret").addText((t) => {
+      t.inputEl.type = "password";
+      t.setValue(draft.clientSecret).onChange((v) => (draft.clientSecret = v.trim()));
+    });
+    new Setting(containerEl)
+      .setName("Item IDs")
+      .setDesc("One per connected bank, separated by commas.")
+      .addText((t) => t.setValue(draft.itemIds).onChange((v) => (draft.itemIds = v)));
+
+    new Setting(containerEl)
+      .setName(config ? "Status" : "Connect")
+      .setDesc(
+        config
+          ? config.lastSync
+            ? `Last synced ${new Date(config.lastSync).toLocaleString()}.`
+            : "Not synced yet."
+          : "Saves the credentials and runs the first sync."
+      )
+      .addButton((b) =>
+        b
+          .setButtonText(config ? "Save and sync" : "Connect")
+          .setCta()
+          .onClick(async () => {
+            const itemIds = draft.itemIds.split(/[\s,]+/).filter(Boolean);
+            if (!draft.clientId || !draft.clientSecret || !itemIds.length) {
+              new Notice("Fill in the client ID, client secret and at least one item ID.");
+              return;
+            }
+            await p.mutate((l) => {
+              l.pluggy = { ...l.pluggy, clientId: draft.clientId, clientSecret: draft.clientSecret, itemIds };
+            });
+            await p.syncBank();
+            this.display();
+          })
+      );
+
+    if (!config) return;
+    new Setting(containerEl)
+      .setName("Disconnect")
+      .setDesc("Stops syncing and removes the credentials. Imported accounts and transactions stay.")
+      .addButton((b) =>
+        b
+          .setButtonText("Disconnect")
+          .setWarning()
+          .onClick(() =>
+            new ConfirmModal(this.app, "Disconnect bank sync and remove the Pluggy credentials?", "Disconnect", () => {
+              void p.mutate((l) => delete l.pluggy).then(() => this.display());
+            }).open()
+          )
       );
   }
 }

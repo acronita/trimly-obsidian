@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.0 — 2026-10-25
+
+- 2026-10-25 — Optional bank sync through Pluggy (Open Finance / Meu Pluggy). Imports accounts and the
+  last 90 days of transactions, creates one Trimly account per bank account or card with the bank's
+  balance, pairs card bill payments (and Pluggy-tagged same-person transfers) into transfers, maps
+  Pluggy categories onto the default ones, and re-links credit card transactions Pluggy re-creates
+  with a new id so user edits survive. Syncs on unlock (at most every 6 hours), from a dashboard
+  button and the **Sync bank accounts** command. Off by default; no network requests without it.
+  Credentials live inside the encrypted ledger. Ledger format bumped to version 2 (new optional
+  fields `pluggy`, `Account.pluggyId`, `Transaction.pluggyIds`/`pending`); 0.1.0 refuses v2 ledgers
+  rather than silently dropping the credentials. `tsconfig.json` allows `.ts` import specifiers so
+  `src/bank-sync.ts` can import `src/ledger.ts` under Node's test runner. Why: typing every
+  transaction by hand doesn't scale. Files touched: `src/bank-sync.ts`, `src/pluggy.ts`,
+  `src/ledger.ts`, `src/main.ts`, `src/view.ts`, `src/styles/index.css`, `test/bank-sync.test.ts`,
+  `tsconfig.json`, `README.md`, `docs/`.
+
 ## 0.1.0 — 2026-10-24
 
 - 2026-10-25 — Release workflow runs on Node 22 instead of 20. Why: `npm test` uses

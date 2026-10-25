@@ -1,0 +1,328 @@
+/**
+ * Merges bank data fetched from Pluggy into the ledger.
+ *
+ * Pluggy re-creates credit card transactions with a new id when a bill closes,
+ * so its ids are not permanent keys. Each sync instead treats Pluggy as the
+ * source of truth for a recent window: transactions it no longer returns are
+ * removed, and ones that came back with a new id are re-linked to the existing
+ * entry so the user's category and notes survive.
+ *
+ * Kept free of Obsidian imports so it can be unit tested in Node.
+ */
+import { accountBalance, newId } from "./ledger.ts";
+import type { Account, AccountType, Ledger, Transaction, TxType } from "./ledger.ts";
+
+/** How far back each sync fetches and reconciles. */
+export const SYNC_WINDOW_DAYS = 90;
+/** Max days between the two legs of a transfer between own accounts. */
+const TRANSFER_MATCH_DAYS = 5;
+/** Max date drift when re-linking a transaction that came back with a new id. */
+const RELINK_DAYS = 7;
+
+export interface PluggyAccount {
+  id: string;
+  type: "BANK" | "CREDIT";
+  subtype?: string;
+  name: string;
+  marketingName?: string | null;
+  /** bank: signed balance; credit card: amount owed */
+  balance: number;
+}
+
+export interface PluggyTransaction {
+  id: string;
+  accountId: string;
+  /** ISO timestamp, midnight UTC of the transaction day */
+  date: string;
+  description: string;
+  /** bank: sign varies, use `type`; credit card: purchases positive, payments negative */
+  amount: number;
+  type: "DEBIT" | "CREDIT";
+  status?: "PENDING" | "POSTED";
+  categoryId?: string | null;
+}
+
+export interface PluggyCategory {
+  id: string;
+  description: string;
+  parentId?: string | null;
+}
+
+export interface BankData {
+  accounts: PluggyAccount[];
+  transactions: PluggyTransaction[];
+  /** empty when the Pluggy plan has no categorization */
+  categories: PluggyCategory[];
+}
+
+export interface SyncResult {
+  accountsCreated: number;
+  added: number;
+  updated: number;
+  removed: number;
+}
+
+/** Pluggy category (any level) -> name of a default Trimly category. */
+const CATEGORY_MAP: Record<string, string> = {
+  Salary: "Salary",
+  "Entrepreneurial activities": "Freelance",
+  "Proceeds interests and dividends": "Investments",
+  Income: "Other income",
+  Utilities: "Utilities",
+  Telecommunications: "Utilities",
+  Education: "Education",
+  "Wellness and fitness": "Health",
+  Tickets: "Entertainment",
+  Housing: "Housing",
+  Groceries: "Groceries",
+  "Food and drinks": "Dining out",
+  Transportation: "Transport",
+  Healthcare: "Health",
+  Shopping: "Shopping",
+  "Digital services": "Entertainment",
+};
+
+/** Categories marking money moved between the user's own accounts. */
+const OWN_TRANSFER = ["Same person transfer", "Credit card payment"];
+
+/** One side of a bank movement, from the Trimly account's point of view. */
+interface Leg {
+  pid: string;
+  accountId: string;
+  onCard: boolean;
+  date: string;
+  /** signed cents: positive = money into the account */
+  cents: number;
+  description: string;
+  pending: boolean;
+  /** category descriptions, leaf first; empty when uncategorized */
+  path: string[];
+}
+
+/** What the ledger should contain for one or two legs. */
+interface Rec {
+  pids: string[];
+  type: TxType;
+  amount: number;
+  accountId: string;
+  toAccountId?: string;
+  date: string;
+  description: string;
+  pending: boolean;
+  path: string[];
+}
+
+function cents(value: number): number {
+  return Math.round(Math.abs(value) * 100);
+}
+
+function daysBetween(a: string, b: string): number {
+  return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
+}
+
+function accountType(p: PluggyAccount): AccountType {
+  if (p.type === "CREDIT") return "credit";
+  return p.subtype === "SAVINGS_ACCOUNT" ? "savings" : "checking";
+}
+
+function categoryPath(categories: Map<string, PluggyCategory>, id?: string | null): string[] {
+  const path: string[] = [];
+  // bounded walk in case of a cycle in the category tree
+  for (let c = id ? categories.get(id) : undefined; c && path.length < 5; c = c.parentId ? categories.get(c.parentId) : undefined) {
+    path.push(c.description);
+  }
+  return path;
+}
+
+function isOwnTransfer(leg: Leg): boolean {
+  return leg.path.some((d) => OWN_TRANSFER.includes(d));
+}
+
+/**
+ * Pair a bank debit with the matching credit on another own account into one
+ * transfer. Without this, paying the card bill counts every purchase twice.
+ * A card payment pairs when neither side is categorized, or one side says it is
+ * a transfer; a bank-to-bank move only pairs when Pluggy says it is a
+ * same-person transfer, since equal amounts between banks are often unrelated.
+ */
+function pairTransfers(legs: Leg[]): Rec[] {
+  const ins = legs.filter((l) => l.cents > 0);
+  const used = new Set<Leg>();
+  const recs: Rec[] = [];
+  for (const out of legs) {
+    if (out.cents >= 0 || out.onCard) continue;
+    let best: Leg | null = null;
+    for (const inn of ins) {
+      if (used.has(inn) || inn.accountId === out.accountId || inn.cents !== -out.cents) continue;
+      if (daysBetween(inn.date, out.date) > TRANSFER_MATCH_DAYS) continue;
+      const ownTransfer = isOwnTransfer(out) || isOwnTransfer(inn);
+      const allowed = inn.onCard ? ownTransfer || (out.path.length === 0 && inn.path.length === 0) : ownTransfer;
+      if (!allowed) continue;
+      if (!best || daysBetween(inn.date, out.date) < daysBetween(best.date, out.date)) best = inn;
+    }
+    if (!best) continue;
+    used.add(out).add(best);
+    recs.push({
+      pids: [out.pid, best.pid],
+      type: "transfer",
+      amount: best.cents,
+      accountId: out.accountId,
+      toAccountId: best.accountId,
+      date: out.date,
+      description: out.description,
+      pending: out.pending || best.pending,
+      path: [],
+    });
+  }
+  for (const l of legs) {
+    if (used.has(l)) continue;
+    recs.push({
+      pids: [l.pid],
+      type: l.cents > 0 ? "income" : "expense",
+      amount: Math.abs(l.cents),
+      accountId: l.accountId,
+      date: l.date,
+      description: l.description,
+      pending: l.pending,
+      path: l.path,
+    });
+  }
+  return recs;
+}
+
+function mapCategory(ledger: Ledger, rec: Rec): string | undefined {
+  if (rec.type === "transfer") return undefined;
+  const kind = rec.type === "income" ? "income" : "expense";
+  for (const d of rec.path) {
+    const name = CATEGORY_MAP[d];
+    const cat = name && ledger.categories.find((c) => c.name === name && c.kind === kind);
+    if (cat) return cat.id;
+  }
+  return undefined;
+}
+
+/** Point an existing transaction at `rec`. Description, category and notes stay the user's. */
+function relink(tx: Transaction, rec: Rec): boolean {
+  const before = JSON.stringify(tx);
+  tx.date = rec.date;
+  tx.amount = rec.amount;
+  tx.pluggyIds = rec.pids;
+  if (rec.pending) tx.pending = true;
+  else delete tx.pending;
+  if (tx.type !== rec.type || tx.accountId !== rec.accountId || tx.toAccountId !== rec.toAccountId) {
+    tx.type = rec.type;
+    tx.accountId = rec.accountId;
+    if (rec.toAccountId) tx.toAccountId = rec.toAccountId;
+    else delete tx.toAccountId;
+    // a category of the other kind would be wrong now
+    delete tx.categoryId;
+  }
+  return JSON.stringify(tx) !== before;
+}
+
+/**
+ * Merge `data` (fetched from `windowStart` on) into the ledger: create Trimly
+ * accounts for new Pluggy accounts, reconcile transactions in the window, and
+ * set each synced account's opening balance so its balance today matches the bank.
+ * Mutates the ledger.
+ */
+export function applyBankData(ledger: Ledger, data: BankData, windowStart: string, today: string): SyncResult {
+  const result: SyncResult = { accountsCreated: 0, added: 0, updated: 0, removed: 0 };
+
+  const byPluggyId = new Map<string, Account>();
+  for (const p of data.accounts) {
+    let acc = ledger.accounts.find((a) => a.pluggyId === p.id);
+    if (!acc) {
+      acc = { id: newId(), name: p.marketingName || p.name, type: accountType(p), openingBalance: 0, pluggyId: p.id };
+      ledger.accounts.push(acc);
+      result.accountsCreated++;
+    }
+    byPluggyId.set(p.id, acc);
+  }
+
+  const categories = new Map(data.categories.map((c) => [c.id, c]));
+  const legs: Leg[] = [];
+  for (const t of data.transactions) {
+    const acc = byPluggyId.get(t.accountId);
+    if (!acc) continue;
+    const onCard = acc.type === "credit";
+    const moneyIn = onCard ? t.amount < 0 : t.type === "CREDIT";
+    legs.push({
+      pid: t.id,
+      accountId: acc.id,
+      onCard,
+      date: t.date.slice(0, 10),
+      cents: moneyIn ? cents(t.amount) : -cents(t.amount),
+      description: t.description,
+      pending: t.status === "PENDING",
+      path: categoryPath(categories, t.categoryId),
+    });
+  }
+  const recs = pairTransfers(legs);
+
+  const synced = new Set([...byPluggyId.values()].map((a) => a.id));
+  const byPid = new Map<string, Transaction>();
+  for (const tx of ledger.transactions) for (const pid of tx.pluggyIds ?? []) byPid.set(pid, tx);
+  const matched = new Set<Transaction>();
+
+  const unmatched: Rec[] = [];
+  for (const rec of recs) {
+    const tx = rec.pids.map((pid) => byPid.get(pid)).find((t) => t && !matched.has(t));
+    if (!tx) {
+      unmatched.push(rec);
+      continue;
+    }
+    matched.add(tx);
+    if (relink(tx, rec)) result.updated++;
+  }
+
+  const stale = ledger.transactions.filter(
+    (t) => t.pluggyIds?.length && !matched.has(t) && t.date >= windowStart && (synced.has(t.accountId) || synced.has(t.toAccountId ?? ""))
+  );
+  for (const rec of unmatched) {
+    let best: Transaction | null = null;
+    for (const t of stale) {
+      if (matched.has(t) || t.type !== rec.type || t.amount !== rec.amount) continue;
+      if (t.accountId !== rec.accountId || t.toAccountId !== rec.toAccountId) continue;
+      if (daysBetween(t.date, rec.date) > RELINK_DAYS) continue;
+      if (!best || daysBetween(t.date, rec.date) < daysBetween(best.date, rec.date)) best = t;
+    }
+    if (best) {
+      matched.add(best);
+      relink(best, rec);
+      result.updated++;
+      continue;
+    }
+    const tx: Transaction = {
+      id: newId(),
+      date: rec.date,
+      type: rec.type,
+      amount: rec.amount,
+      accountId: rec.accountId,
+      description: rec.description,
+      pluggyIds: rec.pids,
+    };
+    if (rec.toAccountId) tx.toAccountId = rec.toAccountId;
+    const categoryId = mapCategory(ledger, rec);
+    if (categoryId) tx.categoryId = categoryId;
+    if (rec.pending) tx.pending = true;
+    ledger.transactions.push(tx);
+    result.added++;
+  }
+
+  const gone = new Set(stale.filter((t) => !matched.has(t)));
+  if (gone.size) {
+    ledger.transactions = ledger.transactions.filter((t) => !gone.has(t));
+    result.removed = gone.size;
+  }
+
+  for (const p of data.accounts) {
+    const acc = byPluggyId.get(p.id);
+    if (!acc) continue;
+    const target = Math.round(p.balance * 100) * (acc.type === "credit" ? -1 : 1);
+    acc.openingBalance = 0;
+    acc.openingBalance = target - accountBalance(ledger, acc.id, today);
+  }
+
+  return result;
+}

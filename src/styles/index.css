@@ -1005,3 +1005,13 @@ input.trimly-amount-input:focus {
   .trimly-tab span:not(.trimly-tab-icon) { display: none; }
   .trimly-add span:not(.trimly-add-icon) { display: none; }
 }
+
+.trimly-spin svg {
+  animation: trimly-spin 1s linear infinite;
+}
+
+@keyframes trimly-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
