@@ -1,6 +1,6 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, moment } from "obsidian";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
-import { Ledger, Transaction, defaultLedger, formatMoney, postDueRecurring, todayISO } from "./ledger";
+import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, todayISO } from "./ledger";
 import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { EncryptedStore } from "./store";
@@ -73,7 +73,7 @@ export default class TrimlyPlugin extends Plugin {
   }
 
   formatMoney(cents: number): string {
-    return formatMoney(cents, this.settings.currency, this.locale());
+    return formatMoney(cents, this.settings.currency, localeForCurrency(this.settings.currency, this.locale()));
   }
 
   async openDashboard() {

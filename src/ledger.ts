@@ -23,6 +23,23 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   other: "Other",
 };
 
+export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
+  checking: "landmark",
+  savings: "piggy-bank",
+  credit: "credit-card",
+  cash: "wallet",
+  investment: "trending-up",
+  other: "coins",
+};
+
+/** Lucide icon names offered for categories. */
+export const CATEGORY_ICONS = [
+  "home", "shopping-cart", "utensils", "coffee", "car", "fuel", "bus", "plane", "heart-pulse", "pill",
+  "zap", "wifi", "smartphone", "clapperboard", "gamepad-2", "music", "shopping-bag", "shirt", "gift",
+  "graduation-cap", "book", "baby", "dog", "dumbbell", "wrench", "receipt", "landmark", "briefcase",
+  "laptop", "trending-up", "coins", "piggy-bank", "plus-circle", "more-horizontal", "tag",
+];
+
 export const FREQUENCY_LABELS: Record<Frequency, string> = {
   weekly: "Weekly",
   monthly: "Monthly",
@@ -43,6 +60,8 @@ export interface Category {
   name: string;
   kind: CategoryKind;
   color: string;
+  /** Lucide icon name; missing = "tag" */
+  icon?: string;
 }
 
 export interface Transaction {
@@ -98,27 +117,28 @@ export function newId(): string {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 }
 
+const DEFAULT_CATEGORIES: [string, CategoryKind, string, string][] = [
+  ["Housing", "expense", "#8e7cc3", "home"],
+  ["Groceries", "expense", "#6aa84f", "shopping-cart"],
+  ["Dining out", "expense", "#e69138", "utensils"],
+  ["Transport", "expense", "#3d85c6", "car"],
+  ["Health", "expense", "#cc4125", "heart-pulse"],
+  ["Utilities", "expense", "#45818e", "zap"],
+  ["Entertainment", "expense", "#c27ba0", "clapperboard"],
+  ["Shopping", "expense", "#f1c232", "shopping-bag"],
+  ["Education", "expense", "#674ea7", "graduation-cap"],
+  ["Other expenses", "expense", "#999999", "more-horizontal"],
+  ["Salary", "income", "#38761d", "briefcase"],
+  ["Freelance", "income", "#0b5394", "laptop"],
+  ["Investments", "income", "#134f5c", "trending-up"],
+  ["Other income", "income", "#666666", "plus-circle"],
+];
+
 export function defaultLedger(): Ledger {
-  const cat = (name: string, kind: CategoryKind, color: string): Category => ({ id: newId(), name, kind, color });
   return {
     version: LEDGER_VERSION,
     accounts: [{ id: newId(), name: "Wallet", type: "cash", openingBalance: 0 }],
-    categories: [
-      cat("Housing", "expense", "#8e7cc3"),
-      cat("Groceries", "expense", "#6aa84f"),
-      cat("Dining out", "expense", "#e69138"),
-      cat("Transport", "expense", "#3d85c6"),
-      cat("Health", "expense", "#cc4125"),
-      cat("Utilities", "expense", "#45818e"),
-      cat("Entertainment", "expense", "#c27ba0"),
-      cat("Shopping", "expense", "#f1c232"),
-      cat("Education", "expense", "#674ea7"),
-      cat("Other expenses", "expense", "#999999"),
-      cat("Salary", "income", "#38761d"),
-      cat("Freelance", "income", "#0b5394"),
-      cat("Investments", "income", "#134f5c"),
-      cat("Other income", "income", "#666666"),
-    ],
+    categories: DEFAULT_CATEGORIES.map(([name, kind, color, icon]) => ({ id: newId(), name, kind, color, icon })),
     transactions: [],
     budgets: [],
     recurring: [],
@@ -131,10 +151,15 @@ export function parseLedger(json: string): Ledger {
   if (typeof raw.version === "number" && raw.version > LEDGER_VERSION) {
     throw new Error(`Ledger version ${raw.version} is newer than this plugin supports; update Trimly`);
   }
+  const categories = raw.categories ?? [];
+  // ledgers created before category icons existed: give default categories their icon
+  for (const c of categories) {
+    if (!c.icon) c.icon = DEFAULT_CATEGORIES.find(([name, kind]) => name === c.name && kind === c.kind)?.[3];
+  }
   return {
     version: LEDGER_VERSION,
     accounts: raw.accounts ?? [],
-    categories: raw.categories ?? [],
+    categories,
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
@@ -165,6 +190,24 @@ export function parseAmount(input: string): number | null {
   const cents = Number(intPart || "0") * 100 + Number(fracPart.padEnd(2, "0") || "0");
   if (!Number.isFinite(cents)) return null;
   return neg ? -cents : cents;
+}
+
+const CURRENCY_LOCALES: Record<string, string> = {
+  BRL: "pt-BR",
+  USD: "en-US",
+  EUR: "de-DE",
+  GBP: "en-GB",
+  JPY: "ja-JP",
+  CAD: "en-CA",
+  AUD: "en-AU",
+  ARS: "es-AR",
+  MXN: "es-MX",
+  CHF: "de-CH",
+};
+
+/** Number format that people using `currency` expect (R$ 1.234,56 for BRL), falling back to `fallback`. */
+export function localeForCurrency(currency: string, fallback?: string): string | undefined {
+  return CURRENCY_LOCALES[currency] ?? fallback;
 }
 
 export function formatMoney(cents: number, currency: string, locale?: string): string {
@@ -258,6 +301,23 @@ export function monthSummary(ledger: Ledger, month: string): MonthSummary {
     else if (tx.type === "expense") expense += tx.amount;
   }
   return { income, expense, net: income - expense };
+}
+
+/** Income and expense totals for the `count` months ending at `lastMonth`, oldest first. */
+export function monthlyHistory(ledger: Ledger, lastMonth: string, count: number): ({ month: string } & MonthSummary)[] {
+  const out = [];
+  for (let i = count - 1; i >= 0; i--) {
+    const month = shiftMonth(lastMonth, -i);
+    out.push({ month, ...monthSummary(ledger, month) });
+  }
+  return out;
+}
+
+/** Recurring occurrences due between `from` and `to` (inclusive), soonest first. */
+export function upcomingRecurring(ledger: Ledger, from: string, to: string): Recurring[] {
+  return ledger.recurring
+    .filter((r) => r.nextDate >= from && r.nextDate <= to && !(r.endDate && r.nextDate > r.endDate))
+    .sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
 }
 
 /** Expense total per category id for a month; uncategorized expenses use the key "". */

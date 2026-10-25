@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   accountBalance,
+  formatMoney,
+  localeForCurrency,
   monthSummary,
   netWorth,
   nextOccurrence,
@@ -104,4 +106,21 @@ test("deleting a category uncategorizes its transactions instead of losing them"
 test("parseLedger fills missing collections and refuses newer versions", () => {
   assert.deepEqual(parseLedger('{"version":1}').transactions, []);
   assert.throws(() => parseLedger('{"version":999}'));
+});
+
+test("ledgers from before category icons get default icons back, custom ones stay untouched", () => {
+  const l = parseLedger(
+    JSON.stringify({ version: 1, categories: [
+      { id: "a", name: "Groceries", kind: "expense", color: "#000" },
+      { id: "b", name: "Pets", kind: "expense", color: "#000" },
+    ] })
+  );
+  assert.equal(l.categories[0].icon, "shopping-cart");
+  assert.equal(l.categories[1].icon, undefined);
+});
+
+test("money uses the currency's own format, not the UI language's", () => {
+  const brl = formatMoney(123456, "BRL", localeForCurrency("BRL", "en"));
+  assert.match(brl, /1\.234,56/);
+  assert.equal(localeForCurrency("XYZ", "en"), "en");
 });

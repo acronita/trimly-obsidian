@@ -1,11 +1,23 @@
 /* src/styles/index.css */
-.trimly-view {
+.trimly-view,
+.trimly-modal {
   --trimly-income: var(--color-green);
   --trimly-expense: var(--color-red);
-  --trimly-transfer: var(--text-muted);
-  padding: var(--size-4-4);
-  max-width: 1100px;
+  --trimly-warn: var(--color-orange);
+  --trimly-card-bg: var(--background-secondary);
+  --trimly-card-border: var(--background-modifier-border);
+  --trimly-radius: 14px;
+  --trimly-gap: 16px;
+}
+.trimly-view {
+  container: trimly / inline-size;
+  padding: 0;
+  background: var(--background-primary);
+}
+.trimly-page {
+  max-width: 1180px;
   margin: 0 auto;
+  padding: 20px 24px 48px;
 }
 .trimly-view .is-income {
   color: var(--trimly-income);
@@ -14,127 +26,286 @@
   color: var(--trimly-expense);
 }
 .trimly-view .is-transfer {
-  color: var(--trimly-transfer);
+  color: var(--text-muted);
 }
-.trimly-header {
+.trimly-eyebrow {
+  font-size: 11px;
+  font-weight: var(--font-semibold);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.trimly-muted {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.trimly-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
+}
+.trimly-topbar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--size-4-2);
-  margin-bottom: var(--size-4-3);
+  gap: 12px;
+  margin-bottom: 14px;
 }
-.trimly-month-nav,
-.trimly-header-actions {
+.trimly-month-nav {
   display: flex;
   align-items: center;
-  gap: var(--size-4-1);
+  gap: 4px;
 }
 .trimly-month-label {
-  font-size: var(--font-ui-large);
-  font-weight: var(--font-semibold);
-  min-width: 11em;
+  font-size: 1.55em;
+  font-weight: var(--font-bold);
+  letter-spacing: -0.01em;
+  padding: 0 6px;
   text-transform: capitalize;
 }
-.trimly-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--size-4-1);
-  border-bottom: 1px solid var(--background-modifier-border);
-  margin-bottom: var(--size-4-4);
-  padding-bottom: var(--size-4-2);
-}
-.trimly-tab {
-  display: flex;
-  align-items: center;
-  gap: var(--size-4-1);
-  background: transparent;
+.trimly-view button.trimly-pill {
+  margin-left: 8px;
+  height: auto;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: var(--font-ui-smaller);
+  background: var(--background-modifier-hover);
   box-shadow: none;
   color: var(--text-muted);
 }
-.trimly-tab.is-active {
-  background: var(--interactive-accent);
-  color: var(--text-on-accent);
+.trimly-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+button.trimly-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 10px;
+  padding: 0 14px;
+  height: 34px;
+  font-weight: var(--font-semibold);
+}
+.trimly-add-icon {
+  display: flex;
+}
+.trimly-add-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.trimly-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  border-bottom: 1px solid var(--trimly-card-border);
+  margin-bottom: 22px;
+}
+.trimly-tabs::-webkit-scrollbar {
+  display: none;
+}
+.trimly-view button.trimly-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: auto;
+  padding: 9px 12px 11px;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  color: var(--text-muted);
+  font-weight: var(--font-medium);
+  white-space: nowrap;
+}
+.trimly-view button.trimly-tab:hover {
+  background: transparent;
+  color: var(--text-normal);
+}
+.trimly-view button.trimly-tab.is-active {
+  color: var(--text-normal);
+  border-bottom-color: var(--interactive-accent);
 }
 .trimly-tab-icon {
   display: flex;
 }
 .trimly-tab-icon svg {
-  width: var(--icon-s);
-  height: var(--icon-s);
+  width: 15px;
+  height: 15px;
 }
-.trimly-stats {
+.trimly-view button.trimly-tab.is-active .trimly-tab-icon {
+  color: var(--interactive-accent);
+}
+.trimly-hero {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  gap: var(--size-4-3);
-  margin-bottom: var(--size-4-4);
+  grid-template-columns: minmax(220px, 1fr) 2fr;
+  gap: 12px 32px;
+  align-items: center;
+  padding: 22px 24px;
+  margin-bottom: var(--trimly-gap);
+  border-radius: var(--trimly-radius);
+  border: 1px solid var(--trimly-card-border);
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, var(--interactive-accent) 16%, transparent) 0%,
+      transparent 60%),
+    var(--trimly-card-bg);
 }
-.trimly-stat {
-  background: var(--background-secondary);
-  border-radius: var(--radius-m);
-  padding: var(--size-4-3) var(--size-4-4);
+.trimly-hero-value {
+  font-size: 2.3em;
+  font-weight: var(--font-bold);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.15;
+  margin: 4px 0;
 }
-.trimly-stat-label {
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
+.trimly-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
 }
-.trimly-stat-value {
-  font-size: 1.4em;
+.trimly-hero-stat {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--background-primary);
+  border: 1px solid var(--trimly-card-border);
+  min-width: 0;
+}
+.trimly-hero-stat-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  color: var(--trimly-tone);
+  background: color-mix(in srgb, var(--trimly-tone) 15%, transparent);
+}
+.trimly-hero-stat-icon svg {
+  width: 18px;
+  height: 18px;
+}
+.trimly-hero-stat.is-income {
+  --trimly-tone: var(--trimly-income);
+}
+.trimly-hero-stat.is-expense {
+  --trimly-tone: var(--trimly-expense);
+}
+.trimly-hero-stat.is-accent {
+  --trimly-tone: var(--interactive-accent);
+}
+.trimly-hero-stat-value {
+  font-size: 1.15em;
   font-weight: var(--font-bold);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trimly-flow {
+  grid-column: 1 / -1;
+  height: 8px;
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--trimly-income) 25%, transparent);
+  overflow: hidden;
+}
+.trimly-flow-fill {
+  height: 100%;
+  width: var(--trimly-pct, 0%);
+  border-radius: 99px;
+  background: var(--trimly-expense);
+  opacity: 0.85;
+}
+.trimly-flow-caption {
+  grid-column: 1 / -1;
+  margin-top: -6px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
 }
 .trimly-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: var(--size-4-4);
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: var(--trimly-gap);
+  margin-bottom: var(--trimly-gap);
 }
-.trimly-section {
-  background: var(--background-secondary);
-  border-radius: var(--radius-m);
-  padding: var(--size-4-3) var(--size-4-4);
-  margin-bottom: var(--size-4-4);
+.trimly-grid-3 {
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
 }
-.trimly-grid .trimly-section {
+.trimly-card {
+  background: var(--trimly-card-bg);
+  border: 1px solid var(--trimly-card-border);
+  border-radius: var(--trimly-radius);
+  padding: 16px 18px;
+  min-width: 0;
+  margin-bottom: var(--trimly-gap);
+}
+.trimly-grid > .trimly-card {
   margin-bottom: 0;
 }
-.trimly-section-head {
+.trimly-card-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: var(--size-4-2);
+  margin-bottom: 10px;
 }
-.trimly-section-head h4 {
-  margin: 0;
+.trimly-card-title {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-medium);
 }
-.trimly-list {
+.trimly-card-foot {
+  margin-top: 10px;
+}
+.trimly-view button.trimly-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: auto;
+  padding: 2px 4px 2px 8px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  font-size: var(--font-ui-small);
+}
+.trimly-view button.trimly-link:hover {
+  background: var(--background-modifier-hover);
+}
+.trimly-link-icon {
   display: flex;
-  flex-direction: column;
+}
+.trimly-link-icon svg {
+  width: 14px;
+  height: 14px;
+}
+.trimly-section-title {
+  font-weight: var(--font-semibold);
+  font-size: var(--font-ui-medium);
+  margin: 6px 0 10px;
 }
 .trimly-row {
   display: flex;
   align-items: center;
-  gap: var(--size-4-3);
-  padding: var(--size-4-2) var(--size-4-1);
-  border-bottom: 1px solid var(--background-modifier-border);
-}
-.trimly-row:last-child {
-  border-bottom: none;
+  gap: 12px;
+  padding: 9px 8px;
+  margin: 0 -8px;
+  border-radius: 10px;
 }
 .trimly-row.is-clickable {
   cursor: pointer;
-  border-radius: var(--radius-s);
 }
 .trimly-row.is-clickable:hover {
   background: var(--background-modifier-hover);
 }
-.trimly-row.is-archived {
-  opacity: 0.55;
-}
-.trimly-row-date {
-  color: var(--text-muted);
-  font-size: var(--font-ui-small);
-  min-width: 4.5em;
-  font-variant-numeric: tabular-nums;
+.trimly-row.is-archived,
+.trimly-tile.is-archived {
+  opacity: 0.5;
 }
 .trimly-row-main {
   flex: 1;
@@ -143,7 +314,8 @@
 .trimly-row-title {
   display: flex;
   align-items: center;
-  gap: var(--size-4-2);
+  gap: 6px;
+  font-weight: var(--font-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -151,127 +323,541 @@
 .trimly-row-sub {
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
-}
-.trimly-row-flag {
-  color: var(--text-faint);
-  display: flex;
-}
-.trimly-row-flag svg {
-  width: var(--icon-xs);
-  height: var(--icon-xs);
-}
-.trimly-amount {
-  font-variant-numeric: tabular-nums;
-  font-weight: var(--font-semibold);
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
-.trimly-chip {
+.trimly-inline-icon {
   display: inline-flex;
+  color: var(--text-faint);
+}
+.trimly-inline-icon svg {
+  width: 12px;
+  height: 12px;
+}
+.trimly-icon-tile {
+  display: flex;
   align-items: center;
-  gap: var(--size-2-2);
+  justify-content: center;
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  color: var(--trimly-color, var(--text-muted));
+  background: color-mix(in srgb, var(--trimly-color, var(--text-muted)) 16%, transparent);
+}
+.trimly-icon-tile svg {
+  width: 18px;
+  height: 18px;
 }
 .trimly-dot {
   display: inline-block;
-  width: 0.6em;
-  height: 0.6em;
-  border-radius: 50%;
-  background: var(--trimly-color, var(--text-faint));
   flex-shrink: 0;
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--trimly-color, var(--text-faint));
 }
-.trimly-bar-row {
-  padding: var(--size-4-1) 0 var(--size-4-2);
-}
-.trimly-bar-top {
+.trimly-empty {
   display: flex;
-  justify-content: space-between;
-  gap: var(--size-4-2);
-  font-size: var(--font-ui-small);
-  margin-bottom: var(--size-2-2);
-}
-.trimly-bar-label {
-  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: var(--size-4-2);
-}
-.trimly-bar-value {
-  font-variant-numeric: tabular-nums;
+  gap: 8px;
+  padding: 22px 12px;
+  text-align: center;
   color: var(--text-muted);
 }
-.trimly-bar-track {
-  height: 6px;
+.trimly-empty-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--background-modifier-hover);
+  color: var(--text-faint);
+}
+.trimly-empty-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.trimly-empty-text {
+  font-size: var(--font-ui-small);
+  max-width: 280px;
+}
+.trimly-legend-inline {
+  display: flex;
+  gap: 14px;
+  margin: -4px 0 8px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.trimly-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+}
+.trimly-view .trimly-key {
+  color: var(--text-muted);
+}
+.trimly-key::before {
+  content: "";
+  width: 9px;
+  height: 9px;
   border-radius: 3px;
-  background: var(--background-modifier-border);
-  overflow: hidden;
+  background: currentColor;
 }
-.trimly-bar-fill {
-  height: 100%;
-  width: var(--trimly-pct, 0%);
-  background: var(--trimly-color, var(--interactive-accent));
+.trimly-key.is-income::before {
+  background: var(--trimly-income);
 }
-.trimly-bar-fill.is-over {
+.trimly-key.is-expense::before {
   background: var(--trimly-expense);
 }
-.trimly-budget {
-  border-bottom: 1px solid var(--background-modifier-border);
-  padding-bottom: var(--size-4-2);
-  margin-bottom: var(--size-4-2);
+.trimly-bars {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  height: 170px;
 }
-.trimly-budget .setting-item {
-  border: none;
-  padding: var(--size-4-1) 0;
+.trimly-bars-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
 }
-.trimly-over {
-  color: var(--trimly-expense);
+.trimly-bars-pair {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 4px;
+  border-radius: 8px;
+}
+.trimly-bars-col.is-current .trimly-bars-pair {
+  background: var(--background-modifier-hover);
+}
+.trimly-bars-bar {
+  width: min(18px, 40%);
+  height: var(--trimly-h, 0%);
+  min-height: 2px;
+  border-radius: 5px 5px 2px 2px;
+  transition: height 0.3s ease;
+}
+.trimly-bars-bar.is-income {
+  background: var(--trimly-income);
+}
+.trimly-bars-bar.is-expense {
+  background: var(--trimly-expense);
+}
+.trimly-bars-label {
+  text-align: center;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  text-transform: capitalize;
+}
+.trimly-bars-col.is-current .trimly-bars-label {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+}
+.trimly-spending {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+}
+.trimly-donut {
+  position: relative;
+  flex-shrink: 0;
+  width: 160px;
+  height: 160px;
+}
+.trimly-donut svg {
+  width: 100%;
+  height: 100%;
+}
+.trimly-donut-track {
+  stroke: var(--background-modifier-border);
+}
+.trimly-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.trimly-donut-value {
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+  font-size: var(--font-ui-medium);
+}
+.trimly-legend {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.trimly-legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: var(--font-ui-small);
+}
+.trimly-legend-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trimly-legend-pct {
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+  width: 3em;
+  text-align: right;
 }
 .trimly-filters {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--size-4-2);
+  gap: 8px;
   align-items: center;
-  margin-bottom: var(--size-4-3);
+  margin-bottom: 14px;
 }
-.trimly-filters input[type=search] {
+.trimly-search {
+  position: relative;
   flex: 1;
-  min-width: 160px;
+  min-width: 200px;
 }
-.trimly-check {
+.trimly-search input {
+  width: 100%;
+  padding-left: 32px;
+  border-radius: 10px;
+}
+.trimly-search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+.trimly-search-icon svg {
+  width: 15px;
+  height: 15px;
+}
+.trimly-toggle-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--trimly-card-border);
+  font-size: var(--font-ui-small);
+  cursor: pointer;
+}
+.trimly-summary-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
+}
+.trimly-summary-chip {
+  padding: 10px 14px;
+  border-radius: 12px;
+  background: var(--trimly-card-bg);
+  border: 1px solid var(--trimly-card-border);
+}
+.trimly-summary-value {
+  font-size: 1.15em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+}
+.trimly-day {
+  margin-bottom: 14px;
+}
+.trimly-day-head {
+  display: flex;
+  justify-content: space-between;
+  padding: 0 4px 6px;
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-semibold);
+  color: var(--text-muted);
+  text-transform: capitalize;
+  font-variant-numeric: tabular-nums;
+}
+.trimly-card.trimly-day-card {
+  padding: 6px 18px;
+  margin-bottom: 0;
+}
+.trimly-page-head {
+  padding: 18px 22px;
+  margin-bottom: var(--trimly-gap);
+  border-radius: var(--trimly-radius);
+  border: 1px solid var(--trimly-card-border);
+  background:
+    radial-gradient(
+      120% 140% at 0% 0%,
+      color-mix(in srgb, var(--interactive-accent) 14%, transparent) 0%,
+      transparent 60%),
+    var(--trimly-card-bg);
+}
+.trimly-page-value {
+  font-size: 1.9em;
+  font-weight: var(--font-bold);
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  margin: 2px 0;
+}
+.trimly-page-head .trimly-progress {
+  margin-top: 12px;
+}
+.trimly-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 12px;
+  margin-bottom: 22px;
+}
+.trimly-tiles-compact {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+.trimly-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: var(--trimly-radius);
+  background: var(--trimly-card-bg);
+  border: 1px solid var(--trimly-card-border);
+  min-width: 0;
+}
+.trimly-tile.is-clickable {
+  cursor: pointer;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.trimly-tile.is-clickable:hover {
+  border-color: var(--interactive-accent);
+}
+.trimly-tile-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+.trimly-tile-top {
   display: flex;
   align-items: center;
-  gap: var(--size-4-1);
+  justify-content: space-between;
+  margin-bottom: 8px;
 }
-.trimly-totals {
-  display: flex;
-  gap: var(--size-4-4);
-  font-size: var(--font-ui-small);
+.trimly-tile-tag {
+  font-size: var(--font-ui-smaller);
   color: var(--text-muted);
-  margin-bottom: var(--size-4-2);
+  background: var(--background-modifier-hover);
+  padding: 2px 8px;
+  border-radius: 999px;
   font-variant-numeric: tabular-nums;
 }
-.trimly-total-line {
-  margin-top: var(--size-4-3);
-  font-weight: var(--font-semibold);
-  font-variant-numeric: tabular-nums;
+.trimly-tile-name {
+  font-weight: var(--font-medium);
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.trimly-empty {
-  color: var(--text-faint);
-  padding: var(--size-4-2) 0;
+.trimly-tile-value {
+  font-size: 1.35em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.01em;
+}
+.trimly-tile-foot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.trimly-tile-add {
+  align-items: center;
+  justify-content: center;
+  flex-direction: row;
+  gap: 8px;
+  min-height: 72px;
+  border-style: dashed;
+  background: transparent;
+  color: var(--text-muted);
+}
+.trimly-tile-add-icon {
+  display: flex;
+}
+.trimly-tile-add-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.trimly-progress {
+  height: 7px;
+  border-radius: 99px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+  margin-top: 6px;
+}
+.trimly-progress-fill {
+  height: 100%;
+  width: var(--trimly-pct, 0%);
+  border-radius: 99px;
+  background: var(--trimly-color, var(--interactive-accent));
+}
+.trimly-progress-fill.is-warn {
+  background: var(--trimly-warn);
+}
+.trimly-progress-fill.is-over {
+  background: var(--trimly-expense);
+}
+input.trimly-limit-input {
+  width: 110px;
+  height: 28px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
 }
 .trimly-locked {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
   text-align: center;
-  margin: 15vh auto 0;
-  max-width: 420px;
+  margin: 18vh auto 0;
+  max-width: 380px;
+  padding: 32px 28px;
+  border-radius: 18px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+}
+.trimly-locked-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  color: var(--interactive-accent);
+  background: color-mix(in srgb, var(--interactive-accent) 15%, transparent);
 }
 .trimly-locked-icon svg {
-  width: 48px;
-  height: 48px;
+  width: 28px;
+  height: 28px;
+}
+.trimly-locked-title {
+  font-size: 1.3em;
+  font-weight: var(--font-bold);
+}
+.trimly-locked-text {
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+.trimly-tx-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 4px 0 16px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.trimly-segmented {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--background-modifier-hover);
+}
+.trimly-modal .trimly-segmented button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 14px;
+  border-radius: 9px;
+  background: transparent;
+  box-shadow: none;
   color: var(--text-muted);
 }
-.trimly-warning {
-  background: var(--background-modifier-error);
+.trimly-modal .trimly-segmented button.is-active {
+  background: var(--background-primary);
+  box-shadow: var(--shadow-s);
   color: var(--text-normal);
-  padding: var(--size-4-2) var(--size-4-3);
-  border-radius: var(--radius-s);
+}
+.trimly-modal .trimly-segmented button.is-active.is-expense {
+  color: var(--trimly-expense);
+}
+.trimly-modal .trimly-segmented button.is-active.is-income {
+  color: var(--trimly-income);
+}
+.trimly-seg-icon {
+  display: flex;
+}
+.trimly-seg-icon svg {
+  width: 14px;
+  height: 14px;
+}
+input.trimly-amount-input {
+  width: 100%;
+  max-width: 280px;
+  height: auto;
+  padding: 6px 10px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  text-align: center;
+  font-size: 2.2em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+}
+input.trimly-amount-input:focus {
+  box-shadow: none;
+  background: var(--background-modifier-hover);
+  border-radius: 12px;
+}
+.trimly-tx-hero.is-expense input.trimly-amount-input {
+  color: var(--trimly-expense);
+}
+.trimly-tx-hero.is-income input.trimly-amount-input {
+  color: var(--trimly-income);
+}
+.trimly-icon-setting {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.trimly-icon-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(38px, 1fr));
+  gap: 6px;
+  padding-bottom: 14px;
+}
+.trimly-modal button.trimly-icon-choice {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 38px;
+  padding: 0;
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.trimly-modal button.trimly-icon-choice.is-active {
+  color: var(--trimly-color);
+  background: color-mix(in srgb, var(--trimly-color) 18%, transparent);
+  outline: 2px solid var(--trimly-color);
+}
+.trimly-warning {
+  border-left: 3px solid var(--color-orange);
+  background: color-mix(in srgb, var(--color-orange) 10%, transparent);
+  color: var(--text-normal);
+  padding: 10px 12px;
+  border-radius: 8px;
   font-size: var(--font-ui-small);
 }
 .trimly-error {
@@ -280,5 +866,33 @@
   margin: 0;
 }
 .trimly-modal input.trimly-invalid {
-  border-color: var(--text-error);
+  color: var(--text-error);
+}
+@container trimly (max-width: 760px) {
+  .trimly-page {
+    padding: 14px 14px 40px;
+  }
+  .trimly-hero {
+    grid-template-columns: 1fr;
+    padding: 18px;
+  }
+  .trimly-hero-stats {
+    grid-template-columns: 1fr;
+  }
+  .trimly-grid {
+    grid-template-columns: 1fr;
+  }
+  .trimly-spending {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .trimly-donut {
+    align-self: center;
+  }
+  .trimly-tab span:not(.trimly-tab-icon) {
+    display: none;
+  }
+  .trimly-add span:not(.trimly-add-icon) {
+    display: none;
+  }
 }

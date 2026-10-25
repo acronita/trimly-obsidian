@@ -1,7 +1,8 @@
-import { App, Modal, Setting } from "obsidian";
+import { App, Modal, Setting, setIcon } from "obsidian";
 import {
   ACCOUNT_TYPE_LABELS,
   Account,
+  CATEGORY_ICONS,
   AccountType,
   Category,
   CategoryKind,
@@ -18,6 +19,7 @@ import {
 } from "./ledger";
 
 const TYPE_LABELS: Record<TxType, string> = { expense: "Expense", income: "Income", transfer: "Transfer" };
+const TYPE_ICONS: Record<TxType, string> = { expense: "arrow-up-right", income: "arrow-down-left", transfer: "arrow-left-right" };
 
 export type PassphraseMode = "unlock" | "create" | "change";
 
@@ -141,19 +143,6 @@ export class ConfirmModal extends Modal {
   }
 }
 
-function amountSetting(container: HTMLElement, name: string, initial: number, onValid: (cents: number) => void) {
-  new Setting(container).setName(name).addText((t) => {
-    t.inputEl.inputMode = "decimal";
-    t.setPlaceholder("0.00");
-    if (initial) t.setValue(centsToInput(initial));
-    t.onChange((v) => {
-      const cents = parseAmount(v);
-      t.inputEl.toggleClass("trimly-invalid", cents === null && v.trim() !== "");
-      if (cents !== null) onValid(cents);
-    });
-  });
-}
-
 function dateSetting(container: HTMLElement, name: string, initial: string, onChange: (v: string) => void) {
   new Setting(container).setName(name).addText((t) => {
     t.inputEl.type = "date";
@@ -195,20 +184,36 @@ function validateTxLike(t: TxLike): string | null {
 }
 
 function renderTxLikeFields(container: HTMLElement, ledger: Ledger, draft: TxLike, rerender: () => void) {
-  new Setting(container).setName("Type").addDropdown((d) =>
-    d
-      .addOptions(TYPE_LABELS)
-      .setValue(draft.type)
-      .onChange((v) => {
-        draft.type = v as TxType;
-        draft.categoryId = undefined;
-        rerender();
-      })
-  );
+  const hero = container.createDiv(`trimly-tx-hero is-${draft.type}`);
+  const seg = hero.createDiv("trimly-segmented");
+  for (const type of Object.keys(TYPE_LABELS) as TxType[]) {
+    const b = seg.createEl("button", { cls: `is-${type}` });
+    setIcon(b.createSpan("trimly-seg-icon"), TYPE_ICONS[type]);
+    b.createSpan({ text: TYPE_LABELS[type] });
+    if (type === draft.type) b.addClass("is-active");
+    b.addEventListener("click", () => {
+      if (draft.type === type) return;
+      draft.type = type;
+      draft.categoryId = undefined;
+      rerender();
+    });
+  }
+  const amount = hero.createEl("input", { cls: "trimly-amount-input", type: "text", placeholder: "0,00" });
+  amount.inputMode = "decimal";
+  if (draft.amount) amount.value = centsToInput(draft.amount);
+  amount.addEventListener("input", () => {
+    const cents = parseAmount(amount.value);
+    amount.toggleClass("trimly-invalid", cents === null && amount.value.trim() !== "");
+    if (cents !== null) draft.amount = Math.abs(cents);
+  });
+  window.setTimeout(() => amount.focus(), 0);
+
   new Setting(container).setName("Description").addText((t) =>
-    t.setValue(draft.description).onChange((v) => (draft.description = v))
+    t
+      .setPlaceholder(draft.type === "income" ? "e.g. Salary" : draft.type === "transfer" ? "e.g. Savings" : "e.g. Supermarket")
+      .setValue(draft.description)
+      .onChange((v) => (draft.description = v))
   );
-  amountSetting(container, "Amount", draft.amount, (c) => (draft.amount = Math.abs(c)));
   new Setting(container).setName(draft.type === "transfer" ? "From account" : "Account").addDropdown((d) =>
     d
       .addOptions(accountOptions(ledger, draft.accountId))
@@ -463,7 +468,7 @@ export class CategoryModal extends Modal {
     private onDelete: ((c: Category) => void) | null
   ) {
     super(app);
-    this.draft = existing ? { ...existing } : { id: newId(), name: "", kind, color: "#888888" };
+    this.draft = existing ? { ...existing } : { id: newId(), name: "", kind, color: "#5b8def", icon: "tag" };
   }
 
   onOpen() {
@@ -477,7 +482,25 @@ export class CategoryModal extends Modal {
         .setValue(this.draft.kind)
         .onChange((v) => (this.draft.kind = v as CategoryKind))
     );
-    new Setting(contentEl).setName("Color").addColorPicker((c) => c.setValue(this.draft.color).onChange((v) => (this.draft.color = v)));
+    new Setting(contentEl).setName("Color").addColorPicker((c) =>
+      c.setValue(this.draft.color).onChange((v) => {
+        this.draft.color = v;
+        grid.setCssProps({ "--trimly-color": v });
+      })
+    );
+    new Setting(contentEl).setName("Icon").setClass("trimly-icon-setting");
+    const grid = contentEl.createDiv("trimly-icon-grid");
+    grid.setCssProps({ "--trimly-color": this.draft.color });
+    for (const icon of CATEGORY_ICONS) {
+      const b = grid.createEl("button", { cls: "trimly-icon-choice", attr: { "aria-label": icon } });
+      setIcon(b, icon);
+      if ((this.draft.icon ?? "tag") === icon) b.addClass("is-active");
+      b.addEventListener("click", () => {
+        this.draft.icon = icon;
+        grid.querySelectorAll(".is-active").forEach((el) => el.removeClass("is-active"));
+        b.addClass("is-active");
+      });
+    }
     const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
     footer(
       contentEl,

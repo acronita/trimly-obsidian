@@ -8,8 +8,9 @@ passphrase that never leaves your device.
 
 ## Features
 
-- **Overview** — month at a glance: income, expenses, net, net worth, account balances, spending by
-  category (against budgets) and recent transactions. Navigate month by month.
+- **Overview** — net worth, the month's income, expenses and savings rate, a 6-month cash-flow chart,
+  spending by category (donut), account balances, recent activity and upcoming bills. Navigate month
+  by month.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
   and notes. Search and filter by account, category, type and month.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones
@@ -17,7 +18,7 @@ passphrase that never leaves your device.
 - **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives.
-- **Categories** — default expense/income categories, fully editable, with colors.
+- **Categories** — default expense/income categories, fully editable, with colors and icons.
 - Amount input accepts `1234.56`, `1.234,56` or `1,234.56`; any ISO currency code (BRL by default).
 
 ## Security model

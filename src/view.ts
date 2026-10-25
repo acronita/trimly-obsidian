@@ -1,16 +1,23 @@
-import { ItemView, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
+import { ItemView, Notice, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
+import { cashFlowBars, donut } from "./charts";
 import { AccountModal, CategoryModal, ConfirmModal, RecurringModal, TransactionModal } from "./modals";
 import {
+  ACCOUNT_TYPE_ICONS,
   ACCOUNT_TYPE_LABELS,
+  Category,
   CategoryKind,
   FREQUENCY_LABELS,
   Ledger,
+  Recurring,
   Transaction,
+  TxType,
   accountBalance,
   accountInUse,
+  centsToInput,
   monthOf,
   monthSummary,
+  monthlyHistory,
   netWorth,
   parseAmount,
   postDueRecurring,
@@ -19,7 +26,8 @@ import {
   sortTransactions,
   spendingByCategory,
   todayISO,
-  centsToInput,
+  toISODate,
+  upcomingRecurring,
 } from "./ledger";
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
@@ -28,12 +36,14 @@ type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | 
 
 const TABS: { id: Tab; label: string; icon: string }[] = [
   { id: "overview", label: "Overview", icon: "layout-dashboard" },
-  { id: "transactions", label: "Transactions", icon: "list" },
+  { id: "transactions", label: "Transactions", icon: "arrow-left-right" },
   { id: "accounts", label: "Accounts", icon: "landmark" },
   { id: "budgets", label: "Budgets", icon: "target" },
   { id: "recurring", label: "Recurring", icon: "repeat" },
   { id: "categories", label: "Categories", icon: "tags" },
 ];
+
+const NEUTRAL = "#8a8a8a";
 
 interface TxFilter {
   text: string;
@@ -71,72 +81,166 @@ export class TrimlyView extends ItemView {
 
   render() {
     const root = this.contentEl;
+    const scroll = root.scrollTop;
     root.empty();
     root.addClass("trimly-view");
     const ledger = this.plugin.ledger;
     if (!ledger) return this.renderLocked(root);
 
-    this.renderHeader(root);
-    const body = root.createDiv("trimly-body");
+    const page = root.createDiv("trimly-page");
+    this.renderHeader(page);
+    const body = page.createDiv("trimly-body");
     switch (this.tab) {
       case "overview":
-        return this.renderOverview(body, ledger);
+        this.renderOverview(body, ledger);
+        break;
       case "transactions":
-        return this.renderTransactions(body, ledger);
+        this.renderTransactions(body, ledger);
+        break;
       case "accounts":
-        return this.renderAccounts(body, ledger);
+        this.renderAccounts(body, ledger);
+        break;
       case "budgets":
-        return this.renderBudgets(body, ledger);
+        this.renderBudgets(body, ledger);
+        break;
       case "recurring":
-        return this.renderRecurring(body, ledger);
+        this.renderRecurring(body, ledger);
+        break;
       case "categories":
-        return this.renderCategories(body, ledger);
+        this.renderCategories(body, ledger);
+        break;
     }
+    root.scrollTop = scroll;
   }
+
+  // ---- shared bits ----
 
   private money(cents: number) {
     return this.plugin.formatMoney(cents);
   }
 
+  private signedMoney(cents: number, type: TxType) {
+    if (type === "expense") return `−${this.money(cents)}`;
+    if (type === "income") return `+${this.money(cents)}`;
+    return this.money(cents);
+  }
+
+  private fmt(opts: Intl.DateTimeFormatOptions, date: Date) {
+    return new Intl.DateTimeFormat(this.plugin.locale(), opts).format(date);
+  }
+
+  private parseDate(iso: string) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return new Date(y, m - 1, d || 1);
+  }
+
+  private monthLabel(month: string) {
+    return this.fmt({ month: "long", year: "numeric" }, this.parseDate(month));
+  }
+
+  private shortMonth(month: string) {
+    return this.fmt({ month: "short" }, this.parseDate(month));
+  }
+
+  private dayHeading(iso: string) {
+    const today = todayISO();
+    const d = this.parseDate(iso);
+    if (iso === today) return "Today";
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (iso === toISODate(yesterday)) return "Yesterday";
+    return this.fmt({ weekday: "long", day: "numeric", month: "long" }, d);
+  }
+
+  private shortDate(iso: string) {
+    return this.fmt({ day: "numeric", month: "short" }, this.parseDate(iso));
+  }
+
+  private category(ledger: Ledger, id?: string): Category | undefined {
+    return ledger.categories.find((c) => c.id === id);
+  }
+
+  private iconTile(parent: HTMLElement, icon: string, color: string, cls = "") {
+    const tile = parent.createDiv(`trimly-icon-tile ${cls}`);
+    tile.setCssProps({ "--trimly-color": color });
+    setIcon(tile, icon);
+    return tile;
+  }
+
+  private card(parent: HTMLElement, title: string, link?: { label: string; onClick: () => void }) {
+    const card = parent.createDiv("trimly-card");
+    const head = card.createDiv("trimly-card-head");
+    head.createDiv({ cls: "trimly-card-title", text: title });
+    if (link) {
+      const a = head.createEl("button", { cls: "trimly-link" });
+      a.createSpan({ text: link.label });
+      setIcon(a.createSpan("trimly-link-icon"), "chevron-right");
+      a.addEventListener("click", link.onClick);
+    }
+    return card;
+  }
+
+  private empty(parent: HTMLElement, icon: string, text: string, cta?: { label: string; onClick: () => void }) {
+    const el = parent.createDiv("trimly-empty");
+    setIcon(el.createDiv("trimly-empty-icon"), icon);
+    el.createDiv({ cls: "trimly-empty-text", text });
+    if (cta) {
+      const b = el.createEl("button", { text: cta.label });
+      b.addEventListener("click", cta.onClick);
+    }
+  }
+
+  private goTab(t: Tab) {
+    this.tab = t;
+    this.contentEl.scrollTop = 0;
+    this.render();
+  }
+
+  // ---- locked ----
+
   private renderLocked(root: HTMLElement) {
     const box = root.createDiv("trimly-locked");
     setIcon(box.createDiv("trimly-locked-icon"), "lock");
-    box.createEl("h3", { text: "Trimly is locked" });
-    box.createEl("p", { text: "Your financial data is encrypted. Enter your passphrase to open it." });
+    box.createDiv({ cls: "trimly-locked-title", text: "Trimly is locked" });
+    box.createDiv({ cls: "trimly-locked-text", text: "Your finances are encrypted. Enter your passphrase to open them." });
     const btn = box.createEl("button", { cls: "mod-cta", text: "Unlock" });
     btn.addEventListener("click", () => void this.plugin.unlock());
   }
 
-  private renderHeader(root: HTMLElement) {
-    const header = root.createDiv("trimly-header");
-    const nav = header.createDiv("trimly-month-nav");
+  // ---- header ----
+
+  private renderHeader(page: HTMLElement) {
+    const top = page.createDiv("trimly-topbar");
+    const nav = top.createDiv("trimly-month-nav");
     const prev = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Previous month" } });
     setIcon(prev, "chevron-left");
     prev.addEventListener("click", () => this.setMonth(shiftMonth(this.month, -1)));
-    const label = nav.createEl("button", { cls: "trimly-month-label", text: this.monthLabel(this.month) });
-    label.setAttr("aria-label", "Go to current month");
-    label.addEventListener("click", () => this.setMonth(monthOf(todayISO())));
+    nav.createDiv({ cls: "trimly-month-label", text: this.monthLabel(this.month) });
     const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Next month" } });
     setIcon(next, "chevron-right");
     next.addEventListener("click", () => this.setMonth(shiftMonth(this.month, 1)));
+    const current = monthOf(todayISO());
+    if (this.month !== current) {
+      const today = nav.createEl("button", { cls: "trimly-pill", text: "This month" });
+      today.addEventListener("click", () => this.setMonth(current));
+    }
 
-    const actions = header.createDiv("trimly-header-actions");
-    const add = actions.createEl("button", { cls: "mod-cta", text: "Add transaction" });
-    add.addEventListener("click", () => this.plugin.openTransactionModal(null));
-    const lock = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Lock" } });
+    const actions = top.createDiv("trimly-top-actions");
+    const lock = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Lock Trimly" } });
     setIcon(lock, "lock");
     lock.addEventListener("click", () => this.plugin.lock());
+    const add = actions.createEl("button", { cls: "mod-cta trimly-add" });
+    setIcon(add.createSpan("trimly-add-icon"), "plus");
+    add.createSpan({ text: "New transaction" });
+    add.addEventListener("click", () => this.plugin.openTransactionModal(null));
 
-    const tabs = root.createDiv("trimly-tabs");
+    const tabs = page.createDiv("trimly-tabs");
     for (const t of TABS) {
       const el = tabs.createEl("button", { cls: "trimly-tab" });
       setIcon(el.createSpan("trimly-tab-icon"), t.icon);
       el.createSpan({ text: t.label });
       if (t.id === this.tab) el.addClass("is-active");
-      el.addEventListener("click", () => {
-        this.tab = t.id;
-        this.render();
-      });
+      el.addEventListener("click", () => this.goTab(t.id));
     }
   }
 
@@ -145,131 +249,172 @@ export class TrimlyView extends ItemView {
     this.render();
   }
 
-  private monthLabel(month: string) {
-    const [y, m] = month.split("-").map(Number);
-    return new Intl.DateTimeFormat(this.plugin.locale(), { month: "long", year: "numeric" }).format(new Date(y, m - 1, 1));
-  }
-
-  private dateLabel(date: string) {
-    const [y, m, d] = date.split("-").map(Number);
-    return new Intl.DateTimeFormat(this.plugin.locale(), { day: "2-digit", month: "short" }).format(new Date(y, m - 1, d));
-  }
-
-  private section(parent: HTMLElement, title: string, action?: { label: string; onClick: () => void }) {
-    const sec = parent.createDiv("trimly-section");
-    const head = sec.createDiv("trimly-section-head");
-    head.createEl("h4", { text: title });
-    if (action) {
-      const b = head.createEl("button", { text: action.label });
-      b.addEventListener("click", action.onClick);
-    }
-    return sec;
-  }
-
   // ---- overview ----
 
   private renderOverview(body: HTMLElement, ledger: Ledger) {
     const monthEnd = `${this.month}-31`;
     const sum = monthSummary(ledger, this.month);
-    const stats = body.createDiv("trimly-stats");
-    this.stat(stats, "Income", sum.income, "is-income");
-    this.stat(stats, "Expenses", sum.expense, "is-expense");
-    this.stat(stats, "Net", sum.net, sum.net >= 0 ? "is-income" : "is-expense");
-    this.stat(stats, "Net worth", netWorth(ledger, monthEnd), "");
+    const activeAccounts = ledger.accounts.filter((a) => !a.archived);
 
-    const grid = body.createDiv("trimly-grid");
+    // hero: net worth + this month's flow
+    const hero = body.createDiv("trimly-hero");
+    const left = hero.createDiv("trimly-hero-main");
+    left.createDiv({ cls: "trimly-eyebrow", text: "Net worth" });
+    left.createDiv({ cls: "trimly-hero-value", text: this.money(netWorth(ledger, monthEnd)) });
+    left.createDiv({
+      cls: "trimly-muted",
+      text: `Across ${activeAccounts.length} account${activeAccounts.length === 1 ? "" : "s"}, end of ${this.monthLabel(this.month)}`,
+    });
+    const stats = hero.createDiv("trimly-hero-stats");
+    this.heroStat(stats, "Income", sum.income, "arrow-down-left", "is-income");
+    this.heroStat(stats, "Expenses", sum.expense, "arrow-up-right", "is-expense");
+    const rate = sum.income > 0 ? Math.round((sum.net / sum.income) * 100) : null;
+    this.heroStat(stats, rate === null ? "Net" : `Saved · ${rate}%`, sum.net, "piggy-bank", sum.net >= 0 ? "is-accent" : "is-expense");
+    if (sum.income > 0 || sum.expense > 0) {
+      const flow = hero.createDiv("trimly-flow");
+      const spentPct = sum.income > 0 ? Math.min(100, (sum.expense / sum.income) * 100) : 100;
+      flow.createDiv("trimly-flow-fill").setCssProps({ "--trimly-pct": `${spentPct}%` });
+      if (sum.expense > sum.income) flow.addClass("is-over");
+      hero.createDiv({
+        cls: "trimly-flow-caption",
+        text: sum.income > 0 ? `${Math.round((sum.expense / sum.income) * 100)}% of income spent` : "No income recorded this month",
+      });
+    }
 
-    const accSec = this.section(grid, "Accounts", { label: "Manage", onClick: () => this.goTab("accounts") });
-    const accList = accSec.createDiv("trimly-list");
-    for (const a of ledger.accounts.filter((x) => !x.archived)) {
-      const row = accList.createDiv("trimly-row");
+    const row1 = body.createDiv("trimly-grid");
+    this.renderCashFlowCard(row1, ledger);
+    this.renderSpendingCard(row1, ledger);
+
+    const row2 = body.createDiv("trimly-grid trimly-grid-3");
+    const accCard = this.card(row2, "Accounts", { label: "Manage", onClick: () => this.goTab("accounts") });
+    if (activeAccounts.length === 0) this.empty(accCard, "landmark", "No accounts yet.");
+    for (const a of activeAccounts) {
+      const row = accCard.createDiv("trimly-row is-clickable");
+      this.iconTile(row, ACCOUNT_TYPE_ICONS[a.type], "var(--interactive-accent)");
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: a.name });
       main.createDiv({ cls: "trimly-row-sub", text: ACCOUNT_TYPE_LABELS[a.type] });
-      this.amountEl(row, accountBalance(ledger, a.id, monthEnd), true);
+      const bal = accountBalance(ledger, a.id, monthEnd);
+      row.createDiv({ cls: `trimly-amount ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      row.addEventListener("click", () => this.editAccount(a.id));
     }
 
-    const spendSec = this.section(grid, "Spending by category", { label: "Budgets", onClick: () => this.goTab("budgets") });
-    const spending = spendingByCategory(ledger, this.month);
-    if (spending.size === 0) spendSec.createDiv({ cls: "trimly-empty", text: "No expenses this month." });
-    const max = Math.max(0, ...spending.values());
-    const entries = [...spending.entries()].sort((a, b) => b[1] - a[1]);
-    for (const [catId, spent] of entries) {
-      const cat = ledger.categories.find((c) => c.id === catId);
-      const budget = ledger.budgets.find((b) => b.categoryId === catId);
-      this.barRow(spendSec, cat?.name ?? "Uncategorized", cat?.color ?? "#888888", spent, budget?.limit, max);
+    const recentCard = this.card(row2, "Recent activity", { label: "All", onClick: () => this.goTab("transactions") });
+    const recent = sortTransactions(ledger.transactions.filter((t) => monthOf(t.date) === this.month)).slice(0, 6);
+    if (recent.length === 0) {
+      this.empty(recentCard, "receipt", "Nothing recorded this month.", {
+        label: "Add transaction",
+        onClick: () => this.plugin.openTransactionModal(null),
+      });
     }
+    for (const tx of recent) this.txRow(recentCard, ledger, tx, true);
 
-    const recentSec = this.section(grid, "Recent transactions", { label: "See all", onClick: () => this.goTab("transactions") });
-    const recent = sortTransactions(ledger.transactions.filter((t) => monthOf(t.date) === this.month)).slice(0, 8);
-    if (recent.length === 0) recentSec.createDiv({ cls: "trimly-empty", text: "No transactions this month." });
-    const list = recentSec.createDiv("trimly-list");
-    for (const tx of recent) this.txRow(list, ledger, tx);
+    const upCard = this.card(row2, "Upcoming", { label: "Recurring", onClick: () => this.goTab("recurring") });
+    const today = todayISO();
+    const horizon = toISODate(new Date(Date.now() + 30 * 86400000));
+    const upcoming = upcomingRecurring(ledger, today, horizon).slice(0, 6);
+    if (upcoming.length === 0) this.empty(upCard, "calendar", "No bills or income due in the next 30 days.");
+    for (const r of upcoming) this.recurringRow(upCard, ledger, r);
   }
 
-  private goTab(t: Tab) {
-    this.tab = t;
-    this.render();
+  private heroStat(parent: HTMLElement, label: string, cents: number, icon: string, cls: string) {
+    const el = parent.createDiv(`trimly-hero-stat ${cls}`);
+    setIcon(el.createDiv("trimly-hero-stat-icon"), icon);
+    const txt = el.createDiv();
+    txt.createDiv({ cls: "trimly-eyebrow", text: label });
+    txt.createDiv({ cls: "trimly-hero-stat-value", text: this.money(cents) });
   }
 
-  private stat(parent: HTMLElement, label: string, cents: number, cls: string) {
-    const el = parent.createDiv("trimly-stat");
-    el.createDiv({ cls: "trimly-stat-label", text: label });
-    el.createDiv({ cls: `trimly-stat-value ${cls}`, text: this.money(cents) });
+  private renderCashFlowCard(parent: HTMLElement, ledger: Ledger) {
+    const card = this.card(parent, "Cash flow");
+    const legend = card.createDiv("trimly-legend-inline");
+    legend.createSpan("trimly-key is-income").createSpan({ text: "Income" });
+    legend.createSpan("trimly-key is-expense").createSpan({ text: "Expenses" });
+    const hist = monthlyHistory(ledger, this.month, 6);
+    cashFlowBars(
+      card,
+      hist.map((h) => ({ label: this.shortMonth(h.month), income: h.income, expense: h.expense, current: h.month === this.month })),
+      (g) => `${g.label}: +${this.money(g.income)} / −${this.money(g.expense)}`
+    );
+    const avgExpense = hist.reduce((s, h) => s + h.expense, 0) / hist.length;
+    card.createDiv({ cls: "trimly-muted trimly-card-foot", text: `6-month average spending: ${this.money(Math.round(avgExpense))}` });
   }
 
-  private amountEl(parent: HTMLElement, cents: number, signedColor: boolean) {
-    const el = parent.createDiv({ cls: "trimly-amount", text: this.money(cents) });
-    if (signedColor && cents < 0) el.addClass("is-expense");
-    return el;
-  }
-
-  private barRow(parent: HTMLElement, name: string, color: string, spent: number, limit: number | undefined, max: number) {
-    const row = parent.createDiv("trimly-bar-row");
-    const top = row.createDiv("trimly-bar-top");
-    const label = top.createDiv("trimly-bar-label");
-    label.createSpan("trimly-dot").setCssProps({ "--trimly-color": color });
-    label.createSpan({ text: name });
-    top.createDiv({
-      cls: "trimly-bar-value",
-      text: limit ? `${this.money(spent)} / ${this.money(limit)}` : this.money(spent),
+  private renderSpendingCard(parent: HTMLElement, ledger: Ledger) {
+    const card = this.card(parent, "Spending by category", { label: "Budgets", onClick: () => this.goTab("budgets") });
+    const spending = [...spendingByCategory(ledger, this.month).entries()].sort((a, b) => b[1] - a[1]);
+    const total = spending.reduce((s, [, v]) => s + v, 0);
+    if (total === 0) {
+      this.empty(card, "pie-chart", "No expenses this month.");
+      return;
+    }
+    const wrap = card.createDiv("trimly-spending");
+    const top = spending.slice(0, 6);
+    const rest = spending.slice(6).reduce((s, [, v]) => s + v, 0);
+    const slices = top.map(([id, value]) => ({ value, color: this.category(ledger, id)?.color ?? NEUTRAL }));
+    if (rest) slices.push({ value: rest, color: NEUTRAL });
+    donut(wrap, slices, (c) => {
+      c.createDiv({ cls: "trimly-eyebrow", text: "Spent" });
+      c.createDiv({ cls: "trimly-donut-value", text: this.money(total) });
     });
-    const track = row.createDiv("trimly-bar-track");
-    const denom = limit ?? max;
-    const pct = denom > 0 ? Math.min(100, (spent / denom) * 100) : 0;
-    const fill = track.createDiv("trimly-bar-fill");
-    fill.setCssProps({ "--trimly-pct": `${pct}%`, "--trimly-color": color });
-    if (limit && spent > limit) fill.addClass("is-over");
+    const legend = wrap.createDiv("trimly-legend");
+    const item = (name: string, color: string, value: number) => {
+      const row = legend.createDiv("trimly-legend-row");
+      row.createSpan("trimly-dot").setCssProps({ "--trimly-color": color });
+      row.createSpan({ cls: "trimly-legend-name", text: name });
+      row.createSpan({ cls: "trimly-legend-pct", text: `${Math.round((value / total) * 100)}%` });
+      row.createSpan({ cls: "trimly-amount", text: this.money(value) });
+    };
+    for (const [id, value] of top) {
+      const cat = this.category(ledger, id);
+      item(cat?.name ?? "Uncategorized", cat?.color ?? NEUTRAL, value);
+    }
+    if (rest) item("Other", NEUTRAL, rest);
   }
 
-  private txRow(list: HTMLElement, ledger: Ledger, tx: Transaction) {
-    const row = list.createDiv("trimly-row is-clickable");
-    row.createDiv({ cls: "trimly-row-date", text: this.dateLabel(tx.date) });
+  private txRow(parent: HTMLElement, ledger: Ledger, tx: Transaction, showDate: boolean) {
+    const row = parent.createDiv("trimly-row is-clickable");
+    const cat = this.category(ledger, tx.categoryId);
+    if (tx.type === "transfer") this.iconTile(row, "arrow-left-right", NEUTRAL);
+    else this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
     const main = row.createDiv("trimly-row-main");
-    main.createDiv({ cls: "trimly-row-title", text: tx.description });
-    const sub = main.createDiv("trimly-row-sub");
+    const title = main.createDiv({ cls: "trimly-row-title", text: tx.description });
+    if (tx.recurringId) setIcon(title.createSpan({ cls: "trimly-inline-icon", attr: { "aria-label": "Recurring" } }), "repeat");
     const acc = (id?: string) => ledger.accounts.find((a) => a.id === id)?.name ?? "?";
-    if (tx.type === "transfer") {
-      sub.setText(`${acc(tx.accountId)} → ${acc(tx.toAccountId)}`);
-    } else {
-      const cat = ledger.categories.find((c) => c.id === tx.categoryId);
-      const chip = sub.createSpan("trimly-chip");
-      chip.createSpan("trimly-dot").setCssProps({ "--trimly-color": cat?.color ?? "#888888" });
-      chip.createSpan({ text: cat?.name ?? "Uncategorized" });
-      sub.createSpan({ text: ` · ${acc(tx.accountId)}` });
-    }
-    const sign = tx.type === "expense" ? -1 : 1;
-    const amt = row.createDiv({ cls: "trimly-amount", text: this.money(sign * tx.amount) });
-    amt.addClass(tx.type === "expense" ? "is-expense" : tx.type === "income" ? "is-income" : "is-transfer");
-    if (tx.recurringId) setIcon(row.createDiv({ cls: "trimly-row-flag", attr: { "aria-label": "Recurring" } }), "repeat");
+    const parts =
+      tx.type === "transfer"
+        ? [`${acc(tx.accountId)} → ${acc(tx.toAccountId)}`]
+        : [cat?.name ?? "Uncategorized", acc(tx.accountId)];
+    if (showDate) parts.unshift(this.shortDate(tx.date));
+    main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
+    row.createDiv({ cls: `trimly-amount is-${tx.type}`, text: this.signedMoney(tx.amount, tx.type) });
     row.addEventListener("click", () => this.plugin.openTransactionModal(tx));
+  }
+
+  private recurringRow(parent: HTMLElement, ledger: Ledger, r: Recurring) {
+    const row = parent.createDiv("trimly-row is-clickable");
+    const cat = this.category(ledger, r.categoryId);
+    if (r.type === "transfer") this.iconTile(row, "arrow-left-right", NEUTRAL);
+    else this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
+    const ended = !!r.endDate && r.nextDate > r.endDate;
+    if (ended) row.addClass("is-archived");
+    const main = row.createDiv("trimly-row-main");
+    main.createDiv({ cls: "trimly-row-title", text: r.description });
+    main.createDiv({
+      cls: "trimly-row-sub",
+      text: ended ? `${FREQUENCY_LABELS[r.frequency]} · ended` : `${FREQUENCY_LABELS[r.frequency]} · next ${this.shortDate(r.nextDate)}`,
+    });
+    row.createDiv({ cls: `trimly-amount is-${r.type}`, text: this.signedMoney(r.amount, r.type) });
+    row.addEventListener("click", () => this.editRecurring(r.id));
   }
 
   // ---- transactions ----
 
   private renderTransactions(body: HTMLElement, ledger: Ledger) {
     const bar = body.createDiv("trimly-filters");
-    const search = bar.createEl("input", { type: "search", placeholder: "Search" });
+    const searchWrap = bar.createDiv("trimly-search");
+    setIcon(searchWrap.createSpan("trimly-search-icon"), "search");
+    const search = searchWrap.createEl("input", { type: "search", placeholder: "Search descriptions and notes" });
     search.value = this.filter.text;
     const select = (options: Record<string, string>, value: string, onChange: (v: string) => void) => {
       const s = bar.createEl("select", { cls: "dropdown" });
@@ -284,7 +429,6 @@ export class TrimlyView extends ItemView {
 
     const listWrap = body.createDiv();
     const renderList = () => this.renderTxList(listWrap, ledger);
-
     search.addEventListener("input", () => {
       this.filter.text = search.value;
       renderList();
@@ -296,10 +440,10 @@ export class TrimlyView extends ItemView {
       this.filter.type,
       (v) => ((this.filter.type = v), renderList())
     );
-    const allLabel = bar.createEl("label", { cls: "trimly-check" });
+    const allLabel = bar.createEl("label", { cls: "trimly-toggle-pill" });
     const all = allLabel.createEl("input", { type: "checkbox" });
     all.checked = this.filter.allMonths;
-    allLabel.appendText("All months");
+    allLabel.createSpan({ text: "All months" });
     all.addEventListener("change", () => ((this.filter.allMonths = all.checked), renderList()));
     renderList();
   }
@@ -326,31 +470,75 @@ export class TrimlyView extends ItemView {
       if (t.type === "income") income += t.amount;
       else if (t.type === "expense") expense += t.amount;
     }
-    const totals = wrap.createDiv("trimly-totals");
-    totals.createSpan({ text: `${txs.length} transaction${txs.length === 1 ? "" : "s"}` });
-    totals.createSpan({ cls: "is-income", text: `+${this.money(income)}` });
-    totals.createSpan({ cls: "is-expense", text: `−${this.money(expense)}` });
-    if (txs.length === 0) wrap.createDiv({ cls: "trimly-empty", text: "No transactions match." });
-    const list = wrap.createDiv("trimly-list");
-    for (const tx of txs.slice(0, 500)) this.txRow(list, ledger, tx);
-    if (txs.length > 500) wrap.createDiv({ cls: "trimly-empty", text: `Showing the newest 500 of ${txs.length}. Narrow the filters to see more.` });
+    const summary = wrap.createDiv("trimly-summary-chips");
+    const chip = (label: string, value: string, cls: string) => {
+      const c = summary.createDiv(`trimly-summary-chip ${cls}`);
+      c.createDiv({ cls: "trimly-eyebrow", text: label });
+      c.createDiv({ cls: "trimly-summary-value", text: value });
+    };
+    chip("Transactions", String(txs.length), "");
+    chip("In", `+${this.money(income)}`, "is-income");
+    chip("Out", `−${this.money(expense)}`, "is-expense");
+    chip("Net", this.money(income - expense), income - expense >= 0 ? "is-income" : "is-expense");
+
+    if (txs.length === 0) {
+      const card = wrap.createDiv("trimly-card");
+      this.empty(card, "search-x", "No transactions match these filters.");
+      return;
+    }
+    const shown = txs.slice(0, 500);
+    let currentDay = "";
+    let group: HTMLElement | null = null;
+    for (const tx of shown) {
+      if (tx.date !== currentDay) {
+        currentDay = tx.date;
+        const day = wrap.createDiv("trimly-day");
+        const head = day.createDiv("trimly-day-head");
+        head.createSpan({ text: this.dayHeading(tx.date) });
+        const net = shown
+          .filter((t) => t.date === tx.date)
+          .reduce((s, t) => s + (t.type === "income" ? t.amount : t.type === "expense" ? -t.amount : 0), 0);
+        if (net !== 0) head.createSpan({ cls: net > 0 ? "is-income" : "is-expense", text: (net > 0 ? "+" : "−") + this.money(Math.abs(net)) });
+        group = day.createDiv("trimly-card trimly-day-card");
+      }
+      if (group) this.txRow(group, ledger, tx, false);
+    }
+    if (txs.length > 500) {
+      wrap.createDiv({ cls: "trimly-muted", text: `Showing the newest 500 of ${txs.length}. Narrow the filters to see more.` });
+    }
   }
 
   // ---- accounts ----
 
   private renderAccounts(body: HTMLElement, ledger: Ledger) {
-    const sec = this.section(body, "Accounts", { label: "Add account", onClick: () => this.editAccount(null) });
-    const list = sec.createDiv("trimly-list");
-    for (const a of ledger.accounts) {
-      const row = list.createDiv("trimly-row is-clickable");
-      if (a.archived) row.addClass("is-archived");
-      const main = row.createDiv("trimly-row-main");
-      main.createDiv({ cls: "trimly-row-title", text: a.name });
-      main.createDiv({ cls: "trimly-row-sub", text: ACCOUNT_TYPE_LABELS[a.type] + (a.archived ? " · archived" : "") });
-      this.amountEl(row, accountBalance(ledger, a.id), true);
-      row.addEventListener("click", () => this.editAccount(a.id));
+    const head = body.createDiv("trimly-page-head");
+    const t = head.createDiv();
+    t.createDiv({ cls: "trimly-eyebrow", text: "Net worth" });
+    t.createDiv({ cls: "trimly-page-value", text: this.money(netWorth(ledger)) });
+
+    const grid = body.createDiv("trimly-tiles");
+    const sorted = [...ledger.accounts].sort((a, b) => Number(!!a.archived) - Number(!!b.archived));
+    for (const a of sorted) {
+      const tile = grid.createDiv("trimly-tile is-clickable");
+      if (a.archived) tile.addClass("is-archived");
+      const top = tile.createDiv("trimly-tile-top");
+      this.iconTile(top, ACCOUNT_TYPE_ICONS[a.type], "var(--interactive-accent)");
+      top.createDiv({ cls: "trimly-tile-tag", text: a.archived ? "Archived" : ACCOUNT_TYPE_LABELS[a.type] });
+      tile.createDiv({ cls: "trimly-tile-name", text: a.name });
+      const bal = accountBalance(ledger, a.id);
+      tile.createDiv({ cls: `trimly-tile-value ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      const count = ledger.transactions.filter((tx) => tx.accountId === a.id || tx.toAccountId === a.id).length;
+      tile.createDiv({ cls: "trimly-muted", text: `${count} transaction${count === 1 ? "" : "s"}` });
+      tile.addEventListener("click", () => this.editAccount(a.id));
     }
-    sec.createDiv({ cls: "trimly-total-line", text: `Net worth: ${this.money(netWorth(ledger))}` });
+    this.addTile(grid, "Add account", () => this.editAccount(null));
+  }
+
+  private addTile(grid: HTMLElement, label: string, onClick: () => void) {
+    const add = grid.createDiv("trimly-tile trimly-tile-add is-clickable");
+    setIcon(add.createDiv("trimly-tile-add-icon"), "plus");
+    add.createDiv({ text: label });
+    add.addEventListener("click", onClick);
   }
 
   private editAccount(id: string | null) {
@@ -385,89 +573,127 @@ export class TrimlyView extends ItemView {
   // ---- budgets ----
 
   private renderBudgets(body: HTMLElement, ledger: Ledger) {
-    const sec = this.section(body, `Monthly budgets · ${this.monthLabel(this.month)}`);
-    sec.createDiv({
-      cls: "setting-item-description",
-      text: "Set a monthly limit per expense category. Leave empty for no limit.",
-    });
     const spending = spendingByCategory(ledger, this.month);
+    const expenseCats = ledger.categories.filter((c) => c.kind === "expense");
+    const budgeted = expenseCats.filter((c) => ledger.budgets.some((b) => b.categoryId === c.id));
+    const unbudgeted = expenseCats.filter((c) => !budgeted.includes(c));
+
     let totalLimit = 0;
     let totalSpent = 0;
-    for (const cat of ledger.categories.filter((c) => c.kind === "expense")) {
-      const budget = ledger.budgets.find((b) => b.categoryId === cat.id);
-      const spent = spending.get(cat.id) ?? 0;
-      if (budget) {
-        totalLimit += budget.limit;
-        totalSpent += spent;
-      }
-      const wrap = sec.createDiv("trimly-budget");
-      this.barRow(wrap, cat.name, cat.color, spent, budget?.limit, Math.max(spent, 1));
-      new Setting(wrap).setName("Limit").addText((t) => {
-        t.inputEl.inputMode = "decimal";
-        t.setPlaceholder("No limit");
-        if (budget) t.setValue(centsToInput(budget.limit));
-        t.inputEl.addEventListener("change", () => {
-          const v = t.getValue().trim();
-          const cents = v ? parseAmount(v) : 0;
-          if (cents === null) {
-            new Notice("Not a valid amount.");
-            return;
-          }
-          void this.plugin.mutate((l) => {
-            l.budgets = l.budgets.filter((b) => b.categoryId !== cat.id);
-            if (cents > 0) l.budgets.push({ categoryId: cat.id, limit: cents });
-          });
-        });
-      });
-      if (budget && spent > budget.limit) {
-        wrap.createDiv({ cls: "trimly-over", text: `Over budget by ${this.money(spent - budget.limit)}` });
-      }
+    for (const c of budgeted) {
+      totalLimit += ledger.budgets.find((b) => b.categoryId === c.id)?.limit ?? 0;
+      totalSpent += spending.get(c.id) ?? 0;
     }
+    const head = body.createDiv("trimly-page-head");
+    const t = head.createDiv();
+    t.createDiv({ cls: "trimly-eyebrow", text: `Budget · ${this.monthLabel(this.month)}` });
     if (totalLimit > 0) {
-      sec.createDiv({
-        cls: "trimly-total-line",
-        text: `Budgeted categories: ${this.money(totalSpent)} of ${this.money(totalLimit)} (${this.money(totalLimit - totalSpent)} left)`,
-      });
+      const left = totalLimit - totalSpent;
+      t.createDiv({ cls: `trimly-page-value ${left < 0 ? "is-expense" : ""}`, text: left >= 0 ? `${this.money(left)} left` : `${this.money(-left)} over` });
+      t.createDiv({ cls: "trimly-muted", text: `${this.money(totalSpent)} spent of ${this.money(totalLimit)}` });
+      this.progress(head, totalSpent, totalLimit, "var(--interactive-accent)");
+    } else {
+      t.createDiv({ cls: "trimly-page-value", text: "No budgets yet" });
+      t.createDiv({ cls: "trimly-muted", text: "Set a monthly limit on a category below to start tracking." });
     }
+
+    if (budgeted.length) {
+      const grid = body.createDiv("trimly-tiles");
+      for (const c of budgeted) {
+        const limit = ledger.budgets.find((b) => b.categoryId === c.id)?.limit ?? 0;
+        const spent = spending.get(c.id) ?? 0;
+        const tile = grid.createDiv("trimly-tile");
+        const top = tile.createDiv("trimly-tile-top");
+        this.iconTile(top, c.icon ?? "tag", c.color);
+        const pct = limit > 0 ? Math.round((spent / limit) * 100) : 0;
+        top.createDiv({ cls: `trimly-tile-tag ${spent > limit ? "is-expense" : ""}`, text: `${pct}%` });
+        tile.createDiv({ cls: "trimly-tile-name", text: c.name });
+        const left = limit - spent;
+        tile.createDiv({
+          cls: `trimly-tile-value ${left < 0 ? "is-expense" : ""}`,
+          text: left >= 0 ? `${this.money(left)} left` : `${this.money(-left)} over`,
+        });
+        this.progress(tile, spent, limit, c.color);
+        const foot = tile.createDiv("trimly-tile-foot");
+        foot.createSpan({ cls: "trimly-muted", text: `${this.money(spent)} of` });
+        this.limitInput(foot, c.id, limit);
+      }
+    }
+
+    if (unbudgeted.length) {
+      const card = this.card(body, "Without a budget");
+      for (const c of unbudgeted) {
+        const row = card.createDiv("trimly-row");
+        this.iconTile(row, c.icon ?? "tag", c.color);
+        const main = row.createDiv("trimly-row-main");
+        main.createDiv({ cls: "trimly-row-title", text: c.name });
+        main.createDiv({ cls: "trimly-row-sub", text: `${this.money(spending.get(c.id) ?? 0)} spent this month` });
+        this.limitInput(row, c.id, 0);
+      }
+    }
+  }
+
+  private progress(parent: HTMLElement, value: number, max: number, color: string) {
+    const track = parent.createDiv("trimly-progress");
+    const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+    const fill = track.createDiv("trimly-progress-fill");
+    fill.setCssProps({ "--trimly-pct": `${pct}%`, "--trimly-color": color });
+    if (value > max) fill.addClass("is-over");
+    else if (pct >= 85) fill.addClass("is-warn");
+  }
+
+  private limitInput(parent: HTMLElement, categoryId: string, limit: number) {
+    const input = parent.createEl("input", { cls: "trimly-limit-input", type: "text", placeholder: "Set limit" });
+    input.inputMode = "decimal";
+    if (limit) input.value = centsToInput(limit);
+    input.addEventListener("click", (e) => e.stopPropagation());
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") input.blur();
+    });
+    input.addEventListener("change", () => {
+      const v = input.value.trim();
+      const cents = v ? parseAmount(v) : 0;
+      if (cents === null) {
+        new Notice("Not a valid amount.");
+        return;
+      }
+      void this.plugin.mutate((l) => {
+        l.budgets = l.budgets.filter((b) => b.categoryId !== categoryId);
+        if (cents > 0) l.budgets.push({ categoryId, limit: cents });
+      });
+    });
   }
 
   // ---- recurring ----
 
   private renderRecurring(body: HTMLElement, ledger: Ledger) {
-    const sec = this.section(body, "Recurring transactions", { label: "Add recurring", onClick: () => this.editRecurring(null) });
-    sec.createDiv({
-      cls: "setting-item-description",
-      text: "Bills, subscriptions and salaries. Each occurrence is posted automatically when its date arrives.",
-    });
-    if (ledger.recurring.length === 0) sec.createDiv({ cls: "trimly-empty", text: "No recurring transactions yet." });
-    const list = sec.createDiv("trimly-list");
-    const sorted = [...ledger.recurring].sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
     let monthlyOut = 0;
     let monthlyIn = 0;
-    for (const r of sorted) {
+    for (const r of ledger.recurring) {
+      if (r.endDate && r.nextDate > r.endDate) continue;
       const factor = r.frequency === "weekly" ? 52 / 12 : r.frequency === "yearly" ? 1 / 12 : 1;
       if (r.type === "expense") monthlyOut += r.amount * factor;
       if (r.type === "income") monthlyIn += r.amount * factor;
-      const ended = !!r.endDate && r.nextDate > r.endDate;
-      const row = list.createDiv("trimly-row is-clickable");
-      if (ended) row.addClass("is-archived");
-      const main = row.createDiv("trimly-row-main");
-      main.createDiv({ cls: "trimly-row-title", text: r.description });
-      main.createDiv({
-        cls: "trimly-row-sub",
-        text: `${FREQUENCY_LABELS[r.frequency]} · ${ended ? "ended" : `next ${this.dateLabel(r.nextDate)} ${r.nextDate.slice(0, 4)}`}`,
-      });
-      const sign = r.type === "expense" ? -1 : 1;
-      const amt = row.createDiv({ cls: "trimly-amount", text: this.money(sign * r.amount) });
-      amt.addClass(r.type === "expense" ? "is-expense" : r.type === "income" ? "is-income" : "is-transfer");
-      row.addEventListener("click", () => this.editRecurring(r.id));
     }
-    if (sorted.length) {
-      sec.createDiv({
-        cls: "trimly-total-line",
-        text: `Per month, about: +${this.money(Math.round(monthlyIn))} / −${this.money(Math.round(monthlyOut))}`,
+    const summary = body.createDiv("trimly-summary-chips");
+    const chip = (label: string, value: string, cls: string) => {
+      const c = summary.createDiv(`trimly-summary-chip ${cls}`);
+      c.createDiv({ cls: "trimly-eyebrow", text: label });
+      c.createDiv({ cls: "trimly-summary-value", text: value });
+    };
+    chip("Fixed income / month", `+${this.money(Math.round(monthlyIn))}`, "is-income");
+    chip("Fixed costs / month", `−${this.money(Math.round(monthlyOut))}`, "is-expense");
+    chip("Left after fixed", this.money(Math.round(monthlyIn - monthlyOut)), monthlyIn >= monthlyOut ? "is-income" : "is-expense");
+
+    const card = this.card(body, "Recurring transactions", { label: "Add", onClick: () => this.editRecurring(null) });
+    if (ledger.recurring.length === 0) {
+      this.empty(card, "repeat", "Add bills, subscriptions and salaries. They post automatically when due.", {
+        label: "Add recurring",
+        onClick: () => this.editRecurring(null),
       });
     }
+    const sorted = [...ledger.recurring].sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
+    for (const r of sorted) this.recurringRow(card, ledger, r);
   }
 
   private editRecurring(id: string | null) {
@@ -509,22 +735,22 @@ export class TrimlyView extends ItemView {
 
   private renderCategories(body: HTMLElement, ledger: Ledger) {
     const kinds: { kind: CategoryKind; title: string }[] = [
-      { kind: "expense", title: "Expense categories" },
-      { kind: "income", title: "Income categories" },
+      { kind: "expense", title: "Expenses" },
+      { kind: "income", title: "Income" },
     ];
     for (const { kind, title } of kinds) {
-      const sec = this.section(body, title, { label: "Add category", onClick: () => this.editCategory(null, kind) });
-      const list = sec.createDiv("trimly-list");
+      body.createDiv({ cls: "trimly-section-title", text: title });
+      const grid = body.createDiv("trimly-tiles trimly-tiles-compact");
       for (const c of ledger.categories.filter((x) => x.kind === kind)) {
-        const row = list.createDiv("trimly-row is-clickable");
-        const main = row.createDiv("trimly-row-main");
-        const t = main.createDiv("trimly-row-title");
-        t.createSpan("trimly-dot").setCssProps({ "--trimly-color": c.color });
-        t.createSpan({ text: c.name });
+        const tile = grid.createDiv("trimly-tile trimly-tile-row is-clickable");
+        this.iconTile(tile, c.icon ?? "tag", c.color);
+        const main = tile.createDiv("trimly-row-main");
+        main.createDiv({ cls: "trimly-row-title", text: c.name });
         const used = ledger.transactions.filter((tx) => tx.categoryId === c.id).length;
-        row.createDiv({ cls: "trimly-row-sub", text: `${used} transaction${used === 1 ? "" : "s"}` });
-        row.addEventListener("click", () => this.editCategory(c.id, kind));
+        main.createDiv({ cls: "trimly-row-sub", text: `${used} transaction${used === 1 ? "" : "s"}` });
+        tile.addEventListener("click", () => this.editCategory(c.id, kind));
       }
+      this.addTile(grid, "Add category", () => this.editCategory(null, kind));
     }
   }
 
