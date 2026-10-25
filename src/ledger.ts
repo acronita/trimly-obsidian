@@ -7,7 +7,7 @@
  * Kept free of Obsidian and local imports so it can be unit tested in Node.
  */
 
-export const LEDGER_VERSION = 1;
+export const LEDGER_VERSION = 2;
 
 export type AccountType = "checking" | "savings" | "credit" | "cash" | "investment" | "other";
 export type CategoryKind = "expense" | "income";
@@ -53,6 +53,8 @@ export interface Account {
   /** balance before the first transaction, in cents (negative for debt) */
   openingBalance: number;
   archived?: boolean;
+  /** Pluggy account this one mirrors; its balance and transactions come from bank sync */
+  pluggyId?: string;
 }
 
 export interface Category {
@@ -79,6 +81,10 @@ export interface Transaction {
   notes?: string;
   /** set when the transaction was posted by a recurring rule */
   recurringId?: string;
+  /** Pluggy transaction ids this one was imported from (two for a paired transfer) */
+  pluggyIds?: string[];
+  /** imported while the bank still listed it as pending */
+  pending?: boolean;
 }
 
 export interface Budget {
@@ -104,6 +110,15 @@ export interface Recurring {
   endDate?: string;
 }
 
+/** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
+export interface PluggyConfig {
+  clientId: string;
+  clientSecret: string;
+  itemIds: string[];
+  /** ISO timestamp of the last successful sync */
+  lastSync?: string;
+}
+
 export interface Ledger {
   version: number;
   accounts: Account[];
@@ -111,6 +126,8 @@ export interface Ledger {
   transactions: Transaction[];
   budgets: Budget[];
   recurring: Recurring[];
+  /** set when bank sync is configured */
+  pluggy?: PluggyConfig;
 }
 
 export function newId(): string {
@@ -163,6 +180,7 @@ export function parseLedger(json: string): Ledger {
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
+    pluggy: raw.pluggy,
   };
 }
 

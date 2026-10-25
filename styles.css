@@ -896,3 +896,11 @@ input.trimly-amount-input:focus {
     display: none;
   }
 }
+.trimly-spin svg {
+  animation: trimly-spin 1s linear infinite;
+}
+@keyframes trimly-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

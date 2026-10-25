@@ -19,5 +19,18 @@ access to your unlocked computer account could read it; turn the toggle off to k
 **Can I move the ledger to another folder?**
 Change *Folder* in settings, then move `ledger.trimly` into the new folder yourself.
 
+**Can Trimly import my bank transactions automatically?**
+Yes, optionally, through Pluggy — see *Bank sync* in the README. Credit card purchases may show as
+pending until the bank settles them; they update in place on a later sync.
+
+**I deleted an imported transaction and it came back.**
+Synced accounts mirror the bank for the last 90 days, so the next sync restores anything the bank
+still lists. Recategorize or edit the description instead; those changes are kept.
+
+**Transfers between my own banks show up as income and expense.**
+Trimly only pairs a move between two banks into a transfer when Pluggy categorizes it as a
+same-person transfer (card bill payments are paired by amount and date). Without Pluggy's
+categorization, edit the two entries by hand: delete one and turn the other into a transfer.
+
 **Two devices edited at the same time. What happens?**
 The last save wins. Avoid editing on two devices before a sync completes.

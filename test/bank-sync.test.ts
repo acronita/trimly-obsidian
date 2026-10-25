@@ -1,0 +1,177 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { applyBankData } from "../src/bank-sync.ts";
+import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "../src/bank-sync.ts";
+import { accountBalance, defaultLedger, monthSummary, parseLedger } from "../src/ledger.ts";
+import type { Ledger } from "../src/ledger.ts";
+
+const WINDOW = "2026-08-01";
+const TODAY = "2026-10-25";
+
+const CATEGORIES: PluggyCategory[] = [
+  { id: "05000000", description: "Transfers" },
+  { id: "05100000", description: "Credit card payment", parentId: "05000000" },
+  { id: "04000000", description: "Same person transfer" },
+  { id: "11000000", description: "Food and drinks" },
+  { id: "11020000", description: "Food delivery", parentId: "11000000" },
+  { id: "10000000", description: "Groceries" },
+];
+
+const checking: PluggyAccount = { id: "p-chk", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Conta", balance: 1000 };
+const card: PluggyAccount = { id: "p-card", type: "CREDIT", subtype: "CREDIT_CARD", name: "Cartão", marketingName: "Nubank Ultravioleta", balance: 80 };
+
+function tx(id: string, accountId: string, date: string, amount: number, type: "DEBIT" | "CREDIT", extra: Partial<PluggyTransaction> = {}): PluggyTransaction {
+  return { id, accountId, date: `${date}T00:00:00.000Z`, description: id, amount, type, status: "POSTED", ...extra };
+}
+
+function data(transactions: PluggyTransaction[], accounts = [checking, card]): BankData {
+  return { accounts, transactions, categories: CATEGORIES };
+}
+
+function fresh(): Ledger {
+  return defaultLedger();
+}
+
+function synced(l: Ledger, pluggyId: string) {
+  const acc = l.accounts.find((a) => a.pluggyId === pluggyId);
+  assert.ok(acc, `account for ${pluggyId}`);
+  return acc;
+}
+
+test("first sync creates one Trimly account per bank account, with balances matching the bank", () => {
+  const l = fresh();
+  const r = applyBankData(l, data([tx("salary", "p-chk", "2026-10-05", 5000, "CREDIT"), tx("ifood", "p-card", "2026-10-10", 80, "DEBIT")]), WINDOW, TODAY);
+  assert.equal(r.accountsCreated, 2);
+  assert.equal(r.added, 2);
+  const chk = synced(l, "p-chk");
+  const cc = synced(l, "p-card");
+  assert.equal(chk.type, "checking");
+  assert.equal(cc.type, "credit");
+  assert.equal(cc.name, "Nubank Ultravioleta");
+  // the dashboard must show what the bank shows, whatever happened before the window
+  assert.equal(accountBalance(l, chk.id, TODAY), 1000_00);
+  // a card bill is debt: negative in Trimly
+  assert.equal(accountBalance(l, cc.id, TODAY), -80_00);
+});
+
+test("syncing again with the same data changes nothing (no duplicates)", () => {
+  const l = fresh();
+  const d = data([tx("salary", "p-chk", "2026-10-05", 5000, "CREDIT"), tx("ifood", "p-card", "2026-10-10", 80, "DEBIT")]);
+  applyBankData(l, d, WINDOW, TODAY);
+  const before = JSON.stringify(l);
+  const r = applyBankData(l, d, WINDOW, TODAY);
+  assert.deepEqual(r, { accountsCreated: 0, added: 0, updated: 0, removed: 0 });
+  assert.equal(JSON.stringify(l), before);
+});
+
+test("paying the card bill becomes one transfer, so purchases are not counted as spending twice", () => {
+  const l = fresh();
+  applyBankData(
+    l,
+    data([
+      tx("market", "p-card", "2026-09-20", 300, "DEBIT"),
+      // bill paid from checking; the card shows the payment as a negative amount
+      tx("bill-out", "p-chk", "2026-10-10", -300, "DEBIT", { categoryId: "05100000" }),
+      tx("bill-in", "p-card", "2026-10-11", -300, "CREDIT", { categoryId: "05100000" }),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  const transfers = l.transactions.filter((t) => t.type === "transfer");
+  assert.equal(transfers.length, 1);
+  assert.equal(transfers[0].accountId, synced(l, "p-chk").id);
+  assert.equal(transfers[0].toAccountId, synced(l, "p-card").id);
+  assert.equal(monthSummary(l, "2026-10").expense, 0);
+  assert.equal(monthSummary(l, "2026-09").expense, 300_00);
+});
+
+test("a card refund is not mistaken for a bill payment when categories say otherwise", () => {
+  const l = fresh();
+  applyBankData(
+    l,
+    data([
+      tx("dinner", "p-chk", "2026-10-10", -50, "DEBIT", { categoryId: "11000000" }),
+      tx("refund", "p-card", "2026-10-11", -50, "CREDIT", { categoryId: "11020000" }),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  assert.equal(l.transactions.filter((t) => t.type === "transfer").length, 0);
+});
+
+test("equal amounts between two banks only pair when Pluggy says it is a same-person transfer", () => {
+  const savings: PluggyAccount = { id: "p-sav", type: "BANK", subtype: "SAVINGS_ACCOUNT", name: "Poupança", balance: 0 };
+  const unrelated = fresh();
+  applyBankData(unrelated, data([tx("pix-out", "p-chk", "2026-10-10", -200, "DEBIT"), tx("pix-in", "p-sav", "2026-10-10", 200, "CREDIT")], [checking, savings]), WINDOW, TODAY);
+  assert.equal(unrelated.transactions.filter((t) => t.type === "transfer").length, 0);
+
+  const own = fresh();
+  applyBankData(
+    own,
+    data([tx("pix-out", "p-chk", "2026-10-10", -200, "DEBIT", { categoryId: "04000000" }), tx("pix-in", "p-sav", "2026-10-10", 200, "CREDIT")], [checking, savings]),
+    WINDOW,
+    TODAY
+  );
+  assert.equal(own.transactions.filter((t) => t.type === "transfer").length, 1);
+});
+
+test("a card transaction restated with a new id keeps the user's category and is not duplicated", () => {
+  const l = fresh();
+  applyBankData(l, data([tx("old-id", "p-card", "2026-10-10", 80, "DEBIT", { status: "PENDING" })]), WINDOW, TODAY);
+  const imported = l.transactions.find((t) => t.pluggyIds?.includes("old-id"));
+  assert.ok(imported);
+  assert.equal(imported.pending, true);
+  const groceries = l.categories.find((c) => c.name === "Groceries");
+  imported.categoryId = groceries?.id;
+
+  // the bill closed: Pluggy deletes the row and re-creates it, posted, with a new id and date
+  const r = applyBankData(l, data([tx("new-id", "p-card", "2026-10-12", 80, "DEBIT")]), WINDOW, TODAY);
+  assert.deepEqual(r, { accountsCreated: 0, added: 0, updated: 1, removed: 0 });
+  const card = l.transactions.filter((t) => t.accountId === synced(l, "p-card").id);
+  assert.equal(card.length, 1);
+  assert.deepEqual(card[0].pluggyIds, ["new-id"]);
+  assert.equal(card[0].date, "2026-10-12");
+  assert.equal(card[0].pending, undefined);
+  assert.equal(card[0].categoryId, groceries?.id);
+});
+
+test("imported transactions the bank no longer returns are removed, but only inside the window", () => {
+  const l = fresh();
+  applyBankData(l, data([tx("kept-old", "p-chk", "2026-07-15", -10, "DEBIT"), tx("dropped", "p-chk", "2026-10-01", -20, "DEBIT")]), "2026-07-01", TODAY);
+  const wallet = l.accounts.find((a) => !a.pluggyId);
+  assert.ok(wallet);
+  l.transactions.push({ id: "manual", date: "2026-10-02", type: "expense", amount: 5_00, accountId: wallet.id, description: "Cash" });
+
+  const r = applyBankData(l, data([]), WINDOW, TODAY);
+  assert.equal(r.removed, 1);
+  const ids = l.transactions.map((t) => t.pluggyIds?.[0] ?? t.id).sort();
+  // older than the window: never re-fetched, so never judged; manual entries are the user's
+  assert.deepEqual(ids, ["kept-old", "manual"]);
+});
+
+test("Pluggy categories map onto the default Trimly categories by tree, otherwise stay uncategorized", () => {
+  const l = fresh();
+  applyBankData(
+    l,
+    data([
+      tx("ifood", "p-card", "2026-10-10", 40, "DEBIT", { categoryId: "11020000" }),
+      tx("market", "p-card", "2026-10-11", 90, "DEBIT", { categoryId: "10000000" }),
+      tx("mystery", "p-card", "2026-10-12", 15, "DEBIT", { categoryId: null }),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  const nameOf = (pid: string) => {
+    const t = l.transactions.find((x) => x.pluggyIds?.includes(pid));
+    return l.categories.find((c) => c.id === t?.categoryId)?.name;
+  };
+  assert.equal(nameOf("ifood"), "Dining out");
+  assert.equal(nameOf("market"), "Groceries");
+  assert.equal(nameOf("mystery"), undefined);
+});
+
+test("bank sync credentials survive saving and reopening the ledger", () => {
+  const l = fresh();
+  l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"] };
+  assert.deepEqual(parseLedger(JSON.stringify(l)).pluggy, l.pluggy);
+});

@@ -226,6 +226,17 @@ export class TrimlyView extends ItemView {
     }
 
     const actions = top.createDiv("trimly-top-actions");
+    if (this.plugin.ledger?.pluggy) {
+      const syncing = this.plugin.isSyncing();
+      const sync = actions.createEl("button", {
+        cls: "clickable-icon",
+        attr: { "aria-label": syncing ? "Syncing bank accounts…" : "Sync bank accounts" },
+      });
+      setIcon(sync, "refresh-cw");
+      sync.toggleClass("trimly-spin", syncing);
+      sync.disabled = syncing;
+      sync.addEventListener("click", () => void this.plugin.syncBank());
+    }
     const lock = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Lock Trimly" } });
     setIcon(lock, "lock");
     lock.addEventListener("click", () => this.plugin.lock());

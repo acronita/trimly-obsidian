@@ -19,6 +19,9 @@ passphrase that never leaves your device.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
+- **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
+  through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
+  purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).
 - Amount input accepts `1234.56`, `1.234,56` or `1,234.56`; any ISO currency code (BRL by default).
 
 ## Security model
@@ -31,6 +34,9 @@ passphrase that never leaves your device.
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
 - The plugin's `data.json` (inside the vault) only holds the folder, currency and that toggle.
+- **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
+  contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
+  passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger.
 - **If you lose the passphrase, the data cannot be recovered.** Save it in a password manager.
 
 ## Install (manual)
@@ -43,7 +49,28 @@ Copy `main.js`, `manifest.json` and `styles.css` from a
 
 Click the wallet icon in the ribbon (or run **Trimly: Open dashboard**). The first time, you'll be
 asked to create a passphrase; the encrypted ledger is created with a starter account and categories.
-Commands: **Open dashboard**, **Add transaction**, **Lock**.
+Commands: **Open dashboard**, **Add transaction**, **Sync bank accounts**, **Lock**.
+
+## Bank sync (optional)
+
+Trimly can pull transactions from your banks through Pluggy's free personal route, *Meu Pluggy*.
+Everything still works fully manually if you skip this.
+
+1. Sign up at [meu.pluggy.ai](https://meu.pluggy.ai) and connect your banks there.
+2. Create an account in the [Pluggy dashboard](https://dashboard.pluggy.ai), add the **MeuPluggy**
+   connector, and create an application to get a **client ID** and **client secret**. The developer
+   account starts with a 15-day trial: link Meu Pluggy during it (see
+   [meu-pluggy](https://github.com/pluggyai/meu-pluggy)).
+3. In the application's demo, connect your Meu Pluggy account once per bank and copy each
+   **Item ID**.
+4. In *Settings → Trimly → Bank sync*, enter the client ID, secret and item IDs, then **Connect**.
+
+Each sync fetches the last 90 days. Trimly creates one account per bank account or card, keeps its
+balance equal to the bank's, and treats the bank as the source of truth for those 90 days: entries
+the bank no longer lists are removed, and a manually deleted imported entry comes back. Your category,
+description and notes on an imported entry are kept. The dashboard syncs on unlock (at most every
+6 hours) and from the refresh button. Categories are filled in only while your Pluggy plan includes
+categorization.
 
 ## Development
 
