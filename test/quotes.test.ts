@@ -77,8 +77,13 @@ test("average price is cost per share; unknown without quantity or cost", () => 
 });
 
 test("a position without an institution is shown under its quoted company or fund name", () => {
-  assert.deepEqual(institutionOf({ quote: { price: 1, longName: "CSHG Logística FII" } }), { name: "CSHG Logística FII", inferred: true });
+  assert.deepEqual(institutionOf({ assetClass: "reit", quote: { price: 1, longName: "CSHG Logística FII" } }), {
+    name: "CSHG Logística FII",
+    via: "quote",
+  });
   // what the bank or the user set always wins
-  assert.deepEqual(institutionOf({ institution: "XP", quote: { price: 1, longName: "Petrobras" } }), { name: "XP", inferred: false });
-  assert.equal(institutionOf({}), null);
+  assert.deepEqual(institutionOf({ assetClass: "stock", institution: "XP", quote: { price: 1, longName: "Petrobras" } }), { name: "XP" });
+  // Tesouro Direto has no quote on the free plan, but its issuer is always the same
+  assert.deepEqual(institutionOf({ assetClass: "treasury" }), { name: "Tesouro Nacional", via: "issuer" });
+  assert.equal(institutionOf({ assetClass: "fund" }), null);
 });

@@ -20,6 +20,7 @@ import {
   accountBalance,
   accountInUse,
   allocationByClass,
+  applyInstitutionToConnection,
   centsToInput,
   incomeByMonth,
   movementFlow,
@@ -918,7 +919,11 @@ export class TrimlyView extends ItemView {
     new AssetModal(
       this.app,
       existing,
-      (asset) => void this.plugin.mutate((l) => saveAsset(l, asset, todayISO())),
+      (asset, toConnection) =>
+        void this.plugin.mutate((l) => {
+          saveAsset(l, asset, todayISO());
+          if (toConnection && asset.pluggyId) applyInstitutionToConnection(l, asset);
+        }),
       existing && !existing.pluggyId
         ? (asset) =>
             new ConfirmModal(this.app, t.inv.deleteConfirm(asset.name), t.common.delete, () =>
@@ -1000,7 +1005,8 @@ export class TrimlyView extends ItemView {
       item(t.details.marketCap, q.marketCap !== undefined && this.plugin.formatCompactMoney(q.marketCap));
     }
     const inst = institutionOf(a);
-    item(t.details.institution, inst ? (inst.inferred ? `${inst.name} ${t.details.viaBrapi}` : inst.name) : undefined);
+    const via = inst?.via === "quote" ? ` ${t.details.viaBrapi}` : inst?.via === "issuer" ? ` ${t.details.viaIssuer}` : "";
+    item(t.details.institution, inst ? `${inst.name}${via}` : undefined);
     item(t.details.issuer, a.issuer);
     item(t.details.code, a.code);
     item(t.details.product, a.subtype);
@@ -1023,10 +1029,17 @@ export class TrimlyView extends ItemView {
         legend.createSpan("trimly-key is-muted").createSpan({ text: t.details.avgPrice });
         series.push({ values: history.map(() => avg / 100), cls: "is-muted", dashed: true });
       }
-      lineChart(chart, history.map(([d]) => this.ts(d)), series, {
-        start: this.longDate(history[0][0]),
-        end: this.longDate(history[history.length - 1][0]),
-      });
+      lineChart(
+        chart,
+        history.map(([d]) => this.ts(d)),
+        series,
+        { start: this.longDate(history[0][0]), end: this.longDate(history[history.length - 1][0]) },
+        (i) => [
+          this.longDate(history[i][0]),
+          `${t.details.price}: ${this.money(history[i][1])}`,
+          ...(avg ? [`${t.details.avgPrice}: ${this.money(avg)}`] : []),
+        ]
+      );
     }
 
     const moves = ledger.investments.movements
@@ -1196,7 +1209,12 @@ export class TrimlyView extends ItemView {
         { values: snaps.map((s) => s.value / 100), cls: "is-accent", area: true },
         { values: snaps.map((s) => s.invested / 100), cls: "is-muted", dashed: true },
       ],
-      { start: this.longDate(snaps[0].date), end: this.longDate(snaps[snaps.length - 1].date) }
+      { start: this.longDate(snaps[0].date), end: this.longDate(snaps[snaps.length - 1].date) },
+      (i) => [
+        this.longDate(snaps[i].date),
+        `${t.perf.value}: ${this.money(snaps[i].value)}`,
+        `${t.perf.invested}: ${this.money(snaps[i].invested)}`,
+      ]
     );
   }
 
@@ -1262,7 +1280,17 @@ export class TrimlyView extends ItemView {
         chartCard,
         points.map((p) => this.ts(p.date)),
         series,
-        { start: this.longDate(first), end: this.longDate(points[points.length - 1].date) }
+        { start: this.longDate(first), end: this.longDate(points[points.length - 1].date) },
+        (i) => [
+          this.longDate(points[i].date),
+          `${t.perf.portfolio}: ${this.signedPct(points[i].index - 1)}`,
+          ...(bench
+            ? [
+                `CDI: ${this.signedPct(cdiReturn(bench.cdi, first, points[i].date))}`,
+                `IPCA: ${this.signedPct(ipcaReturn(bench.ipca, first, points[i].date))}`,
+              ]
+            : []),
+        ]
       );
       this.benchmarkNote(chartCard, !!bench);
     }

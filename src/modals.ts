@@ -509,11 +509,13 @@ export class AssetModal extends Modal {
   private draft: Asset;
   /** fields whose text is not a valid number */
   private invalid = new Set<string>();
+  /** synced positions: also give the institution to the connection's positions without one */
+  private toConnection = true;
 
   constructor(
     app: App,
     existing: Asset | null,
-    private onSave: (a: Asset) => void,
+    private onSave: (a: Asset, toConnection: boolean) => void,
     private onDelete: ((a: Asset) => void) | null
   ) {
     super(app);
@@ -555,6 +557,10 @@ export class AssetModal extends Modal {
         );
     if (synced) {
       institution();
+      new Setting(contentEl)
+        .setName(a.applyToConnection)
+        .setDesc(a.applyToConnectionDesc)
+        .addToggle((tg) => tg.setValue(this.toConnection).onChange((v) => (this.toConnection = v)));
       contentEl.createEl("p", {
         cls: "setting-item-description",
         text: a.syncedNote,
@@ -607,7 +613,7 @@ export class AssetModal extends Modal {
         if (this.invalid.size) return t.common.fixInvalidNumbers;
         if (!synced && !this.onDelete && !(d.value > 0)) return a.enterValue;
         d.name = d.name.trim();
-        this.onSave(d);
+        this.onSave(d, this.toConnection);
         return null;
       },
       this.onDelete ? () => this.onDelete?.(d) : null,

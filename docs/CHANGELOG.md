@@ -2,6 +2,15 @@
 
 ## 0.3.0 — 2026-10-25
 
+- 2026-10-25 — Line charts show the value under the pointer: hovering or touching a chart (evolution,
+  cumulative return, a position's 3 months) draws a guide line, a dot on each series and a tooltip
+  with the date and values. Tesouro Direto positions without an institution show "Tesouro Nacional"
+  (their issuer; marked "(emissor)" in the details). Setting the institution of a synced position can
+  also fill it into the positions of the same bank connection that have none (on by default in
+  *Editar ativo*), since funds have no free data source to infer it from. Files touched:
+  `src/charts.ts`, `src/quotes.ts`, `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/*`,
+  `src/styles/index.css`, `test/quotes.test.ts`, `test/investment-sync.test.ts`.
+
 - 2026-10-25 — Line charts no longer break the view they are in: SVG classes were passed as one
   space-separated string, which Obsidian's `createSvg` rejects, so every position with a brapi price
   history failed to open (and the evolution and performance charts would have failed the same way).

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyInvestments, assetClass, displayName } from "../src/investment-sync.ts";
 import type { PluggyInvestment, PluggyInvestmentTransaction } from "../src/investment-sync.ts";
-import { allocationByClass, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue, saveAsset } from "../src/ledger.ts";
+import { allocationByClass, applyInstitutionToConnection, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue, saveAsset } from "../src/ledger.ts";
 import type { Ledger } from "../src/ledger.ts";
 import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
@@ -303,4 +303,26 @@ test("an institution set by the user on a synced position survives the next sync
   saveAsset(l, { ...asset(l, "s"), institution: "Nubank" }, "2026-10-24");
   applyInvestments(l, [inv("s", { institution: { name: "Something else" } })], ["item-1"], TODAY);
   assert.equal(asset(l, "s").institution, "Nubank");
+});
+
+test("an institution set on one position can fill the others of the same connection, and sync keeps them", () => {
+  const l = defaultLedger();
+  applyInvestments(
+    l,
+    [
+      inv("fund-a", { type: "MUTUAL_FUND", institution: null, issuer: null }),
+      inv("fund-b", { type: "MUTUAL_FUND", institution: null, issuer: null }),
+      inv("other", { itemId: "item-2", institution: null, issuer: null }),
+    ],
+    ["item-1", "item-2"],
+    "2026-10-24"
+  );
+  const a = { ...asset(l, "fund-a"), institution: "Banco do Brasil" };
+  saveAsset(l, a, "2026-10-24");
+  assert.equal(applyInstitutionToConnection(l, a), 1);
+  assert.equal(asset(l, "fund-b").institution, "Banco do Brasil");
+  // another bank connection is left alone
+  assert.equal(asset(l, "other").institution, undefined);
+  applyInvestments(l, [inv("fund-b", { type: "MUTUAL_FUND", institution: null, issuer: null })], ["item-1"], TODAY);
+  assert.equal(asset(l, "fund-b").institution, "Banco do Brasil");
 });

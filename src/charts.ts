@@ -69,12 +69,23 @@ export interface LineSeries {
   dashed?: boolean;
 }
 
-/** Lines over time; `xs` holds one timestamp per value, so gaps between points keep their width. */
-export function lineChart(parent: HTMLElement, xs: number[], series: LineSeries[], labels: { start: string; end: string }) {
+/**
+ * Lines over time; `xs` holds one timestamp per value, so gaps between points
+ * keep their width. Hovering (or touching) shows the nearest point: a guide
+ * line, a dot per series and `tooltip(i)`'s lines (first one as the heading).
+ */
+export function lineChart(
+  parent: HTMLElement,
+  xs: number[],
+  series: LineSeries[],
+  labels: { start: string; end: string },
+  tooltip?: (i: number) => string[]
+) {
   const wrap = parent.createDiv("trimly-line");
+  const plot = wrap.createDiv("trimly-line-plot");
   const W = 300;
   const H = 100;
-  const svg = wrap.createSvg("svg", { attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" } });
+  const svg = plot.createSvg("svg", { attr: { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: "none" } });
   const all = series.flatMap((s) => s.values);
   let min = Math.min(...all);
   let max = Math.max(...all);
@@ -97,6 +108,33 @@ export function lineChart(parent: HTMLElement, xs: number[], series: LineSeries[
     if (s.area) svg.createSvg("polygon", { cls: ["trimly-line-area", s.cls], attr: { points: `0,${H} ${pts} ${x(s.values.length - 1).toFixed(2)},${H}` } });
     svg.createSvg("polyline", { cls: ["trimly-line-stroke", s.cls, ...(s.dashed ? ["is-dashed"] : [])], attr: { points: pts } });
   }
+
+  if (tooltip) {
+    // HTML overlay: dots drawn inside the stretched SVG would turn into ellipses
+    const guide = plot.createDiv("trimly-line-guide");
+    const dots = series.map((s) => plot.createDiv(`trimly-line-dot ${s.cls}`));
+    const tip = plot.createDiv("trimly-line-tip");
+    const show = (e: PointerEvent) => {
+      const rect = plot.getBoundingClientRect();
+      if (rect.width <= 0) return;
+      const at = x0 + ((e.clientX - rect.left) / rect.width) * span;
+      let i = 0;
+      for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k] - at) < Math.abs(xs[i] - at)) i = k;
+      const left = (x(i) / W) * 100;
+      guide.setCssProps({ "--trimly-x": `${left}%` });
+      series.forEach((s, k) => dots[k].setCssProps({ "--trimly-x": `${left}%`, "--trimly-y": `${(y(s.values[i]) / H) * 100}%` }));
+      tip.empty();
+      tooltip(i).forEach((line, k) => tip.createDiv({ cls: k === 0 ? "trimly-line-tip-head" : "", text: line }));
+      tip.setCssProps({ "--trimly-x": `${left}%` });
+      // keep the box inside the chart: flip it to the left of the guide on the right half
+      tip.toggleClass("is-left", left > 50);
+      plot.addClass("is-hover");
+    };
+    plot.addEventListener("pointermove", show);
+    plot.addEventListener("pointerdown", show);
+    plot.addEventListener("pointerleave", () => plot.removeClass("is-hover"));
+  }
+
   const foot = wrap.createDiv("trimly-line-labels");
   foot.createSpan({ text: labels.start });
   foot.createSpan({ text: labels.end });

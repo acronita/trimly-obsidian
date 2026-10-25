@@ -50,13 +50,17 @@ function toQuote(q: QuoteData): Quote {
 }
 
 /**
- * Institution to show for a position: the one the bank or the user set, else
- * the company or fund name from its quote (`inferred`), else null. Display only:
- * the stored institution is never replaced by a quote.
+ * Institution to show for a position: the one the bank or the user set; else
+ * the company or fund name from its quote (`via: "quote"`); else, for Tesouro
+ * Direto, its issuer (`via: "issuer"`); else null. Display only: the stored
+ * institution is never replaced.
  */
-export function institutionOf(a: Pick<Asset, "institution" | "quote">): { name: string; inferred: boolean } | null {
-  if (a.institution) return { name: a.institution, inferred: false };
-  if (a.quote?.longName) return { name: a.quote.longName, inferred: true };
+export function institutionOf(
+  a: Pick<Asset, "institution" | "quote" | "assetClass">
+): { name: string; via?: "quote" | "issuer" } | null {
+  if (a.institution) return { name: a.institution };
+  if (a.quote?.longName) return { name: a.quote.longName, via: "quote" };
+  if (a.assetClass === "treasury") return { name: "Tesouro Nacional", via: "issuer" };
   return null;
 }
 

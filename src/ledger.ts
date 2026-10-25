@@ -701,6 +701,22 @@ export function saveAsset(ledger: Ledger, asset: Asset, today: string) {
   recordSnapshot(ledger, today, untracked);
 }
 
+/**
+ * Give `asset`'s institution to the other positions of the same bank connection
+ * that have none, as if the user had set each. Returns how many changed. Mutates the ledger.
+ */
+export function applyInstitutionToConnection(ledger: Ledger, asset: Asset): number {
+  if (!asset.pluggyItemId || !asset.institution) return 0;
+  let n = 0;
+  for (const a of ledger.investments.assets) {
+    if (a.id === asset.id || a.pluggyItemId !== asset.pluggyItemId || a.institution) continue;
+    a.institution = asset.institution;
+    a.institutionEdited = true;
+    n++;
+  }
+  return n;
+}
+
 /** Delete a manual position and its movements; its value leaves as money out, not as loss. Mutates the ledger. */
 export function removeManualAsset(ledger: Ledger, assetId: string, today: string) {
   const a = ledger.investments.assets.find((x) => x.id === assetId);
