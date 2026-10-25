@@ -48,6 +48,10 @@ passphrase that never leaves your device.
   quantity follow the market.
 - **Language** — Brazilian Portuguese by default, English in settings.
 - Amount input accepts `1234.56`, `1.234,56` or `1,234.56`; any ISO currency code (BRL by default).
+- **Other currencies** — accounts in another currency (e.g. a dollar account) and purchases made
+  abroad keep their own currency: the amount shows as it was made (US$ 10,00) with its value in your
+  currency under it. Purchases abroad count what the card actually charged; totals (net worth,
+  month summary, spending, budgets) convert other currencies at the day's rate.
 
 ## Security model
 
@@ -67,7 +71,9 @@ passphrase that never leaves your device.
   from `api.bcb.gov.br` (Central Bank of Brazil); only the series and a date range are requested.
   Turn off *Compare with CDI and IPCA* in settings to stop it. With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
-  the encrypted ledger.
+  the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
+  reference rates (European Central Bank data) from `api.frankfurter.dev`, at most once a day; only
+  currency codes are sent.
 - **If you lose the passphrase, the data cannot be recovered.** Save it in a password manager.
 
 ## Install (manual)

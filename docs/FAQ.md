@@ -23,6 +23,13 @@ Change *Folder* in settings, then move `ledger.trimly` into the new folder yours
 Yes, optionally, through Pluggy — see *Bank sync* in the README. Credit card purchases may show as
 pending until the bank settles them; they update in place on a later sync.
 
+**A purchase abroad or a dollar account shows in dollars. Where does the conversion come from?**
+A purchase made abroad shows in the currency it was made in, with what the card charged under it
+(the bank's own conversion, from Pluggy). An account in another currency keeps its balance in that
+currency, with its value in your currency under it. Totals use the day's reference rates of the
+European Central Bank (via frankfurter.dev), fetched at most once a day while some account or
+purchase is in another currency. To convert into another currency, change *Moeda* in settings.
+
 **My investments don't show up.**
 They come from bank sync. The connected Pluggy item must include the investments product; if
 loading them fails, the sync shows a notice with Pluggy's error. Positions only have history from

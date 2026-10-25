@@ -163,6 +163,8 @@ export const ptBR = {
   },
 
   tx: {
+    converted: (date: string) => `Convertido pela cotação de ${date}`,
+    purchasedIn: (currency: string) => `Compra feita em ${currency}; abaixo, o valor cobrado na conta`,
     recurring: "Recorrente",
     search: "Buscar em descrições e observações",
     allAccounts: "Todas as contas",
@@ -574,6 +576,7 @@ export const ptBR = {
   },
 
   notices: {
+    fxFailed: (e: string) => `Trimly: as cotações de câmbio não foram atualizadas: ${e}`,
     ledgerCreated: (path: string) => `Ledger do Trimly criado em ${path}.`,
     createFailed: (path: string, e: string) => `Não foi possível criar ${path}: ${e}`,
     wrongPassphrase: "Senha incorreta.",
@@ -642,7 +645,8 @@ export const ptBR = {
     folder: "Pasta",
     folderDesc: "Pasta do cofre com o ledger criptografado. Mudar bloqueia o Trimly; mova o arquivo existente você mesmo.",
     currency: "Moeda",
-    currencyDesc: "Código de três letras, ex.: BRL, USD, EUR.",
+    currencyDesc:
+      "Código de três letras, ex.: BRL, USD, EUR. Contas e compras em outra moeda aparecem na moeda original, com a conversão para esta pela cotação do dia (Banco Central Europeu).",
     investments: "Investimentos",
     benchmarks: "Comparar com CDI e IPCA",
     benchmarksDesc:
@@ -688,6 +692,7 @@ export const ptBR = {
   },
 
   errors: {
+    fxRates: (status: number) => `Cotações de câmbio falharam (HTTP ${status})`,
     pluggyRejected: "O Pluggy recusou o client ID ou o secret",
     failed: (what: string, status: number, detail: string) => `${what} falhou (HTTP ${status})${detail ? `: ${detail}` : ""}`,
     pluggySignIn: "Login no Pluggy",

@@ -21,7 +21,9 @@ import {
   Transaction,
   TxType,
   accountBalance,
+  accountCurrency,
   accountInUse,
+  baseAmount,
   cardBill,
   cardBills,
   isCardPayment,
@@ -58,6 +60,7 @@ import {
   shiftMonth,
   sortTransactions,
   spendingByCategory,
+  toBase,
   todayISO,
   toISODate,
   upcomingRecurring,
@@ -221,14 +224,50 @@ export class TrimlyView extends ItemView {
 
   // ---- shared bits ----
 
-  private money(cents: number) {
-    return this.plugin.settings.hideValues ? "••••••" : this.plugin.formatMoney(cents);
+  /** `currency` defaults to the one in the settings. */
+  private money(cents: number, currency?: string) {
+    return this.plugin.settings.hideValues ? "••••••" : this.plugin.formatMoney(cents, currency);
   }
 
-  private signedMoney(cents: number, type: TxType) {
-    if (type === "expense") return `−${this.money(cents)}`;
-    if (type === "income") return `+${this.money(cents)}`;
-    return this.money(cents);
+  private signedMoney(cents: number, type: TxType, currency?: string) {
+    if (type === "expense") return `−${this.money(cents, currency)}`;
+    if (type === "income") return `+${this.money(cents, currency)}`;
+    return this.money(cents, currency);
+  }
+
+  /** Under an amount in another currency, what it is worth in the settings' one; nothing until a rate is known. */
+  private converted(el: HTMLElement, ledger: Ledger, cents: number, currency: string | undefined, sign = "") {
+    const fx = ledger.fx;
+    if (!currency || currency === this.plugin.settings.currency || !fx?.rates[currency]) return;
+    el.createDiv({
+      cls: "trimly-amount-sub",
+      text: `≈ ${sign}${this.money(Math.abs(toBase(ledger, cents, currency)))}`,
+      attr: { "aria-label": t.tx.converted(this.shortDate(fx.date)) },
+    });
+  }
+
+  /** Signed amount of a transaction in its account's currency, or in the one it was made in with the charge below. */
+  private txAmount(row: HTMLElement, ledger: Ledger, tx: Transaction) {
+    const currency = accountCurrency(ledger, tx.accountId);
+    const sign = tx.type === "expense" ? "−" : tx.type === "income" ? "+" : "";
+    const el = row.createDiv(`trimly-amount is-${tx.type}`);
+    if (tx.original) {
+      el.createDiv({
+        text: this.signedMoney(tx.original.amount, tx.type, tx.original.currency),
+        attr: { "aria-label": t.tx.purchasedIn(tx.original.currency) },
+      });
+      el.createDiv({ cls: "trimly-amount-sub", text: this.signedMoney(tx.amount, tx.type, currency) });
+    } else {
+      el.createDiv({ text: this.signedMoney(tx.amount, tx.type, currency) });
+    }
+    this.converted(el, ledger, tx.amount, currency, sign);
+  }
+
+  /** Balance of an account in its own currency, converted below when that is another one. */
+  private balance(parent: HTMLElement, cls: string, ledger: Ledger, a: Account, cents: number) {
+    const el = parent.createDiv(`${cls} ${cents < 0 ? "is-expense" : ""}`);
+    el.createDiv({ text: this.money(cents, a.currency) });
+    this.converted(el, ledger, cents, a.currency, cents < 0 ? "−" : "");
   }
 
   private fmt(opts: Intl.DateTimeFormatOptions, date: Date) {
@@ -459,8 +498,7 @@ export class TrimlyView extends ItemView {
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: a.name });
       main.createDiv({ cls: "trimly-row-sub", text: t.labels.accountType[a.type] });
-      const bal = accountBalance(ledger, a.id, monthEnd);
-      row.createDiv({ cls: `trimly-amount ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      this.balance(row, "trimly-amount", ledger, a, accountBalance(ledger, a.id, monthEnd));
       row.addEventListener("click", () => this.editAccount(a.id));
     }
     if (positions) {
@@ -509,11 +547,11 @@ export class TrimlyView extends ItemView {
     if (closed.remaining > 0) {
       const overdue = !!closed.due && closed.due < today;
       const due = closed.due ? ` · ${t.accounts.dueOn(this.shortDate(closed.due))}` : "";
-      main.createDiv({ cls: `trimly-row-sub ${overdue ? "is-expense" : ""}`, text: t.accounts.closedToPay(this.money(closed.remaining)) + due });
+      main.createDiv({ cls: `trimly-row-sub ${overdue ? "is-expense" : ""}`, text: t.accounts.closedToPay(this.money(closed.remaining, a.currency)) + due });
     } else {
       main.createDiv({ cls: "trimly-row-sub", text: t.accounts.openBill(this.shortDate(open.close)) });
     }
-    row.createDiv({ cls: "trimly-amount", text: this.money(open.remaining) });
+    row.createDiv({ cls: "trimly-amount", text: this.money(open.remaining, a.currency) });
     if (a.creditLimit) this.progress(wrap, Math.max(0, -accountBalance(ledger, a.id)), a.creditLimit, "var(--interactive-accent)");
     wrap.addEventListener("click", () => this.showAccountTransactions(a.id));
   }
@@ -588,7 +626,7 @@ export class TrimlyView extends ItemView {
         : [cat?.name ?? t.common.uncategorized, acc(tx.accountId)];
     if (showDate) parts.unshift(this.shortDate(tx.date));
     main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
-    row.createDiv({ cls: `trimly-amount is-${tx.type}`, text: this.signedMoney(tx.amount, tx.type) });
+    this.txAmount(row, ledger, tx);
     row.addEventListener("click", () => this.plugin.openTransactionModal(tx));
   }
 
@@ -607,7 +645,7 @@ export class TrimlyView extends ItemView {
         ? t.recurring.ended(t.labels.frequency[r.frequency])
         : t.recurring.next(t.labels.frequency[r.frequency], this.shortDate(r.nextDate)),
     });
-    row.createDiv({ cls: `trimly-amount is-${r.type}`, text: this.signedMoney(r.amount, r.type) });
+    row.createDiv({ cls: `trimly-amount is-${r.type}`, text: this.signedMoney(r.amount, r.type, accountCurrency(ledger, r.accountId)) });
     row.addEventListener("click", () => this.editRecurring(r.id));
   }
 
@@ -687,8 +725,8 @@ export class TrimlyView extends ItemView {
     let income = 0;
     let expense = 0;
     for (const t of txs) {
-      if (t.type === "income") income += t.amount;
-      else if (t.type === "expense") expense += t.amount;
+      if (t.type === "income") income += baseAmount(ledger, t);
+      else if (t.type === "expense") expense += baseAmount(ledger, t);
     }
     const summary = wrap.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
@@ -722,7 +760,7 @@ export class TrimlyView extends ItemView {
         head.createSpan({ text: this.dayHeading(tx.date) });
         const net = shown
           .filter((t) => t.date === tx.date)
-          .reduce((s, t) => s + (t.type === "income" ? t.amount : t.type === "expense" ? -t.amount : 0), 0);
+          .reduce((s, t) => s + (t.type === "income" ? baseAmount(ledger, t) : t.type === "expense" ? -baseAmount(ledger, t) : 0), 0);
         if (net !== 0) head.createSpan({ cls: net > 0 ? "is-income" : "is-expense", text: (net > 0 ? "+" : "−") + this.money(Math.abs(net)) });
         group = day.createDiv("trimly-card trimly-day-card");
       }
@@ -764,9 +802,9 @@ export class TrimlyView extends ItemView {
       c.createDiv({ cls: "trimly-eyebrow", text: label });
       c.createDiv({ cls: "trimly-summary-value", text: value });
     };
-    chip(t.accounts.billTotal, this.money(bill.total));
-    chip(t.accounts.billPaid, this.money(bill.paid), bill.paid ? "is-income" : "");
-    chip(t.accounts.billRemaining, this.money(bill.remaining), bill.remaining ? "is-expense" : "");
+    chip(t.accounts.billTotal, this.money(bill.total, card.currency));
+    chip(t.accounts.billPaid, this.money(bill.paid, card.currency), bill.paid ? "is-income" : "");
+    chip(t.accounts.billRemaining, this.money(bill.remaining, card.currency), bill.remaining ? "is-expense" : "");
     chip(t.accounts.billDue, bill.due ? this.shortDate(bill.due) : "—");
 
     const charges = sortTransactions(
@@ -800,7 +838,7 @@ export class TrimlyView extends ItemView {
     const cards = sorted.filter((a) => a.type === "credit");
     const plain = sorted.filter((a) => a.type !== "credit");
 
-    const cash = plain.filter((a) => !a.archived).reduce((sum, a) => sum + accountBalance(ledger, a.id), 0);
+    const cash = plain.filter((a) => !a.archived).reduce((sum, a) => sum + toBase(ledger, accountBalance(ledger, a.id), a.currency), 0);
     body.createDiv({ cls: "trimly-section-title", text: `${t.accounts.groupAccounts} · ${this.money(cash)}` });
     const grid = body.createDiv("trimly-tiles");
     for (const a of plain) {
@@ -810,8 +848,7 @@ export class TrimlyView extends ItemView {
       this.iconTile(top, ACCOUNT_TYPE_ICONS[a.type], "var(--interactive-accent)");
       top.createDiv({ cls: "trimly-tile-tag", text: a.archived ? t.accounts.archived : t.labels.accountType[a.type] });
       tile.createDiv({ cls: "trimly-tile-name", text: a.name });
-      const bal = accountBalance(ledger, a.id);
-      tile.createDiv({ cls: `trimly-tile-value ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
+      this.balance(tile, "trimly-tile-value", ledger, a, accountBalance(ledger, a.id));
       const count = ledger.transactions.filter((tx) => tx.accountId === a.id || tx.toAccountId === a.id).length;
       tile.createDiv({ cls: "trimly-muted", text: t.accounts.txCount(count) });
       tile.addEventListener("click", () => this.editAccount(a.id));
@@ -849,18 +886,18 @@ export class TrimlyView extends ItemView {
     top.createDiv({ cls: "trimly-tile-tag", text: a.archived ? t.accounts.archived : t.accounts.closesOn(this.shortDate(open.close)) });
     tile.createDiv({ cls: "trimly-tile-name", text: a.name });
     tile.createDiv({ cls: "trimly-eyebrow", text: t.accounts.currentBill });
-    tile.createDiv({ cls: "trimly-tile-value", text: this.money(open.remaining) });
+    tile.createDiv({ cls: "trimly-tile-value", text: this.money(open.remaining, a.currency) });
     if (a.creditLimit) {
       const used = Math.max(0, -accountBalance(ledger, a.id));
       this.progress(tile, used, a.creditLimit, "var(--interactive-accent)");
       const foot = tile.createDiv("trimly-tile-foot is-split");
-      foot.createSpan({ cls: "trimly-muted", text: t.accounts.available(this.money(Math.max(0, a.creditLimit - used))) });
-      foot.createSpan({ cls: "trimly-muted", text: t.accounts.limit(this.money(a.creditLimit)) });
+      foot.createSpan({ cls: "trimly-muted", text: t.accounts.available(this.money(Math.max(0, a.creditLimit - used), a.currency)) });
+      foot.createSpan({ cls: "trimly-muted", text: t.accounts.limit(this.money(a.creditLimit, a.currency)) });
     }
     if (closed.remaining > 0) {
       const overdue = !!closed.due && closed.due < today;
       const due = closed.due ? ` · ${t.accounts.dueOn(this.shortDate(closed.due))}` : "";
-      tile.createDiv({ cls: `trimly-muted ${overdue ? "is-expense" : ""}`, text: t.accounts.closedToPay(this.money(closed.remaining)) + due });
+      tile.createDiv({ cls: `trimly-muted ${overdue ? "is-expense" : ""}`, text: t.accounts.closedToPay(this.money(closed.remaining, a.currency)) + due });
     }
     tile.addEventListener("click", () => this.editAccount(a.id));
   }
@@ -1013,8 +1050,8 @@ export class TrimlyView extends ItemView {
     let monthlyIn = 0;
     for (const r of ledger.recurring) {
       if (r.endDate && r.nextDate > r.endDate) continue;
-      if (r.type === "expense") monthlyOut += monthlyAmount(r);
-      if (r.type === "income") monthlyIn += monthlyAmount(r);
+      if (r.type === "expense") monthlyOut += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
+      if (r.type === "income") monthlyIn += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
     }
     const summary = body.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
@@ -1050,7 +1087,8 @@ export class TrimlyView extends ItemView {
     let monthly = 0;
     for (const r of [...subs].sort((a, b) => monthlyAmount(b) - monthlyAmount(a))) {
       const ended = !!r.endDate && r.nextDate > r.endDate;
-      if (!ended) monthly += monthlyAmount(r);
+      const currency = accountCurrency(ledger, r.accountId);
+      if (!ended) monthly += toBase(ledger, monthlyAmount(r), currency);
       const row = card.createDiv("trimly-row is-clickable");
       const cat = this.category(ledger, r.categoryId);
       this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
@@ -1062,15 +1100,15 @@ export class TrimlyView extends ItemView {
       const prev = charges[charges.length - 2];
       const parts = [
         ended ? t.recurring.ended(t.labels.frequency[r.frequency]) : t.labels.frequency[r.frequency],
-        t.recurring.perYear(this.money(Math.round(monthlyAmount(r) * 12))),
+        t.recurring.perYear(this.money(Math.round(monthlyAmount(r) * 12), currency)),
       ];
       if (!ended && r.nextDate < today) parts.push(t.recurring.awaitingCharge(this.shortDate(r.nextDate)));
       else if (last) parts.push(t.recurring.lastCharge(this.shortDate(last.date)));
       if (last && prev && last.amount !== prev.amount) {
-        parts.push((last.amount > prev.amount ? t.recurring.priceUp : t.recurring.priceDown)(this.money(prev.amount)));
+        parts.push((last.amount > prev.amount ? t.recurring.priceUp : t.recurring.priceDown)(this.money(prev.amount, currency)));
       }
       main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
-      row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(r.amount, r.type) });
+      row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(r.amount, r.type, currency) });
       row.addEventListener("click", () => this.editRecurring(r.id));
     }
     card.createDiv({
@@ -1162,7 +1200,7 @@ export class TrimlyView extends ItemView {
       ];
       if (tx) parts.push(t.obligations.linked);
       main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
-      if (tx) row.createDiv({ cls: `trimly-amount is-${tx.type}`, text: this.signedMoney(tx.amount, tx.type) });
+      if (tx) this.txAmount(row, ledger, tx);
       row.addEventListener("click", () => this.settle(o, s.due));
     }
   }
@@ -1176,7 +1214,7 @@ export class TrimlyView extends ItemView {
       due,
       this.shortDate(due),
       paymentCandidates(ledger, o, due),
-      (tx) => `${this.shortDate(tx.date)} · ${tx.description} · ${this.money(tx.amount)}`,
+      (tx) => `${this.shortDate(tx.date)} · ${tx.description} · ${this.money(tx.amount, accountCurrency(ledger, tx.accountId))}`,
       (s) =>
         void this.plugin.mutate((l) => {
           const target = l.obligations.find((x) => x.id === o.id);

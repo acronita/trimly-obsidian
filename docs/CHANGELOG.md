@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.9.0 — 2026-10-25
+
+- 2026-10-25 — Amounts in other currencies. Pluggy reports purchases abroad in their own currency
+  (`currencyCode`, e.g. USD) with the charge in the account's currency in `amountInAccountCurrency`,
+  and some accounts (e.g. dollar accounts) are in another currency; Trimly read every `amount` as
+  the settings' currency, so US$ 10 showed and counted as R$ 10. Now synced accounts take their
+  `currency` from Pluggy, a purchase abroad stores what the account was charged as its amount and
+  the purchase amount in a new optional `original: { currency, amount }`, and the transaction list
+  shows the amount in the currency it was made in with the charge (or its value in the settings'
+  currency) under it. Account and card tiles show balances, bills and limits in the account's
+  currency. Totals (net worth, month summary, spending by category and budgets, transaction list
+  sums, recurring and subscription totals) convert with daily reference rates from Frankfurter (ECB
+  data, no key), fetched at most once a day and only when another currency is in use, stored in a
+  new optional `fx` field of the encrypted ledger (no format bump). Without a rate amounts stay
+  unconverted. Not covered yet: investment positions in other currencies, and manual transfers
+  between accounts in different currencies (one amount for both sides). Why: purchases abroad were
+  shown in the wrong currency and inflated or deflated every total. Files touched: `src/ledger.ts`,
+  `src/bank-sync.ts`, `src/fx.ts` (new), `src/main.ts`, `src/view.ts`, `src/styles/index.css`,
+  `src/i18n/*`, `test/currencies.test.ts` (new), `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+
 ## 0.8.0 — 2026-10-25
 
 - 2026-10-25 — *Tornar recorrente* in the transaction editor: an existing transaction can become a

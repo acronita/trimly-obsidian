@@ -158,6 +158,8 @@ export const en: Strings = {
   },
 
   tx: {
+    converted: (date: string) => `Converted at the rate of ${date}`,
+    purchasedIn: (currency: string) => `Purchase made in ${currency}; below, the amount charged to the account`,
     recurring: "Recurring",
     search: "Search descriptions and notes",
     allAccounts: "All accounts",
@@ -568,6 +570,7 @@ export const en: Strings = {
   },
 
   notices: {
+    fxFailed: (e: string) => `Trimly: exchange rates not updated: ${e}`,
     ledgerCreated: (path: string) => `Trimly ledger created at ${path}.`,
     createFailed: (path: string, e: string) => `Could not create ${path}: ${e}`,
     wrongPassphrase: "Wrong passphrase.",
@@ -636,7 +639,8 @@ export const en: Strings = {
     folder: "Folder",
     folderDesc: "Vault folder for the encrypted ledger file. Changing it locks Trimly; move the existing file yourself.",
     currency: "Currency",
-    currencyDesc: "Three-letter currency code, for example BRL, USD, EUR.",
+    currencyDesc:
+      "Three-letter currency code, for example BRL, USD, EUR. Accounts and purchases in another currency show in their own currency, converted to this one at the day's rate (European Central Bank).",
     investments: "Investments",
     benchmarks: "Compare with CDI and IPCA",
     benchmarksDesc:
@@ -682,6 +686,7 @@ export const en: Strings = {
   },
 
   errors: {
+    fxRates: (status: number) => `Exchange rates failed (HTTP ${status})`,
     pluggyRejected: "Pluggy rejected the client ID or secret",
     failed: (what: string, status: number, detail: string) => `${what} failed (HTTP ${status})${detail ? `: ${detail}` : ""}`,
     pluggySignIn: "Pluggy sign-in",
