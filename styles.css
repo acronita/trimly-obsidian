@@ -1,0 +1,284 @@
+/* src/styles/index.css */
+.trimly-view {
+  --trimly-income: var(--color-green);
+  --trimly-expense: var(--color-red);
+  --trimly-transfer: var(--text-muted);
+  padding: var(--size-4-4);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+.trimly-view .is-income {
+  color: var(--trimly-income);
+}
+.trimly-view .is-expense {
+  color: var(--trimly-expense);
+}
+.trimly-view .is-transfer {
+  color: var(--trimly-transfer);
+}
+.trimly-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  margin-bottom: var(--size-4-3);
+}
+.trimly-month-nav,
+.trimly-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+.trimly-month-label {
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  min-width: 11em;
+  text-transform: capitalize;
+}
+.trimly-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-1);
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: var(--size-4-4);
+  padding-bottom: var(--size-4-2);
+}
+.trimly-tab {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+}
+.trimly-tab.is-active {
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+.trimly-tab-icon {
+  display: flex;
+}
+.trimly-tab-icon svg {
+  width: var(--icon-s);
+  height: var(--icon-s);
+}
+.trimly-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--size-4-3);
+  margin-bottom: var(--size-4-4);
+}
+.trimly-stat {
+  background: var(--background-secondary);
+  border-radius: var(--radius-m);
+  padding: var(--size-4-3) var(--size-4-4);
+}
+.trimly-stat-label {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.trimly-stat-value {
+  font-size: 1.4em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+}
+.trimly-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--size-4-4);
+}
+.trimly-section {
+  background: var(--background-secondary);
+  border-radius: var(--radius-m);
+  padding: var(--size-4-3) var(--size-4-4);
+  margin-bottom: var(--size-4-4);
+}
+.trimly-grid .trimly-section {
+  margin-bottom: 0;
+}
+.trimly-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--size-4-2);
+}
+.trimly-section-head h4 {
+  margin: 0;
+}
+.trimly-list {
+  display: flex;
+  flex-direction: column;
+}
+.trimly-row {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-3);
+  padding: var(--size-4-2) var(--size-4-1);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.trimly-row:last-child {
+  border-bottom: none;
+}
+.trimly-row.is-clickable {
+  cursor: pointer;
+  border-radius: var(--radius-s);
+}
+.trimly-row.is-clickable:hover {
+  background: var(--background-modifier-hover);
+}
+.trimly-row.is-archived {
+  opacity: 0.55;
+}
+.trimly-row-date {
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+  min-width: 4.5em;
+  font-variant-numeric: tabular-nums;
+}
+.trimly-row-main {
+  flex: 1;
+  min-width: 0;
+}
+.trimly-row-title {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trimly-row-sub {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+.trimly-row-flag {
+  color: var(--text-faint);
+  display: flex;
+}
+.trimly-row-flag svg {
+  width: var(--icon-xs);
+  height: var(--icon-xs);
+}
+.trimly-amount {
+  font-variant-numeric: tabular-nums;
+  font-weight: var(--font-semibold);
+  white-space: nowrap;
+}
+.trimly-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--size-2-2);
+}
+.trimly-dot {
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--trimly-color, var(--text-faint));
+  flex-shrink: 0;
+}
+.trimly-bar-row {
+  padding: var(--size-4-1) 0 var(--size-4-2);
+}
+.trimly-bar-top {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  font-size: var(--font-ui-small);
+  margin-bottom: var(--size-2-2);
+}
+.trimly-bar-label {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-2);
+}
+.trimly-bar-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+}
+.trimly-bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+.trimly-bar-fill {
+  height: 100%;
+  width: var(--trimly-pct, 0%);
+  background: var(--trimly-color, var(--interactive-accent));
+}
+.trimly-bar-fill.is-over {
+  background: var(--trimly-expense);
+}
+.trimly-budget {
+  border-bottom: 1px solid var(--background-modifier-border);
+  padding-bottom: var(--size-4-2);
+  margin-bottom: var(--size-4-2);
+}
+.trimly-budget .setting-item {
+  border: none;
+  padding: var(--size-4-1) 0;
+}
+.trimly-over {
+  color: var(--trimly-expense);
+  font-size: var(--font-ui-small);
+}
+.trimly-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--size-4-2);
+  align-items: center;
+  margin-bottom: var(--size-4-3);
+}
+.trimly-filters input[type=search] {
+  flex: 1;
+  min-width: 160px;
+}
+.trimly-check {
+  display: flex;
+  align-items: center;
+  gap: var(--size-4-1);
+}
+.trimly-totals {
+  display: flex;
+  gap: var(--size-4-4);
+  font-size: var(--font-ui-small);
+  color: var(--text-muted);
+  margin-bottom: var(--size-4-2);
+  font-variant-numeric: tabular-nums;
+}
+.trimly-total-line {
+  margin-top: var(--size-4-3);
+  font-weight: var(--font-semibold);
+  font-variant-numeric: tabular-nums;
+}
+.trimly-empty {
+  color: var(--text-faint);
+  padding: var(--size-4-2) 0;
+}
+.trimly-locked {
+  text-align: center;
+  margin: 15vh auto 0;
+  max-width: 420px;
+}
+.trimly-locked-icon svg {
+  width: 48px;
+  height: 48px;
+  color: var(--text-muted);
+}
+.trimly-warning {
+  background: var(--background-modifier-error);
+  color: var(--text-normal);
+  padding: var(--size-4-2) var(--size-4-3);
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-small);
+}
+.trimly-error {
+  color: var(--text-error);
+  min-height: 1.2em;
+  margin: 0;
+}
+.trimly-modal input.trimly-invalid {
+  border-color: var(--text-error);
+}
