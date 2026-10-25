@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0 — 2026-10-25
+
+- 2026-10-25 — *Tornar recorrente* in the transaction editor: an existing transaction can become a
+  recurring rule in one step. It saves the transaction, opens the recurring editor prefilled from it
+  (description, type, amount, account, category, its date as the first date, monthly), and on save
+  links the transaction as the first occurrence (`recurringId`) and moves the rule past its date, so
+  that occurrence is neither posted again nor matched to another synced charge. A transaction that
+  already belongs to a rule shows *Ver recorrente* instead. Why: subscriptions and bills usually
+  show up as a transaction first, and recreating them by hand was tedious. Files touched:
+  `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/*`, `test/ledger.test.ts`, `README.md`.
+
 ## 0.7.0 — 2026-10-25
 
 - 2026-10-25 — Credit cards get their own views. The Accounts tab is split into *Contas*,

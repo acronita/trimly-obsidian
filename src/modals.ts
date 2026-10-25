@@ -278,13 +278,26 @@ export class TransactionModal extends Modal {
     private ledger: Ledger,
     existing: Transaction | null,
     private onSave: (tx: Transaction) => void,
-    private onDelete: ((tx: Transaction) => void) | null
+    private onDelete: ((tx: Transaction) => void) | null,
+    /** existing transactions only: saves it, then opens its recurring rule (a new one built from it when unlinked) */
+    private onRecurring: ((tx: Transaction) => void) | null = null
   ) {
     super(app);
     const firstAccount = ledger.accounts.find((a) => !a.archived)?.id ?? "";
     this.draft = existing
       ? { ...existing }
       : { id: newId(), date: todayISO(), type: "expense", amount: 0, accountId: firstAccount, description: "" };
+  }
+
+  /** Validate and save the draft; returns an error message, or null when saved. */
+  private save(): string | null {
+    const err = validateTxLike(this.draft) ?? (this.draft.date ? null : t.common.pickDate);
+    if (err) return err;
+    if (this.draft.type !== "transfer") delete this.draft.toAccountId;
+    else delete this.draft.categoryId;
+    this.draft.description = this.draft.description.trim();
+    this.onSave(this.draft);
+    return null;
   }
 
   onOpen() {
@@ -302,18 +315,25 @@ export class TransactionModal extends Modal {
       text.setValue(this.draft.notes ?? "").onChange((v) => (this.draft.notes = v || undefined))
     );
     const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    const onRecurring = this.onRecurring;
+    if (onRecurring) {
+      const rule = this.ledger.recurring.find((r) => r.id === this.draft.recurringId);
+      new Setting(contentEl)
+        .setName(t.modals.tx.recurrence)
+        .setDesc(rule ? t.modals.tx.linkedTo(rule.description) : t.modals.tx.makeRecurringDesc)
+        .addButton((b) =>
+          b.setButtonText(rule ? t.modals.tx.viewRecurring : t.modals.tx.makeRecurring).onClick(() => {
+            const err = this.save();
+            if (err) return errorEl.setText(err);
+            this.close();
+            onRecurring(this.draft);
+          })
+        );
+    }
     footer(
       contentEl,
       errorEl,
-      () => {
-        const err = validateTxLike(this.draft) ?? (this.draft.date ? null : t.common.pickDate);
-        if (err) return err;
-        if (this.draft.type !== "transfer") delete this.draft.toAccountId;
-        else delete this.draft.categoryId;
-        this.draft.description = this.draft.description.trim();
-        this.onSave(this.draft);
-        return null;
-      },
+      () => this.save(),
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
       () => this.close()
     );

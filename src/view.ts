@@ -41,6 +41,8 @@ import {
   portfolioValue,
   rebalance,
   postDueRecurring,
+  linkToRule,
+  newId,
   ruleTransactions,
   daysUntil,
   dueObligations,
@@ -1078,38 +1080,7 @@ export class TrimlyView extends ItemView {
   }
 
   private editRecurring(id: string | null) {
-    const ledger = this.plugin.ledger;
-    if (!ledger) return;
-    if (!ledger.accounts.some((a) => !a.archived)) {
-      new Notice(t.common.addAccountFirst);
-      return;
-    }
-    const existing = ledger.recurring.find((r) => r.id === id) ?? null;
-    new RecurringModal(
-      this.app,
-      ledger,
-      existing,
-      (rec) =>
-        void this.plugin.mutate((l) => {
-          const i = l.recurring.findIndex((r) => r.id === rec.id);
-          if (i >= 0) l.recurring[i] = rec;
-          else l.recurring.push(rec);
-          const posted = postDueRecurring(l, todayISO());
-          if (posted) new Notice(t.recurring.posted(posted));
-        }),
-      existing
-        ? (rec) =>
-            new ConfirmModal(
-              this.app,
-              t.recurring.deleteConfirm(rec.description),
-              t.common.delete,
-              () =>
-                void this.plugin.mutate((l) => {
-                  l.recurring = l.recurring.filter((r) => r.id !== rec.id);
-                })
-            ).open()
-        : null
-    ).open();
+    openRecurringModal(this.plugin, this.plugin.ledger?.recurring.find((r) => r.id === id) ?? null);
   }
 
   // ---- obligations ----
@@ -2129,6 +2100,65 @@ export function openTransactionModal(plugin: TrimlyPlugin, tx: Transaction | nul
             void plugin.mutate((l) => {
               l.transactions = l.transactions.filter((t) => t.id !== del.id);
             })
+          ).open()
+      : null,
+    tx
+      ? (saved) => {
+          const rule = plugin.ledger?.recurring.find((r) => r.id === saved.recurringId);
+          openRecurringModal(plugin, rule ?? null, rule ? undefined : saved);
+        }
+      : null
+  ).open();
+}
+
+/**
+ * Edit a recurring rule, or create one. `fromTx` prefills a new rule from that
+ * transaction and, on save, links the transaction as its first occurrence.
+ */
+function openRecurringModal(plugin: TrimlyPlugin, existing: Recurring | null, fromTx?: Transaction) {
+  const ledger = plugin.ledger;
+  if (!ledger) return;
+  if (!ledger.accounts.some((a) => !a.archived)) {
+    new Notice(t.common.addAccountFirst);
+    return;
+  }
+  const template: Recurring | null = fromTx
+    ? {
+        id: newId(),
+        description: fromTx.description,
+        type: fromTx.type,
+        amount: fromTx.amount,
+        accountId: fromTx.accountId,
+        toAccountId: fromTx.toAccountId,
+        categoryId: fromTx.categoryId,
+        frequency: "monthly",
+        startDate: fromTx.date,
+        nextDate: fromTx.date,
+      }
+    : existing;
+  new RecurringModal(
+    plugin.app,
+    ledger,
+    template,
+    (rec) =>
+      void plugin.mutate((l) => {
+        const i = l.recurring.findIndex((r) => r.id === rec.id);
+        if (i >= 0) l.recurring[i] = rec;
+        else l.recurring.push(rec);
+        if (fromTx) linkToRule(l, rec, fromTx.id);
+        const posted = postDueRecurring(l, todayISO());
+        if (posted) new Notice(t.recurring.posted(posted));
+      }),
+    existing
+      ? (rec) =>
+          new ConfirmModal(
+            plugin.app,
+            t.recurring.deleteConfirm(rec.description),
+            t.common.delete,
+            () =>
+              void plugin.mutate((l) => {
+                l.recurring = l.recurring.filter((r) => r.id !== rec.id);
+              })
           ).open()
       : null
   ).open();

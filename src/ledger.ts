@@ -969,6 +969,18 @@ export function isSyncedRule(ledger: Ledger, r: Recurring): boolean {
 }
 
 /** Transactions posted by or linked to a rule, oldest first. */
+/**
+ * Make an existing transaction an occurrence of `rule`: link it, and move the
+ * rule past its date so that occurrence is not posted (or matched) again.
+ */
+export function linkToRule(ledger: Ledger, rule: Recurring, txId: string) {
+  const tx = ledger.transactions.find((x) => x.id === txId);
+  if (!tx) return;
+  tx.recurringId = rule.id;
+  const anchorDay = Number(rule.startDate.slice(8, 10));
+  for (let i = 0; i < 1000 && rule.nextDate <= tx.date; i++) rule.nextDate = nextOccurrence(rule.nextDate, rule.frequency, anchorDay);
+}
+
 export function ruleTransactions(ledger: Ledger, ruleId: string): Transaction[] {
   return ledger.transactions.filter((tx) => tx.recurringId === ruleId).sort((a, b) => (a.date < b.date ? -1 : 1));
 }
