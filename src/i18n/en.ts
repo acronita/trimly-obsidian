@@ -202,6 +202,14 @@ export const en: Strings = {
     next: (freq: string, date: string) => `${freq} · next ${date}`,
     posted: (n: number) => `Posted ${n} recurring ${s(n, "transaction", "transactions")}.`,
     deleteConfirm: (d: string) => `Delete recurring "${d}"? Transactions it already posted are kept.`,
+    subscriptions: "Subscriptions",
+    subscriptionsEmpty: "Mark a recurring transaction as a subscription to see it here, with what it costs per year.",
+    subscriptionsTotal: (month: string, year: string) => `${month} per month · ${year} per year`,
+    perYear: (v: string) => `${v}/year`,
+    lastCharge: (date: string) => `last on ${date}`,
+    awaitingCharge: (date: string) => `waiting for the ${date} charge`,
+    priceUp: (from: string) => `up from ${from}`,
+    priceDown: (from: string) => `down from ${from}`,
   },
 
   categories: {
@@ -384,7 +392,11 @@ export const en: Strings = {
       firstDate: "First date",
       nextDate: "Next date",
       endDate: "End date (optional)",
-      recurringHint: "Occurrences are posted as transactions automatically when their date arrives.",
+      recurringHint:
+        "On manual accounts, each occurrence is posted as a transaction when its date arrives. " +
+        "On synced accounts nothing is posted: Trimly links the charge that comes from the bank (up to 7 days apart) and takes its amount.",
+      subscription: "Subscription",
+      subscriptionDesc: "A service paid for regularly (streaming, apps, gym). Listed with your subscriptions, with its yearly cost.",
       addDescription: "Add a description.",
       pickAccount: "Pick an account.",
       pickOtherAccount: "Pick a different destination account.",

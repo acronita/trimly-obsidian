@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, defaultCategoryKey, newId } from "./ledger.ts";
+import { accountBalance, daysBetween, defaultCategoryKey, newId } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync fetches and reconciles. */
@@ -114,10 +114,6 @@ interface Rec {
 
 function cents(value: number): number {
   return Math.round(Math.abs(value) * 100);
-}
-
-function daysBetween(a: string, b: string): number {
-  return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
 }
 
 function accountType(p: PluggyAccount): AccountType {

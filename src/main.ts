@@ -346,6 +346,8 @@ export default class TrimlyPlugin extends Plugin {
       const r = applyBankData(ledger, data.bank, windowStart, todayISO(now));
       const inv = applyInvestments(ledger, data.investments.investments, data.investments.itemIds, todayISO(now));
       ledger.pluggy.lastSync = now.toISOString();
+      // link the charges just imported to the recurring rules on synced accounts
+      postDueRecurring(ledger, todayISO(now));
       const n = t.notices;
       const parts = [
         r.accountsCreated && n.newAccounts(r.accountsCreated),

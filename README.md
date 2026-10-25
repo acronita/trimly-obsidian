@@ -17,7 +17,10 @@ passphrase that never leaves your device.
   without losing history.
 - **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
-  posted automatically when their date arrives.
+  posted automatically when their date arrives. On bank-synced accounts nothing is posted: the
+  charge imported from the bank is linked to the rule instead, so it is never counted twice.
+- **Subscriptions** — mark a recurring expense as a subscription to list it apart with its yearly
+  cost, last charge and price changes, to judge whether it is still worth paying for.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by

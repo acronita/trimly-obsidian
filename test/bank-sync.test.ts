@@ -2,9 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyBankData } from "../src/bank-sync.ts";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "../src/bank-sync.ts";
-import { accountBalance, defaultLedger, monthSummary, parseLedger, translateDefaults } from "../src/ledger.ts";
+import { accountBalance, defaultLedger, monthSummary, parseLedger, postDueRecurring, translateDefaults } from "../src/ledger.ts";
 import { LANGUAGES } from "../src/i18n/index.ts";
-import type { Ledger } from "../src/ledger.ts";
+import type { Ledger, Recurring } from "../src/ledger.ts";
 
 const WINDOW = "2026-08-01";
 const TODAY = "2026-10-25";
@@ -184,4 +184,69 @@ test("starter categories still map after being translated", () => {
   applyBankData(l, data([tx("market", "p-card", "2026-10-11", 90, "DEBIT", { categoryId: "10000000" })]), WINDOW, TODAY);
   const t = l.transactions.find((x) => x.pluggyIds?.includes("market"));
   assert.equal(l.categories.find((c) => c.id === t?.categoryId)?.name, "Groceries");
+});
+
+/** A synced ledger with a monthly Netflix rule on the synced card. */
+function withNetflix(nextDate = "2026-09-12"): { l: Ledger; rule: Recurring } {
+  const l = fresh();
+  l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"], lastSync: `${TODAY}T12:00:00.000Z` };
+  applyBankData(l, data([]), WINDOW, TODAY);
+  const entertainment = l.categories.find((c) => c.name === "Lazer");
+  const rule: Recurring = {
+    id: "netflix",
+    description: "Netflix",
+    type: "expense",
+    amount: 39_90,
+    accountId: synced(l, "p-card").id,
+    categoryId: entertainment?.id,
+    frequency: "monthly",
+    startDate: nextDate,
+    nextDate,
+    subscription: true,
+  };
+  l.recurring.push(rule);
+  return { l, rule };
+}
+
+test("a rule on a synced card is never posted: the imported charge is linked instead, so it counts once", () => {
+  const { l, rule } = withNetflix();
+  applyBankData(l, data([tx("NETFLIX.COM", "p-card", "2026-09-12", 39.9, "DEBIT"), tx("NETFLIX.COM 2", "p-card", "2026-10-13", 39.9, "DEBIT")]), WINDOW, TODAY);
+  assert.equal(postDueRecurring(l, TODAY), 0);
+  assert.equal(l.transactions.length, 2);
+  assert.ok(l.transactions.every((x) => x.recurringId === "netflix"));
+  // the rule's category wins over whatever sync guessed
+  assert.ok(l.transactions.every((x) => x.categoryId === rule.categoryId));
+  assert.equal(rule.nextDate, "2026-11-12");
+  // the card balance is still what the bank says
+  assert.equal(accountBalance(l, synced(l, "p-card").id, TODAY), -80_00);
+});
+
+test("a price increase still links by name, and the rule follows the new price", () => {
+  const { l, rule } = withNetflix("2026-10-12");
+  applyBankData(l, data([tx("NETFLIX.COM", "p-card", "2026-10-11", 55.9, "DEBIT")]), WINDOW, TODAY);
+  postDueRecurring(l, TODAY);
+  assert.equal(l.transactions[0].recurringId, "netflix");
+  assert.equal(rule.amount, 55_90);
+});
+
+test("an unrelated purchase is not taken for the subscription", () => {
+  const { l, rule } = withNetflix("2026-10-12");
+  // other name and price far off, or same price but weeks away
+  applyBankData(l, data([tx("Padaria", "p-card", "2026-10-12", 12, "DEBIT"), tx("Loja", "p-card", "2026-09-01", 39.9, "DEBIT")]), WINDOW, TODAY);
+  postDueRecurring(l, TODAY);
+  assert.ok(l.transactions.every((x) => !x.recurringId));
+  // no charge 13 days after the due date, with sync up to date: that month was skipped
+  assert.equal(rule.nextDate, "2026-11-12");
+});
+
+test("a synced rule waits for its charge while sync has not caught up", () => {
+  const { l, rule } = withNetflix("2026-10-22");
+  postDueRecurring(l, TODAY);
+  // only 3 days past due: the charge may still be pending at the bank
+  assert.equal(rule.nextDate, "2026-10-22");
+  l.pluggy!.lastSync = "2026-10-01T12:00:00.000Z";
+  rule.nextDate = "2026-09-22";
+  postDueRecurring(l, TODAY);
+  // sync last ran 11 days after due without the charge: skipped; October is after the last sync, so it waits
+  assert.equal(rule.nextDate, "2026-10-22");
 });

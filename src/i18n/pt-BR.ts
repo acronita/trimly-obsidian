@@ -207,6 +207,14 @@ export const ptBR = {
     next: (freq: string, date: string) => `${freq} · próxima em ${date}`,
     posted: (n: number) => `${n} ${s(n, "transação recorrente lançada", "transações recorrentes lançadas")}.`,
     deleteConfirm: (d: string) => `Excluir a recorrente "${d}"? As transações já lançadas são mantidas.`,
+    subscriptions: "Assinaturas",
+    subscriptionsEmpty: "Marque uma recorrente como assinatura para vê-la aqui, com quanto custa por ano.",
+    subscriptionsTotal: (month: string, year: string) => `${month} por mês · ${year} por ano`,
+    perYear: (v: string) => `${v}/ano`,
+    lastCharge: (date: string) => `última em ${date}`,
+    awaitingCharge: (date: string) => `aguardando a cobrança de ${date}`,
+    priceUp: (from: string) => `subiu de ${from}`,
+    priceDown: (from: string) => `caiu de ${from}`,
   },
 
   categories: {
@@ -389,7 +397,11 @@ export const ptBR = {
       firstDate: "Primeira data",
       nextDate: "Próxima data",
       endDate: "Data final (opcional)",
-      recurringHint: "As ocorrências são lançadas como transações automaticamente quando a data chega.",
+      recurringHint:
+        "Em contas manuais, cada ocorrência é lançada como transação quando a data chega. " +
+        "Em contas sincronizadas nada é lançado: o Trimly vincula a cobrança que vier do banco (até 7 dias de diferença) e passa a usar o valor dela.",
+      subscription: "Assinatura",
+      subscriptionDesc: "Serviço pago com regularidade (streaming, apps, academia). Aparece na lista de assinaturas, com o custo por ano.",
       addDescription: "Adicione uma descrição.",
       pickAccount: "Escolha uma conta.",
       pickOtherAccount: "Escolha uma conta de destino diferente.",

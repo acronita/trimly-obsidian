@@ -369,6 +369,12 @@ export class RecurringModal extends Modal {
       this.draft.nextDate = v;
     });
     dateSetting(contentEl, t.modals.tx.endDate, this.draft.endDate ?? "", (v) => (this.draft.endDate = v || undefined));
+    if (this.draft.type === "expense") {
+      new Setting(contentEl)
+        .setName(t.modals.tx.subscription)
+        .setDesc(t.modals.tx.subscriptionDesc)
+        .addToggle((tg) => tg.setValue(!!this.draft.subscription).onChange((v) => (this.draft.subscription = v || undefined)));
+    }
     contentEl.createEl("p", {
       cls: "setting-item-description",
       text: t.modals.tx.recurringHint,
@@ -382,6 +388,7 @@ export class RecurringModal extends Modal {
         if (err) return err;
         if (this.draft.type !== "transfer") delete this.draft.toAccountId;
         else delete this.draft.categoryId;
+        if (this.draft.type !== "expense") delete this.draft.subscription;
         this.draft.description = this.draft.description.trim();
         this.onSave(this.draft);
         return null;

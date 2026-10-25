@@ -12,7 +12,7 @@ produced by `encryptText`, or if new fields are added to the settings (`data.jso
 | File | Role |
 |---|---|
 | `src/crypto.ts` | Web Crypto: PBKDF2 key derivation, AES-GCM encrypt/decrypt, envelope format. No Obsidian imports (unit tested in Node). |
-| `src/ledger.ts` | Data model and pure finance logic: balances, month summaries, spending by category, recurring posting, amount parsing; portfolio totals, snapshots (`recordSnapshot` rebuilds today's flows from known movements plus an accumulated untracked part) and manual positions/movements (`saveAsset`, `saveManualMovement`, …, which apply movements to value, cost at average cost, and quantity). No Obsidian imports. |
+| `src/ledger.ts` | Data model and pure finance logic: balances, month summaries, spending by category, recurring posting (and linking rules on synced accounts to the imported charges), amount parsing; portfolio totals, snapshots (`recordSnapshot` rebuilds today's flows from known movements plus an accumulated untracked part) and manual positions/movements (`saveAsset`, `saveManualMovement`, …, which apply movements to value, cost at average cost, and quantity). No Obsidian imports. |
 | `src/store.ts` | `EncryptedStore`: loads/decrypts and encrypts/saves the ledger file; caches the derived key; serializes writes; remembers its last write to ignore its own modify events. |
 | `src/passphrase.ts` | `PassphraseManager`: passphrase in memory and, optionally, in vault-scoped `localStorage` (device app data, outside the vault). |
 | `src/bank-sync.ts` | Pure merge of Pluggy data into the ledger: creates synced accounts, pairs own-account transfers (card bill payments), reconciles the 90-day window (re-links transactions Pluggy re-created with a new id, removes ones it no longer returns), maps Pluggy categories, aligns balances. No Obsidian imports (unit tested in Node). |
@@ -50,7 +50,7 @@ The plaintext is the JSON of `Ledger` (`src/ledger.ts`):
 - `categories[]` — `id, name, kind (expense|income), color, icon?` (Lucide icon name; default categories get theirs back on load)
 - `transactions[]` — `id, date (YYYY-MM-DD), type (expense|income|transfer), amount, accountId, toAccountId?, categoryId?, description, notes?, recurringId?, pluggyIds?, pending?` (`pluggyIds`: the one or two Pluggy transactions an imported entry represents)
 - `budgets[]` — `categoryId, limit`
-- `recurring[]` — `id, description, type, amount, accountId, toAccountId?, categoryId?, frequency, startDate, nextDate, endDate?`
+- `recurring[]` — `id, description, type, amount, accountId, toAccountId?, categoryId?, frequency, startDate, nextDate, endDate?, subscription?`. A rule on a synced account (one with `pluggyId`, while bank sync is configured) is never posted: `postDueRecurring` links the imported transaction closest to `nextDate` (within 7 days; same name, or amount within 20%) by setting its `recurringId` and category, and the rule takes that charge's amount. With no charge 7 days after the due date (counted up to the last sync), the occurrence is skipped.
 - `investments` — `assets[]`: `id, name, assetClass (fixed_income|treasury|stock|reit|etf|fund|retirement|other), code?, issuer?, institution?, quantity?, value (net, after taxes), grossValue?, invested?, rate?, rateType?, fixedRate?, dueDate?, updatedAt, closed?, pluggyId?, pluggyItemId?, movementsSynced?, addedOn?, subtype?, pluggyName?, renamed?, institutionEdited?` (no `pluggyId` = manual; sync replaces `name` with a readable one until `renamed`); `snapshots[]`: `date, value, invested, flow?, estimated?, income?`, oldest first, one per day, written on every sync (`flow`: net money in since the previous day's snapshot, `estimated`: the part movements don't explain — amount-invested estimates, newly tracked, closed or deleted positions — `income`: payouts in that window); `movements[]`: `id, assetId, date, type (buy|sell|income|tax|amortization|transfer), amount (net of fees), quantity?, description?, direction? (transfers: in|out), cost? (manual withdrawals: cost taken off), pluggyId?`; `targets[]`: `assetClass, pct` (percent; `rebalance()` scales them to 100%). Net worth for a past date uses the last snapshot on or before it (zero before the first one).
 - `brapi?` — `token, lastUpdate?`: quote settings, encrypted like the Pluggy credentials. Positions with a B3 ticker carry `quote?: { price (cents), changePct?, time?, longName?, low52?, high52?, pe?, eps?, marketCap?, logo?, history? }` (`history`: last 3 months of daily closes, `[YYYY-MM-DD, cents]`).
 - `pluggy?` — bank sync credentials: `clientId, clientSecret, itemIds[], lastSync?`. Lives here, encrypted, so it is never in `data.json` and follows the vault to other devices.
@@ -63,7 +63,8 @@ All amounts are positive integer cents (`type` gives the direction; opening bala
    file, it opens silently; otherwise a passphrase modal asks for it. With no file yet, the create
    modal sets a passphrase and writes a starter ledger.
 2. After decrypting, due recurring occurrences are posted and saved. If bank sync is configured and
-   the last sync is older than 6 hours, a sync runs in the background.
+   the last sync is older than 6 hours, a sync runs in the background; after each sync, rules on
+   synced accounts are linked to the charges just imported.
 3. Every edit goes through `plugin.mutate()`, which re-renders and re-encrypts the whole ledger.
 4. If the file changes on disk from outside (sync, `git pull`), it is reloaded with the in-memory
    passphrase. Concurrent edits on two devices are last-write-wins.

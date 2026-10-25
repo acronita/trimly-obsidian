@@ -128,6 +128,8 @@ export interface Recurring {
   nextDate: string;
   /** last allowed occurrence (inclusive), optional */
   endDate?: string;
+  /** a service paid for regularly (streaming, apps, gym); listed apart with its yearly cost */
+  subscription?: boolean;
 }
 
 /** One investment position. Values are the latest known, in cents. */
@@ -444,6 +446,10 @@ export function shiftMonth(month: string, delta: number): string {
   const [y, m] = month.split("-").map(Number);
   const d = new Date(y, m - 1 + delta, 1);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+export function daysBetween(a: string, b: string): number {
+  return Math.abs(Date.parse(a) - Date.parse(b)) / 86_400_000;
 }
 
 function daysInMonth(y: number, m0: number): number {
@@ -815,14 +821,98 @@ export function sortTransactions(txs: Transaction[]): Transaction[] {
   return [...txs].sort((a, b) => (a.date === b.date ? (a.id < b.id ? 1 : -1) : a.date < b.date ? 1 : -1));
 }
 
+/** Max days between a rule's due date and the synced charge linked to it. */
+const LINK_DAYS = 7;
+/** How far a synced charge's amount may be from the rule's and still match without a matching description. */
+const LINK_AMOUNT_TOLERANCE = 0.2;
+
+/** Average cost of a rule per month, in cents (weekly × 52/12, yearly ÷ 12). */
+export function monthlyAmount(r: Recurring): number {
+  const factor = r.frequency === "weekly" ? 52 / 12 : r.frequency === "yearly" ? 1 / 12 : 1;
+  return r.amount * factor;
+}
+
+/**
+ * Whether a rule's transactions come from bank sync: it is on an account
+ * Pluggy mirrors, so posting it too would count every charge twice.
+ */
+export function isSyncedRule(ledger: Ledger, r: Recurring): boolean {
+  const synced = (id?: string) => !!ledger.accounts.find((a) => a.id === id)?.pluggyId;
+  return !!ledger.pluggy && (synced(r.accountId) || (r.type === "transfer" && synced(r.toAccountId)));
+}
+
+/** Transactions posted by or linked to a rule, oldest first. */
+export function ruleTransactions(ledger: Ledger, ruleId: string): Transaction[] {
+  return ledger.transactions.filter((tx) => tx.recurringId === ruleId).sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+function words(s: string): string[] {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3);
+}
+
+/** The imported transaction that best fits the rule's next occurrence, if any. */
+function syncedCharge(ledger: Ledger, r: Recurring): Transaction | undefined {
+  const ruleWords = words(r.description);
+  let best: Transaction | undefined;
+  let bestScore = Infinity;
+  for (const tx of ledger.transactions) {
+    if (!tx.pluggyIds?.length || tx.recurringId || tx.type !== r.type || tx.accountId !== r.accountId) continue;
+    if (r.type === "transfer" && tx.toAccountId !== r.toAccountId) continue;
+    const days = daysBetween(tx.date, r.nextDate);
+    if (days > LINK_DAYS) continue;
+    const named = words(tx.description).some((w) => ruleWords.includes(w));
+    const drift = Math.abs(tx.amount - r.amount) / r.amount;
+    if (!named && drift > LINK_AMOUNT_TOLERANCE) continue;
+    // a matching name beats any amount; then the closest amount, then the closest date
+    const score = (named ? 0 : 1000) + drift * 100 + days;
+    if (score < bestScore) {
+      best = tx;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/**
+ * Link a synced rule's occurrences to the charges bank sync imported. A rule
+ * advances when its charge is found, or when sync has gone LINK_DAYS past the
+ * due date without one (a month the service was not charged). The rule takes
+ * the latest charge's amount, so a price change is matched next time too.
+ */
+function linkSyncedRule(ledger: Ledger, r: Recurring, anchorDay: number) {
+  const syncedUpTo = ledger.pluggy?.lastSync?.slice(0, 10);
+  for (let i = 0; i < 1000; i++) {
+    if (r.endDate && r.nextDate > r.endDate) break;
+    const tx = syncedCharge(ledger, r);
+    if (tx) {
+      tx.recurringId = r.id;
+      if (r.categoryId && r.type !== "transfer") tx.categoryId = r.categoryId;
+      r.amount = tx.amount;
+    } else if (!syncedUpTo || r.nextDate >= syncedUpTo || daysBetween(r.nextDate, syncedUpTo) <= LINK_DAYS) {
+      break;
+    }
+    r.nextDate = nextOccurrence(r.nextDate, r.frequency, anchorDay);
+  }
+}
+
 /**
  * Post every recurring occurrence due on or before `today`, advancing each
- * rule's nextDate. Mutates the ledger; returns how many transactions were added.
+ * rule's nextDate. Rules on synced accounts are linked to the imported charges
+ * instead of posted. Mutates the ledger; returns how many transactions were added.
  */
 export function postDueRecurring(ledger: Ledger, today: string): number {
   let posted = 0;
   for (const r of ledger.recurring) {
     const anchorDay = Number(r.startDate.slice(8, 10));
+    if (isSyncedRule(ledger, r)) {
+      linkSyncedRule(ledger, r, anchorDay);
+      continue;
+    }
     // guard against a corrupted rule looping forever
     for (let i = 0; i < 1000 && r.nextDate <= today; i++) {
       if (r.endDate && r.nextDate > r.endDate) break;

@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.4.0 — 2026-10-25
+
+- 2026-10-25 — Subscriptions, and recurring rules that no longer double-count on synced accounts.
+  A recurring rule on a bank-synced account used to post its own transaction while sync imported
+  the real charge, so it counted twice. Now such a rule posts nothing: the imported charge closest
+  to the due date (within 7 days, same name or amount within 20%) is linked to it, takes the rule's
+  category, and the rule follows the charge's amount, so a price increase is matched next time.
+  A month with no charge 7 days past the due date, counted up to the last sync, is skipped.
+  Duplicates already posted before this change are not removed; delete them by hand. Recurring
+  expenses can be marked as a subscription (`Recurring.subscription`, optional): the Recurring tab
+  lists them apart with their yearly cost, last charge and price change, and the total per month
+  and per year. Why: seeing what services cost per year helps decide whether to keep them, and the
+  card they are charged to is usually synced. Files touched: `src/ledger.ts`, `src/bank-sync.ts`,
+  `src/main.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/*`, `test/bank-sync.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`.
+
 ## 0.3.0 — 2026-10-25
 
 - 2026-10-25 — Eye button in the dashboard header hides every money amount (shown as `••••••`,

@@ -26,6 +26,7 @@ import {
   movementFlow,
   monthOf,
   monthSummary,
+  monthlyAmount,
   monthlyHistory,
   netWorth,
   openAssets,
@@ -34,6 +35,7 @@ import {
   portfolioValue,
   rebalance,
   postDueRecurring,
+  ruleTransactions,
   removeCategory,
   removeManualAsset,
   removeManualMovement,
@@ -811,9 +813,8 @@ export class TrimlyView extends ItemView {
     let monthlyIn = 0;
     for (const r of ledger.recurring) {
       if (r.endDate && r.nextDate > r.endDate) continue;
-      const factor = r.frequency === "weekly" ? 52 / 12 : r.frequency === "yearly" ? 1 / 12 : 1;
-      if (r.type === "expense") monthlyOut += r.amount * factor;
-      if (r.type === "income") monthlyIn += r.amount * factor;
+      if (r.type === "expense") monthlyOut += monthlyAmount(r);
+      if (r.type === "income") monthlyIn += monthlyAmount(r);
     }
     const summary = body.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
@@ -833,7 +834,49 @@ export class TrimlyView extends ItemView {
       });
     }
     const sorted = [...ledger.recurring].sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
-    for (const r of sorted) this.recurringRow(card, ledger, r);
+    for (const r of sorted) if (!r.subscription) this.recurringRow(card, ledger, r);
+
+    this.renderSubscriptions(body, ledger, sorted.filter((r) => r.subscription));
+  }
+
+  /** What each subscription costs per year and how its price moved, to judge whether it is worth keeping. */
+  private renderSubscriptions(body: HTMLElement, ledger: Ledger, subs: Recurring[]) {
+    const card = this.card(body, t.recurring.subscriptions);
+    if (subs.length === 0) {
+      this.empty(card, "clapperboard", t.recurring.subscriptionsEmpty);
+      return;
+    }
+    const today = todayISO();
+    let monthly = 0;
+    for (const r of [...subs].sort((a, b) => monthlyAmount(b) - monthlyAmount(a))) {
+      const ended = !!r.endDate && r.nextDate > r.endDate;
+      if (!ended) monthly += monthlyAmount(r);
+      const row = card.createDiv("trimly-row is-clickable");
+      const cat = this.category(ledger, r.categoryId);
+      this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
+      if (ended) row.addClass("is-archived");
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: r.description });
+      const charges = ruleTransactions(ledger, r.id);
+      const last = charges[charges.length - 1];
+      const prev = charges[charges.length - 2];
+      const parts = [
+        ended ? t.recurring.ended(t.labels.frequency[r.frequency]) : t.labels.frequency[r.frequency],
+        t.recurring.perYear(this.money(Math.round(monthlyAmount(r) * 12))),
+      ];
+      if (!ended && r.nextDate < today) parts.push(t.recurring.awaitingCharge(this.shortDate(r.nextDate)));
+      else if (last) parts.push(t.recurring.lastCharge(this.shortDate(last.date)));
+      if (last && prev && last.amount !== prev.amount) {
+        parts.push((last.amount > prev.amount ? t.recurring.priceUp : t.recurring.priceDown)(this.money(prev.amount)));
+      }
+      main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
+      row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(r.amount, r.type) });
+      row.addEventListener("click", () => this.editRecurring(r.id));
+    }
+    card.createDiv({
+      cls: "trimly-muted trimly-card-foot",
+      text: t.recurring.subscriptionsTotal(this.money(Math.round(monthly)), this.money(Math.round(monthly * 12))),
+    });
   }
 
   private editRecurring(id: string | null) {
