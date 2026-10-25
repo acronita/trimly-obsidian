@@ -44,6 +44,14 @@
   font-variant-numeric: tabular-nums;
   font-weight: var(--font-semibold);
   white-space: nowrap;
+  text-align: right;
+}
+
+/* the same amount in another currency, under the main one */
+.trimly-amount-sub {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-normal);
 }
 
 /* ---- top bar ---- */
@@ -303,6 +311,28 @@ button.trimly-add {
 
 .trimly-card-foot {
   margin-top: 10px;
+}
+
+/* a card's total, set apart from its rows */
+.trimly-total-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--trimly-card-border);
+}
+
+.trimly-total-foot-values {
+  text-align: right;
+}
+
+.trimly-total-foot-value {
+  font-size: 1.3em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .trimly-view button.trimly-link {

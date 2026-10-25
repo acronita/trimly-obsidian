@@ -3,12 +3,14 @@ import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { fetchBenchmarks } from "./bcb";
+import { fetchRates } from "./fx";
 import { LANGUAGES, LANGUAGE_NAMES, Language, setLanguage, t } from "./i18n";
 import { applyInvestments } from "./investment-sync";
 import {
   Ledger,
   Transaction,
   defaultLedger,
+  foreignCurrencies,
   formatMoney,
   localeForCurrency,
   obligationReminders,
@@ -142,8 +144,9 @@ export default class TrimlyPlugin extends Plugin {
     return t.locale;
   }
 
-  formatMoney(cents: number): string {
-    return formatMoney(cents, this.settings.currency, localeForCurrency(this.settings.currency, this.locale()));
+  /** `currency` defaults to the one in the settings. */
+  formatMoney(cents: number, currency = this.settings.currency): string {
+    return formatMoney(cents, currency, localeForCurrency(currency, this.locale()));
   }
 
   /** Large amounts in currency units, abbreviated (R$ 788,9 bi). */
@@ -312,6 +315,29 @@ export default class TrimlyPlugin extends Plugin {
     }
     this.autoSync();
     this.remind();
+    void this.refreshRates();
+  }
+
+  /**
+   * Fetch exchange rates for the currencies in use other than the settings'
+   * one, at most once a day. Rates for another base are dropped first, since
+   * they would convert into the wrong currency.
+   */
+  async refreshRates() {
+    const l = this.ledger;
+    if (!l) return;
+    const base = this.settings.currency;
+    const today = todayISO();
+    if (l.fx && l.fx.base !== base) await this.mutate((x) => delete x.fx);
+    const symbols = foreignCurrencies(l, base);
+    const fx = l.fx;
+    if (!symbols.length || (fx && fx.fetched === today && symbols.every((c) => c in fx.rates))) return;
+    try {
+      const rates = await fetchRates(base, symbols, today);
+      await this.mutate((x) => (x.fx = rates));
+    } catch (e) {
+      new Notice(t.notices.fxFailed((e as Error).message));
+    }
   }
 
   /**
@@ -366,6 +392,8 @@ export default class TrimlyPlugin extends Plugin {
         }
         if (bank && this.ledger?.pluggy) await this.syncBank(quiet);
         if (this.ledger?.brapi) await this.refreshQuotes(quiet);
+        // a sync can bring the first account or purchase in another currency
+        await this.refreshRates();
       })().finally(() => {
         this.syncing = null;
         this.refreshViews();
@@ -594,6 +622,7 @@ class TrimlySettingTab extends PluginSettingTab {
           p.settings.currency = code;
           await p.saveSettings();
           p.refreshViews();
+          await p.refreshRates();
         })
       );
 

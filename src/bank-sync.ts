@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, daysBetween, defaultCategoryKey, newId } from "./ledger.ts";
+import { accountBalance, convert, daysBetween, defaultCategoryKey, newId } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync fetches and reconciles. */
@@ -27,6 +27,8 @@ export interface PluggyAccount {
   marketingName?: string | null;
   /** bank: signed balance; credit card: amount owed */
   balance: number;
+  /** ISO 4217 code of the balance and of transactions without amountInAccountCurrency */
+  currencyCode?: string | null;
   /** credit cards: ISO dates of the current bill's closing and due day, and the limit */
   creditData?: { balanceCloseDate?: string | null; balanceDueDate?: string | null; creditLimit?: number | null } | null;
 }
@@ -41,6 +43,10 @@ export interface PluggyTransaction {
   amount: number;
   type: "DEBIT" | "CREDIT";
   status?: "PENDING" | "POSTED";
+  /** ISO 4217 code of `amount` */
+  currencyCode?: string | null;
+  /** `amount` converted to the account's currency, when the transaction was made in another one */
+  amountInAccountCurrency?: number | null;
   categoryId?: string | null;
 }
 
@@ -95,6 +101,8 @@ interface Leg {
   date: string;
   /** signed cents: positive = money into the account */
   cents: number;
+  /** what was spent in another currency, when it differs from the account's */
+  original?: Transaction["original"];
   description: string;
   pending: boolean;
   /** category descriptions, leaf first; empty when uncategorized */
@@ -112,6 +120,7 @@ interface Rec {
   description: string;
   pending: boolean;
   path: string[];
+  original?: Transaction["original"];
 }
 
 function cents(value: number): number {
@@ -183,6 +192,7 @@ function pairTransfers(legs: Leg[]): Rec[] {
       description: l.description,
       pending: l.pending,
       path: l.path,
+      original: l.original,
     });
   }
   return recs;
@@ -207,6 +217,8 @@ function relink(tx: Transaction, rec: Rec): boolean {
   tx.pluggyIds = rec.pids;
   if (rec.pending) tx.pending = true;
   else delete tx.pending;
+  if (rec.original) tx.original = rec.original;
+  else delete tx.original;
   if (tx.type !== rec.type || tx.accountId !== rec.accountId || tx.toAccountId !== rec.toAccountId) {
     tx.type = rec.type;
     tx.accountId = rec.accountId;
@@ -242,6 +254,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (acc.type === "credit" && !acc.dueDay && dueDay) acc.dueDay = dueDay;
     // the limit changes on the bank's side (raises), so the bank's value always wins
     if (acc.type === "credit" && p.creditData?.creditLimit) acc.creditLimit = cents(p.creditData.creditLimit);
+    if (p.currencyCode) acc.currency = p.currencyCode;
     byPluggyId.set(p.id, acc);
   }
 
@@ -252,12 +265,21 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (!acc) continue;
     const onCard = acc.type === "credit";
     const moneyIn = onCard ? t.amount < 0 : t.type === "CREDIT";
+    // a purchase abroad: Pluggy's amount is in the purchase's currency, the account was charged the converted one
+    const foreign = !!t.currencyCode && !!acc.currency && t.currencyCode !== acc.currency;
+    // without Pluggy's conversion, fall back to the stored rates
+    const charged = !foreign
+      ? cents(t.amount)
+      : t.amountInAccountCurrency != null
+        ? cents(t.amountInAccountCurrency)
+        : convert(ledger, cents(t.amount), t.currencyCode!, acc.currency!);
     legs.push({
       pid: t.id,
       accountId: acc.id,
       onCard,
       date: t.date.slice(0, 10),
-      cents: moneyIn ? cents(t.amount) : -cents(t.amount),
+      cents: moneyIn ? charged : -charged,
+      original: foreign ? { currency: t.currencyCode!, amount: cents(t.amount) } : undefined,
       description: t.description,
       pending: t.status === "PENDING",
       path: categoryPath(categories, t.categoryId),
@@ -308,6 +330,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
       pluggyIds: rec.pids,
     };
     if (rec.toAccountId) tx.toAccountId = rec.toAccountId;
+    if (rec.original) tx.original = rec.original;
     const categoryId = mapCategory(ledger, rec);
     if (categoryId) tx.categoryId = categoryId;
     if (rec.pending) tx.pending = true;

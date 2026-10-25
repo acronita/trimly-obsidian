@@ -82,6 +82,8 @@ export interface Account {
   dueDay?: number;
   /** credit cards: credit limit, in cents */
   creditLimit?: number;
+  /** ISO 4217 code of the account's money; missing = the currency set in the settings */
+  currency?: string;
 }
 
 export interface Category {
@@ -112,6 +114,8 @@ export interface Transaction {
   pluggyIds?: string[];
   /** imported while the bank still listed it as pending */
   pending?: boolean;
+  /** made in another currency than the account's (e.g. a card purchase in USD); `amount` is what the account was charged */
+  original?: { currency: string; amount: number };
 }
 
 export interface Budget {
@@ -304,6 +308,17 @@ export interface BrapiConfig {
   lastUpdate?: string;
 }
 
+/** Public exchange rates for converting other currencies into `base`, the currency set in the settings. */
+export interface FxRates {
+  base: string;
+  /** day the rates refer to */
+  date: string;
+  /** day they were fetched, so a weekend's rates are not fetched again */
+  fetched: string;
+  /** units of each currency per 1 `base` */
+  rates: Record<string, number>;
+}
+
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
 export interface PluggyConfig {
   clientId: string;
@@ -326,6 +341,8 @@ export interface Ledger {
   pluggy?: PluggyConfig;
   /** set when quotes are configured */
   brapi?: BrapiConfig;
+  /** exchange rates, set when some account or transaction is in another currency */
+  fx?: FxRates;
 }
 
 export function newId(): string {
@@ -410,6 +427,7 @@ export function parseLedger(json: string): Ledger {
     },
     pluggy: raw.pluggy,
     brapi: raw.brapi,
+    fx: raw.fx,
   };
 }
 
@@ -509,6 +527,46 @@ export function nextOccurrence(date: string, frequency: Frequency, anchorDay: nu
   const target = new Date(y, m - 1 + months, 1);
   const day = Math.min(anchorDay, daysInMonth(target.getFullYear(), target.getMonth()));
   return toISODate(new Date(target.getFullYear(), target.getMonth(), day));
+}
+
+// ---- currencies ----
+
+/** Currency of an account's money; undefined = the currency set in the settings. */
+export function accountCurrency(ledger: Ledger, accountId: string): string | undefined {
+  return ledger.accounts.find((a) => a.id === accountId)?.currency;
+}
+
+/**
+ * `cents` in `currency` converted into the settings' currency with the stored
+ * rates. Unchanged when `currency` is the settings' one (or unset), and when no
+ * rate is known yet, since there is nothing better to show.
+ */
+export function toBase(ledger: Ledger, cents: number, currency?: string): number {
+  const fx = ledger.fx;
+  if (!currency || !fx || currency === fx.base) return cents;
+  const rate = fx.rates[currency];
+  return rate ? Math.round(cents / rate) : cents;
+}
+
+/** `cents` in `from` converted into `to` with the stored rates; unchanged when a rate is missing. */
+export function convert(ledger: Ledger, cents: number, from: string, to: string): number {
+  const fx = ledger.fx;
+  if (from === to || !fx) return cents;
+  const rate = (c: string) => (c === fx.base ? 1 : fx.rates[c]);
+  return rate(from) && rate(to) ? Math.round((cents / rate(from)) * rate(to)) : cents;
+}
+
+/** A transaction's amount in the settings' currency. */
+export function baseAmount(ledger: Ledger, tx: Transaction): number {
+  return toBase(ledger, tx.amount, accountCurrency(ledger, tx.accountId));
+}
+
+/** Currencies other than `base` in use by accounts or transactions, to fetch rates for. */
+export function foreignCurrencies(ledger: Ledger, base: string): string[] {
+  const out = new Set<string>();
+  for (const a of ledger.accounts) if (a.currency && a.currency !== base) out.add(a.currency);
+  for (const tx of ledger.transactions) if (tx.original && tx.original.currency !== base) out.add(tx.original.currency);
+  return [...out].sort();
 }
 
 // ---- computations ----
@@ -614,9 +672,9 @@ export function cardBills(ledger: Ledger, accountId: string, today: string): { c
   return { closed: cardBill(ledger, accountId, today, -1), open: cardBill(ledger, accountId, today, 0) };
 }
 
-/** Accounts plus investments. */
+/** Accounts plus investments, in the settings' currency. */
 export function netWorth(ledger: Ledger, upTo?: string): number {
-  return ledger.accounts.reduce((sum, a) => sum + accountBalance(ledger, a.id, upTo), 0) + portfolioValue(ledger, upTo);
+  return ledger.accounts.reduce((sum, a) => sum + toBase(ledger, accountBalance(ledger, a.id, upTo), a.currency), 0) + portfolioValue(ledger, upTo);
 }
 
 // ---- investments ----
@@ -903,14 +961,14 @@ export interface MonthSummary {
   net: number;
 }
 
-/** Income/expense totals for a month. Transfers move money between own accounts and are excluded. */
+/** Income/expense totals for a month, in the settings' currency. Transfers move money between own accounts and are excluded. */
 export function monthSummary(ledger: Ledger, month: string): MonthSummary {
   let income = 0;
   let expense = 0;
   for (const tx of ledger.transactions) {
     if (monthOf(tx.date) !== month) continue;
-    if (tx.type === "income") income += tx.amount;
-    else if (tx.type === "expense") expense += tx.amount;
+    if (tx.type === "income") income += baseAmount(ledger, tx);
+    else if (tx.type === "expense") expense += baseAmount(ledger, tx);
   }
   return { income, expense, net: income - expense };
 }
@@ -932,13 +990,13 @@ export function upcomingRecurring(ledger: Ledger, from: string, to: string): Rec
     .sort((a, b) => (a.nextDate < b.nextDate ? -1 : 1));
 }
 
-/** Expense total per category id for a month; uncategorized expenses use the key "". */
+/** Expense total per category id for a month, in the settings' currency; uncategorized expenses use the key "". */
 export function spendingByCategory(ledger: Ledger, month: string): Map<string, number> {
   const out = new Map<string, number>();
   for (const tx of ledger.transactions) {
     if (tx.type !== "expense" || monthOf(tx.date) !== month) continue;
     const key = tx.categoryId ?? "";
-    out.set(key, (out.get(key) ?? 0) + tx.amount);
+    out.set(key, (out.get(key) ?? 0) + baseAmount(ledger, tx));
   }
   return out;
 }
