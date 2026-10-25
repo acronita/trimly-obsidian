@@ -54,7 +54,7 @@ test("marking the same month twice keeps a single mark", () => {
   assert.equal(o.settled[0].status, "done");
 });
 
-test("a bill created after this month's due day starts next month, not as overdue", () => {
+test("occurrences due before an obligation existed never open", () => {
   const o = obligation({ since: TODAY });
   assert.deepEqual(openOccurrences(o, "2026-11-30"), ["2026-11-10"]);
 });

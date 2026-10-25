@@ -1000,6 +1000,9 @@ export class ObligationModal extends Modal {
         if (yearly && lastMonth !== month) this.draft.endMonth = lastMonth;
         else delete this.draft.endMonth;
         if (this.draft.kind !== "payment") delete this.draft.amount;
+        // a new one starts with the current month (or year), so what was already done in it can be recorded
+        const today = todayISO();
+        if (!this.onDelete) this.draft.since = yearly ? `${today.slice(0, 4)}-01-01` : `${today.slice(0, 7)}-01`;
         this.onSave(this.draft);
         return null;
       },
@@ -1083,7 +1086,7 @@ export class SettleModal extends Modal {
     }
     buttons
       .addButton((b) => b.setButtonText(m.skip).onClick(() => settle("skipped")))
-      .addButton((b) => b.setButtonText(isPayment ? m.paid : m.sent).setCta().onClick(() => settle("done")));
+      .addButton((b) => b.setButtonText(existing ? t.common.save : isPayment ? m.paid : m.sent).setCta().onClick(() => settle("done")));
   }
 
   onClose() {

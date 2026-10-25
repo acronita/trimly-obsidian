@@ -7,7 +7,10 @@
   for each, so a window can span months (IRPF: March 23 to May 29). The year
   and month are always the current ones, so the *Primeiro vencimento* and *Data final* dates are
   gone; an *Encerrada* toggle in the editor stops an obligation instead. *Marcar como paga* /
-  *Marcar como enviado* record the day it was done; a bill marked on a weekend or national bank
+  *Marcar como enviado* record today, and clicking the entry under *Feitas recentemente* changes
+  that day (or undoes it). A new obligation starts with the current month (yearly: the current
+  year), so one already done this period, like an IRPF sent in March, shows up to be recorded with
+  its real date; a bill marked on a weekend or national bank
   holiday (Carnaval, Sexta-feira Santa and Corpus Christi included) is recorded as scheduled for
   the next business day, shows *agendada para …* until then, and *paga* after. Ledger format
   bumped to version 5 (`day`, `endDay?`, `month?`, `endMonth?`, `since`, `archived?` replace `startDate` and

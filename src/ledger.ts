@@ -165,7 +165,7 @@ export interface Obligation {
   month?: number;
   /** yearly documents: month of `endDay` when the window ends in a later month; unset = `month` */
   endMonth?: number;
-  /** when it was created; occurrences due earlier are never open */
+  /** first day of the month (or year) it was created in; occurrences due earlier are never open */
   since: string;
   /** stopped: no more occurrences, history kept */
   archived?: boolean;
