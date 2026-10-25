@@ -7,12 +7,13 @@
  * Kept free of Obsidian and local imports so it can be unit tested in Node.
  */
 
-export const LEDGER_VERSION = 2;
+export const LEDGER_VERSION = 3;
 
 export type AccountType = "checking" | "savings" | "credit" | "cash" | "investment" | "other";
 export type CategoryKind = "expense" | "income";
 export type TxType = "expense" | "income" | "transfer";
 export type Frequency = "weekly" | "monthly" | "yearly";
+export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
 
 export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   checking: "Checking",
@@ -29,6 +30,39 @@ export const ACCOUNT_TYPE_ICONS: Record<AccountType, string> = {
   credit: "credit-card",
   cash: "wallet",
   investment: "trending-up",
+  other: "coins",
+};
+
+export const ASSET_CLASS_LABELS: Record<AssetClass, string> = {
+  fixed_income: "Fixed income",
+  treasury: "Treasury",
+  stock: "Stocks",
+  reit: "Real estate funds",
+  etf: "ETFs",
+  fund: "Funds",
+  retirement: "Retirement",
+  other: "Other",
+};
+
+export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
+  fixed_income: "#3d85c6",
+  treasury: "#0b5394",
+  stock: "#6aa84f",
+  reit: "#e69138",
+  etf: "#45818e",
+  fund: "#8e7cc3",
+  retirement: "#c27ba0",
+  other: "#999999",
+};
+
+export const ASSET_CLASS_ICONS: Record<AssetClass, string> = {
+  fixed_income: "landmark",
+  treasury: "shield",
+  stock: "candlestick-chart",
+  reit: "building-2",
+  etf: "layers",
+  fund: "briefcase",
+  retirement: "umbrella",
   other: "coins",
 };
 
@@ -110,6 +144,53 @@ export interface Recurring {
   endDate?: string;
 }
 
+/** One investment position. Values are the latest known, in cents. */
+export interface Asset {
+  id: string;
+  name: string;
+  assetClass: AssetClass;
+  /** ticker or product code, e.g. "PETR4" */
+  code?: string;
+  issuer?: string;
+  /** broker or bank holding it */
+  institution?: string;
+  quantity?: number;
+  /** current net value (after taxes and fees) */
+  value: number;
+  /** current gross value, when known */
+  grossValue?: number;
+  /** amount originally invested, when known */
+  invested?: number;
+  /** percentage of the index, e.g. 110 for "110% CDI" */
+  rate?: number;
+  /** benchmark index, e.g. "CDI", "IPCA" */
+  rateType?: string;
+  /** fixed annual rate in percent, e.g. 5 for "IPCA + 5%" */
+  fixedRate?: number;
+  /** maturity date (YYYY-MM-DD) */
+  dueDate?: string;
+  /** date the value refers to (YYYY-MM-DD) */
+  updatedAt: string;
+  /** fully withdrawn or no longer reported; kept for history, excluded from totals */
+  closed?: boolean;
+  /** Pluggy investment this one mirrors, and the item it belongs to */
+  pluggyId?: string;
+  pluggyItemId?: string;
+}
+
+/** Portfolio total on one day, recorded whenever positions change. */
+export interface PortfolioSnapshot {
+  date: string;
+  value: number;
+  invested: number;
+}
+
+export interface Investments {
+  assets: Asset[];
+  /** oldest first, at most one per day */
+  snapshots: PortfolioSnapshot[];
+}
+
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
 export interface PluggyConfig {
   clientId: string;
@@ -126,6 +207,7 @@ export interface Ledger {
   transactions: Transaction[];
   budgets: Budget[];
   recurring: Recurring[];
+  investments: Investments;
   /** set when bank sync is configured */
   pluggy?: PluggyConfig;
 }
@@ -159,6 +241,7 @@ export function defaultLedger(): Ledger {
     transactions: [],
     budgets: [],
     recurring: [],
+    investments: { assets: [], snapshots: [] },
   };
 }
 
@@ -180,6 +263,7 @@ export function parseLedger(json: string): Ledger {
     transactions: raw.transactions ?? [],
     budgets: raw.budgets ?? [],
     recurring: raw.recurring ?? [],
+    investments: { assets: raw.investments?.assets ?? [], snapshots: raw.investments?.snapshots ?? [] },
     pluggy: raw.pluggy,
   };
 }
@@ -299,8 +383,50 @@ export function accountBalance(ledger: Ledger, accountId: string, upTo?: string)
   return bal;
 }
 
+/** Accounts plus investments. */
 export function netWorth(ledger: Ledger, upTo?: string): number {
-  return ledger.accounts.reduce((sum, a) => sum + accountBalance(ledger, a.id, upTo), 0);
+  return ledger.accounts.reduce((sum, a) => sum + accountBalance(ledger, a.id, upTo), 0) + portfolioValue(ledger, upTo);
+}
+
+// ---- investments ----
+
+export function openAssets(ledger: Ledger): Asset[] {
+  return ledger.investments.assets.filter((a) => !a.closed);
+}
+
+/**
+ * Investment total today, or on `upTo` from the snapshots. Positions only have
+ * a current value, so a date before the first snapshot counts as zero.
+ */
+export function portfolioValue(ledger: Ledger, upTo?: string): number {
+  const current = openAssets(ledger).reduce((s, a) => s + a.value, 0);
+  if (!upTo) return current;
+  const snaps = ledger.investments.snapshots;
+  if (snaps.length && upTo >= snaps[snaps.length - 1].date) return current;
+  let value = 0;
+  for (const s of snaps) if (s.date <= upTo) value = s.value;
+  return value;
+}
+
+/** Amount invested in open positions; positions with unknown cost count at their current value. */
+export function portfolioInvested(ledger: Ledger): number {
+  return openAssets(ledger).reduce((s, a) => s + (a.invested ?? a.value), 0);
+}
+
+/** Current value per asset class, largest first. */
+export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
+  const out = new Map<AssetClass, number>();
+  for (const a of openAssets(ledger)) out.set(a.assetClass, (out.get(a.assetClass) ?? 0) + a.value);
+  return [...out.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+}
+
+/** Record today's portfolio total, replacing an earlier snapshot of the same day. Mutates the ledger. */
+export function recordSnapshot(ledger: Ledger, today: string) {
+  const snaps = ledger.investments.snapshots;
+  const snap = { date: today, value: portfolioValue(ledger), invested: portfolioInvested(ledger) };
+  const last = snaps[snaps.length - 1];
+  if (last?.date === today) snaps[snaps.length - 1] = snap;
+  else if (!last || last.date < today) snaps.push(snap);
 }
 
 export interface MonthSummary {

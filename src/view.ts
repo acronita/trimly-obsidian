@@ -5,6 +5,11 @@ import { AccountModal, CategoryModal, ConfirmModal, RecurringModal, TransactionM
 import {
   ACCOUNT_TYPE_ICONS,
   ACCOUNT_TYPE_LABELS,
+  ASSET_CLASS_COLORS,
+  ASSET_CLASS_ICONS,
+  ASSET_CLASS_LABELS,
+  Asset,
+  AssetClass,
   Category,
   CategoryKind,
   FREQUENCY_LABELS,
@@ -14,12 +19,16 @@ import {
   TxType,
   accountBalance,
   accountInUse,
+  allocationByClass,
   centsToInput,
   monthOf,
   monthSummary,
   monthlyHistory,
   netWorth,
+  openAssets,
   parseAmount,
+  portfolioInvested,
+  portfolioValue,
   postDueRecurring,
   removeCategory,
   shiftMonth,
@@ -32,16 +41,31 @@ import {
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "categories";
+type Mode = "accounts" | "investments";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "categories" | "inv-overview" | "portfolio";
 
-const TABS: { id: Tab; label: string; icon: string }[] = [
-  { id: "overview", label: "Overview", icon: "layout-dashboard" },
-  { id: "transactions", label: "Transactions", icon: "arrow-left-right" },
-  { id: "accounts", label: "Accounts", icon: "landmark" },
-  { id: "budgets", label: "Budgets", icon: "target" },
-  { id: "recurring", label: "Recurring", icon: "repeat" },
-  { id: "categories", label: "Categories", icon: "tags" },
+const MODES: { id: Mode; label: string; icon: string }[] = [
+  { id: "accounts", label: "Accounts", icon: "wallet" },
+  { id: "investments", label: "Investments", icon: "trending-up" },
 ];
+
+const TABS: Record<Mode, { id: Tab; label: string; icon: string }[]> = {
+  accounts: [
+    { id: "overview", label: "Overview", icon: "layout-dashboard" },
+    { id: "transactions", label: "Transactions", icon: "arrow-left-right" },
+    { id: "accounts", label: "Accounts", icon: "landmark" },
+    { id: "budgets", label: "Budgets", icon: "target" },
+    { id: "recurring", label: "Recurring", icon: "repeat" },
+    { id: "categories", label: "Categories", icon: "tags" },
+  ],
+  investments: [
+    { id: "inv-overview", label: "Overview", icon: "layout-dashboard" },
+    { id: "portfolio", label: "Portfolio", icon: "briefcase" },
+  ],
+};
+
+/** Maturities shown on the investments overview. */
+const MATURITY_HORIZON_DAYS = 365;
 
 const NEUTRAL = "#8a8a8a";
 
@@ -54,7 +78,9 @@ interface TxFilter {
 }
 
 export class TrimlyView extends ItemView {
-  private tab: Tab = "overview";
+  private mode: Mode = "accounts";
+  /** active tab of each mode, so switching back returns to it */
+  private tabs: Record<Mode, Tab> = { accounts: "overview", investments: "inv-overview" };
   private month = monthOf(todayISO());
   private filter: TxFilter = { text: "", accountId: "", categoryId: "", type: "", allMonths: false };
 
@@ -90,7 +116,7 @@ export class TrimlyView extends ItemView {
     const page = root.createDiv("trimly-page");
     this.renderHeader(page);
     const body = page.createDiv("trimly-body");
-    switch (this.tab) {
+    switch (this.tabs[this.mode]) {
       case "overview":
         this.renderOverview(body, ledger);
         break;
@@ -108,6 +134,12 @@ export class TrimlyView extends ItemView {
         break;
       case "categories":
         this.renderCategories(body, ledger);
+        break;
+      case "inv-overview":
+        this.renderInvestmentsOverview(body, ledger);
+        break;
+      case "portfolio":
+        this.renderPortfolio(body, ledger);
         break;
     }
     root.scrollTop = scroll;
@@ -191,7 +223,13 @@ export class TrimlyView extends ItemView {
   }
 
   private goTab(t: Tab) {
-    this.tab = t;
+    this.tabs[this.mode] = t;
+    this.contentEl.scrollTop = 0;
+    this.render();
+  }
+
+  private setMode(m: Mode) {
+    this.mode = m;
     this.contentEl.scrollTop = 0;
     this.render();
   }
@@ -211,19 +249,16 @@ export class TrimlyView extends ItemView {
 
   private renderHeader(page: HTMLElement) {
     const top = page.createDiv("trimly-topbar");
-    const nav = top.createDiv("trimly-month-nav");
-    const prev = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Previous month" } });
-    setIcon(prev, "chevron-left");
-    prev.addEventListener("click", () => this.setMonth(shiftMonth(this.month, -1)));
-    nav.createDiv({ cls: "trimly-month-label", text: this.monthLabel(this.month) });
-    const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Next month" } });
-    setIcon(next, "chevron-right");
-    next.addEventListener("click", () => this.setMonth(shiftMonth(this.month, 1)));
-    const current = monthOf(todayISO());
-    if (this.month !== current) {
-      const today = nav.createEl("button", { cls: "trimly-pill", text: "This month" });
-      today.addEventListener("click", () => this.setMonth(current));
+    const left = top.createDiv("trimly-top-left");
+    const modes = left.createDiv("trimly-segmented");
+    for (const m of MODES) {
+      const b = modes.createEl("button", { attr: { "aria-label": m.label } });
+      setIcon(b.createSpan("trimly-seg-icon"), m.icon);
+      b.createSpan({ text: m.label });
+      if (m.id === this.mode) b.addClass("is-active");
+      b.addEventListener("click", () => this.setMode(m.id));
     }
+    if (this.mode === "accounts") this.renderMonthNav(left);
 
     const actions = top.createDiv("trimly-top-actions");
     if (this.plugin.ledger?.pluggy) {
@@ -240,18 +275,36 @@ export class TrimlyView extends ItemView {
     const lock = actions.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Lock Trimly" } });
     setIcon(lock, "lock");
     lock.addEventListener("click", () => this.plugin.lock());
-    const add = actions.createEl("button", { cls: "mod-cta trimly-add" });
-    setIcon(add.createSpan("trimly-add-icon"), "plus");
-    add.createSpan({ text: "New transaction" });
-    add.addEventListener("click", () => this.plugin.openTransactionModal(null));
+    if (this.mode === "accounts") {
+      const add = actions.createEl("button", { cls: "mod-cta trimly-add" });
+      setIcon(add.createSpan("trimly-add-icon"), "plus");
+      add.createSpan({ text: "New transaction" });
+      add.addEventListener("click", () => this.plugin.openTransactionModal(null));
+    }
 
     const tabs = page.createDiv("trimly-tabs");
-    for (const t of TABS) {
+    for (const t of TABS[this.mode]) {
       const el = tabs.createEl("button", { cls: "trimly-tab" });
       setIcon(el.createSpan("trimly-tab-icon"), t.icon);
       el.createSpan({ text: t.label });
-      if (t.id === this.tab) el.addClass("is-active");
+      if (t.id === this.tabs[this.mode]) el.addClass("is-active");
       el.addEventListener("click", () => this.goTab(t.id));
+    }
+  }
+
+  private renderMonthNav(parent: HTMLElement) {
+    const nav = parent.createDiv("trimly-month-nav");
+    const prev = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Previous month" } });
+    setIcon(prev, "chevron-left");
+    prev.addEventListener("click", () => this.setMonth(shiftMonth(this.month, -1)));
+    nav.createDiv({ cls: "trimly-month-label", text: this.monthLabel(this.month) });
+    const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": "Next month" } });
+    setIcon(next, "chevron-right");
+    next.addEventListener("click", () => this.setMonth(shiftMonth(this.month, 1)));
+    const current = monthOf(todayISO());
+    if (this.month !== current) {
+      const today = nav.createEl("button", { cls: "trimly-pill", text: "This month" });
+      today.addEventListener("click", () => this.setMonth(current));
     }
   }
 
@@ -266,6 +319,8 @@ export class TrimlyView extends ItemView {
     const monthEnd = `${this.month}-31`;
     const sum = monthSummary(ledger, this.month);
     const activeAccounts = ledger.accounts.filter((a) => !a.archived);
+    const positions = openAssets(ledger).length;
+    const invested = portfolioValue(ledger, monthEnd);
 
     // hero: net worth + this month's flow
     const hero = body.createDiv("trimly-hero");
@@ -274,7 +329,10 @@ export class TrimlyView extends ItemView {
     left.createDiv({ cls: "trimly-hero-value", text: this.money(netWorth(ledger, monthEnd)) });
     left.createDiv({
       cls: "trimly-muted",
-      text: `Across ${activeAccounts.length} account${activeAccounts.length === 1 ? "" : "s"}, end of ${this.monthLabel(this.month)}`,
+      text:
+        `Across ${activeAccounts.length} account${activeAccounts.length === 1 ? "" : "s"}` +
+        (invested ? ` and ${this.money(invested)} invested` : "") +
+        `, end of ${this.monthLabel(this.month)}`,
     });
     const stats = hero.createDiv("trimly-hero-stats");
     this.heroStat(stats, "Income", sum.income, "arrow-down-left", "is-income");
@@ -308,6 +366,15 @@ export class TrimlyView extends ItemView {
       const bal = accountBalance(ledger, a.id, monthEnd);
       row.createDiv({ cls: `trimly-amount ${bal < 0 ? "is-expense" : ""}`, text: this.money(bal) });
       row.addEventListener("click", () => this.editAccount(a.id));
+    }
+    if (positions) {
+      const row = accCard.createDiv("trimly-row is-clickable");
+      this.iconTile(row, "trending-up", "var(--interactive-accent)");
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: "Investments" });
+      main.createDiv({ cls: "trimly-row-sub", text: `${positions} position${positions === 1 ? "" : "s"}` });
+      row.createDiv({ cls: "trimly-amount", text: this.money(invested) });
+      row.addEventListener("click", () => this.setMode("investments"));
     }
 
     const recentCard = this.card(row2, "Recent activity", { label: "All", onClick: () => this.goTab("transactions") });
@@ -526,6 +593,8 @@ export class TrimlyView extends ItemView {
     const t = head.createDiv();
     t.createDiv({ cls: "trimly-eyebrow", text: "Net worth" });
     t.createDiv({ cls: "trimly-page-value", text: this.money(netWorth(ledger)) });
+    const invested = portfolioValue(ledger);
+    if (invested) t.createDiv({ cls: "trimly-muted", text: `Includes ${this.money(invested)} in investments` });
 
     const grid = body.createDiv("trimly-tiles");
     const sorted = [...ledger.accounts].sort((a, b) => Number(!!a.archived) - Number(!!b.archived));
@@ -740,6 +809,169 @@ export class TrimlyView extends ItemView {
             ).open()
         : null
     ).open();
+  }
+
+  // ---- investments ----
+
+  private pct(value: number, digits = 1) {
+    return `${new Intl.NumberFormat(this.plugin.locale(), { maximumFractionDigits: digits }).format(value)}%`;
+  }
+
+  /** "110% CDI", "IPCA + 5% p.a.", "12% p.a."; empty when unknown. */
+  private rateLabel(a: Asset) {
+    const fixed = a.fixedRate ? `${this.pct(a.fixedRate, 2)} p.a.` : "";
+    if (!a.rateType) return fixed;
+    if (fixed) return a.rate && a.rate !== 100 ? `${this.pct(a.rate, 2)} ${a.rateType} + ${fixed}` : `${a.rateType} + ${fixed}`;
+    return a.rate ? `${this.pct(a.rate, 2)} ${a.rateType}` : a.rateType;
+  }
+
+  private longDate(iso: string) {
+    return this.fmt({ day: "numeric", month: "short", year: "numeric" }, this.parseDate(iso));
+  }
+
+  private assetRow(parent: HTMLElement, a: Asset) {
+    const row = parent.createDiv("trimly-row");
+    if (a.closed) row.addClass("is-archived");
+    this.iconTile(row, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
+    const main = row.createDiv("trimly-row-main");
+    main.createDiv({ cls: "trimly-row-title", text: a.code && !a.name.includes(a.code) ? `${a.code} · ${a.name}` : a.name });
+    const sub = [a.institution, this.rateLabel(a), a.dueDate && `due ${this.longDate(a.dueDate)}`].filter(Boolean);
+    if (a.quantity && (a.assetClass === "stock" || a.assetClass === "reit" || a.assetClass === "etf")) sub.unshift(`${a.quantity} units`);
+    main.createDiv({ cls: "trimly-row-sub", text: sub.join(" · ") || ASSET_CLASS_LABELS[a.assetClass] });
+    const end = row.createDiv("trimly-row-end");
+    end.createDiv({ cls: "trimly-amount", text: this.money(a.value) });
+    if (a.invested) {
+      const p = a.value - a.invested;
+      end.createDiv({
+        cls: `trimly-row-sub ${p >= 0 ? "is-income" : "is-expense"}`,
+        text: `${p >= 0 ? "+" : "−"}${this.money(Math.abs(p))} · ${this.pct((p / a.invested) * 100)}`,
+      });
+    }
+  }
+
+  private emptyInvestments(parent: HTMLElement) {
+    const card = parent.createDiv("trimly-card");
+    this.empty(
+      card,
+      "trending-up",
+      this.plugin.ledger?.pluggy
+        ? "No investments found. Bank sync imports them when the connected Pluggy items include the investments product."
+        : "Investments are imported by bank sync. Set up Pluggy in Trimly's settings to bring them in."
+    );
+  }
+
+  private renderInvestmentsOverview(body: HTMLElement, ledger: Ledger) {
+    const assets = openAssets(ledger);
+    if (assets.length === 0) return this.emptyInvestments(body);
+    const total = portfolioValue(ledger);
+    const cost = portfolioInvested(ledger);
+    const updated = assets.reduce((d, a) => (a.updatedAt > d ? a.updatedAt : d), "");
+
+    const hero = body.createDiv("trimly-hero");
+    const left = hero.createDiv("trimly-hero-main");
+    left.createDiv({ cls: "trimly-eyebrow", text: "Portfolio" });
+    left.createDiv({ cls: "trimly-hero-value", text: this.money(total) });
+    left.createDiv({
+      cls: "trimly-muted",
+      text: `${assets.length} position${assets.length === 1 ? "" : "s"} · updated ${this.longDate(updated)}`,
+    });
+    const stats = hero.createDiv("trimly-hero-stats");
+    this.heroStat(stats, "Invested", cost, "piggy-bank", "is-accent");
+    const gain = total - cost;
+    this.heroStat(
+      stats,
+      cost > 0 ? `Profit · ${this.pct((gain / cost) * 100)}` : "Profit",
+      gain,
+      gain >= 0 ? "arrow-up-right" : "arrow-down-right",
+      gain >= 0 ? "is-income" : "is-expense"
+    );
+    const taxes = assets.reduce((s, a) => s + (a.grossValue !== undefined ? Math.max(0, a.grossValue - a.value) : 0), 0);
+    this.heroStat(stats, "Taxes and fees due", taxes, "receipt", "is-expense");
+
+    const row1 = body.createDiv("trimly-grid");
+    this.renderAllocationCard(row1, ledger, total);
+    const instCard = this.card(row1, "By institution");
+    const byInst = new Map<string, number>();
+    for (const a of assets) {
+      const name = a.institution ?? "Unknown";
+      byInst.set(name, (byInst.get(name) ?? 0) + a.value);
+    }
+    for (const [name, value] of [...byInst.entries()].sort((a, b) => b[1] - a[1])) {
+      const row = instCard.createDiv("trimly-inst-row");
+      const head = row.createDiv("trimly-legend-row");
+      head.createSpan({ cls: "trimly-legend-name", text: name });
+      head.createSpan({ cls: "trimly-legend-pct", text: this.pct((value / total) * 100, 0) });
+      head.createSpan({ cls: "trimly-amount", text: this.money(value) });
+      this.progress(row, value, total, "var(--interactive-accent)");
+    }
+
+    const row2 = body.createDiv("trimly-grid");
+    const topCard = this.card(row2, "Largest positions", { label: "Portfolio", onClick: () => this.goTab("portfolio") });
+    for (const a of [...assets].sort((x, y) => y.value - x.value).slice(0, 6)) this.assetRow(topCard, a);
+
+    const dueCard = this.card(row2, "Upcoming maturities");
+    const today = todayISO();
+    const horizon = toISODate(new Date(Date.now() + MATURITY_HORIZON_DAYS * 86400000));
+    const due = assets
+      .filter((a): a is Asset & { dueDate: string } => !!a.dueDate && a.dueDate >= today && a.dueDate <= horizon)
+      .sort((x, y) => (x.dueDate < y.dueDate ? -1 : 1));
+    if (due.length === 0) this.empty(dueCard, "calendar", "Nothing matures in the next 12 months.");
+    for (const a of due.slice(0, 6)) this.assetRow(dueCard, a);
+  }
+
+  private renderAllocationCard(parent: HTMLElement, ledger: Ledger, total: number) {
+    const card = this.card(parent, "Allocation");
+    const wrap = card.createDiv("trimly-spending");
+    const alloc = allocationByClass(ledger);
+    donut(
+      wrap,
+      alloc.map(([c, value]) => ({ value, color: ASSET_CLASS_COLORS[c] })),
+      (c) => {
+        c.createDiv({ cls: "trimly-eyebrow", text: "Classes" });
+        c.createDiv({ cls: "trimly-donut-value", text: String(alloc.length) });
+      }
+    );
+    const legend = wrap.createDiv("trimly-legend");
+    for (const [c, value] of alloc) {
+      const row = legend.createDiv("trimly-legend-row");
+      row.createSpan("trimly-dot").setCssProps({ "--trimly-color": ASSET_CLASS_COLORS[c] });
+      row.createSpan({ cls: "trimly-legend-name", text: ASSET_CLASS_LABELS[c] });
+      row.createSpan({ cls: "trimly-legend-pct", text: this.pct((value / total) * 100, 0) });
+      row.createSpan({ cls: "trimly-amount", text: this.money(value) });
+    }
+  }
+
+  private renderPortfolio(body: HTMLElement, ledger: Ledger) {
+    const assets = openAssets(ledger);
+    const closed = ledger.investments.assets.filter((a) => a.closed);
+    if (assets.length === 0 && closed.length === 0) return this.emptyInvestments(body);
+    const total = portfolioValue(ledger);
+
+    const head = body.createDiv("trimly-page-head");
+    const t = head.createDiv();
+    t.createDiv({ cls: "trimly-eyebrow", text: "Portfolio" });
+    t.createDiv({ cls: "trimly-page-value", text: this.money(total) });
+
+    const byClass = new Map<AssetClass, Asset[]>();
+    for (const a of assets) byClass.set(a.assetClass, [...(byClass.get(a.assetClass) ?? []), a]);
+    for (const [c, value] of allocationByClass(ledger)) {
+      const list = (byClass.get(c) ?? []).sort((x, y) => y.value - x.value);
+      body.createDiv({ cls: "trimly-section-title", text: `${ASSET_CLASS_LABELS[c]} · ${this.money(value)} · ${this.pct((value / total) * 100, 0)}` });
+      const card = body.createDiv("trimly-card");
+      for (const a of list) this.assetRow(card, a);
+    }
+    // the allocation leaves out positions worth nothing, but they are still held
+    const zero = assets.filter((a) => a.value <= 0);
+    if (zero.length) {
+      body.createDiv({ cls: "trimly-section-title", text: "No value reported" });
+      const card = body.createDiv("trimly-card");
+      for (const a of zero) this.assetRow(card, a);
+    }
+    if (closed.length) {
+      body.createDiv({ cls: "trimly-section-title", text: `Closed · ${closed.length}` });
+      const card = body.createDiv("trimly-card");
+      for (const a of closed) this.assetRow(card, a);
+    }
   }
 
   // ---- categories ----

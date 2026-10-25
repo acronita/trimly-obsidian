@@ -1,5 +1,6 @@
 import { RequestUrlResponse, requestUrl } from "obsidian";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "./bank-sync";
+import type { PluggyInvestment } from "./investment-sync";
 import type { PluggyConfig } from "./ledger";
 
 /**
@@ -66,17 +67,56 @@ async function fetchCategories(apiKey: string): Promise<PluggyCategory[]> {
   }
 }
 
-/** Accounts of every configured item plus their transactions dated `dateFrom` or later. */
-export async function fetchBankData(config: PluggyConfig, dateFrom: string): Promise<BankData> {
+export interface InvestmentData {
+  investments: PluggyInvestment[];
+  /** items whose investments loaded; only their positions may be closed as gone */
+  itemIds: string[];
+  /** one message per item whose investments could not be loaded */
+  errors: string[];
+}
+
+export interface SyncData {
+  bank: BankData;
+  investments: InvestmentData;
+}
+
+async function fetchInvestments(apiKey: string, itemId: string): Promise<PluggyInvestment[]> {
+  const out: PluggyInvestment[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const res = await get<{ results: PluggyInvestment[]; totalPages?: number }>(
+      apiKey,
+      "/investments",
+      { itemId, page: String(page) },
+      `Loading investments of item ${itemId}`
+    );
+    out.push(...res.results);
+    if (!res.totalPages || page >= res.totalPages) break;
+  }
+  return out;
+}
+
+/**
+ * Accounts of every configured item plus their transactions dated `dateFrom` or
+ * later, and the items' investment positions. A failure loading investments
+ * (e.g. the item has no investments product) does not fail the bank sync.
+ */
+export async function fetchBankData(config: PluggyConfig, dateFrom: string): Promise<SyncData> {
   const apiKey = await authenticate(config);
   const accounts: PluggyAccount[] = [];
   const transactions: PluggyTransaction[] = [];
+  const investments: InvestmentData = { investments: [], itemIds: [], errors: [] };
   for (const itemId of config.itemIds) {
     const page = await get<{ results: PluggyAccount[] }>(apiKey, "/accounts", { itemId }, `Loading accounts of item ${itemId}`);
     for (const acc of page.results) {
       accounts.push(acc);
       transactions.push(...(await fetchTransactions(apiKey, acc.id, dateFrom)));
     }
+    try {
+      investments.investments.push(...(await fetchInvestments(apiKey, itemId)));
+      investments.itemIds.push(itemId);
+    } catch (e) {
+      investments.errors.push((e as Error).message);
+    }
   }
-  return { accounts, transactions, categories: await fetchCategories(apiKey) };
+  return { bank: { accounts, transactions, categories: await fetchCategories(apiKey) }, investments };
 }

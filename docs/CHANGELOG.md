@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0 — 2026-10-25
+
+- 2026-10-25 — Investments mode, phase 1. A switch at the top of the dashboard toggles between
+  *Accounts* (the existing tabs) and *Investments*, which has its own tabs: Overview (portfolio
+  value, amount invested, profit, taxes and fees due, allocation by class, value by institution,
+  largest positions, maturities in the next 12 months) and Portfolio (positions grouped by class,
+  with rate, maturity and profit; closed positions listed apart). Bank sync now also fetches each
+  item's positions from Pluggy's `/investments` and records one portfolio snapshot per day, which
+  later phases chart. A failure loading an item's investments shows a notice and does not fail the
+  bank sync or close that item's positions. Net worth in Accounts mode now includes investments
+  (from the snapshots for past months). Ledger format bumped to version 3 (new `investments` with
+  `assets[]` and `snapshots[]`); 0.2.0 refuses v3 ledgers. Why: Pluggy already has the investment
+  data and Trimly showed none of it. Files touched: `src/investment-sync.ts`, `src/pluggy.ts`,
+  `src/ledger.ts`, `src/main.ts`, `src/view.ts`, `src/styles/index.css`,
+  `test/investment-sync.test.ts`, `test/ledger.test.ts`, `README.md`, `docs/`.
+
 ## 0.2.0 — 2026-10-25
 
 - 2026-10-25 — Optional bank sync through Pluggy (Open Finance / Meu Pluggy). Imports accounts and the

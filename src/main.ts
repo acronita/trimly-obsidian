@@ -1,6 +1,7 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile, moment } from "obsidian";
 import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
+import { applyInvestments } from "./investment-sync";
 import { Ledger, Transaction, defaultLedger, formatMoney, localeForCurrency, postDueRecurring, toISODate, todayISO } from "./ledger";
 import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
@@ -252,17 +253,22 @@ export default class TrimlyPlugin extends Plugin {
     let summary = "";
     await this.mutate((ledger) => {
       if (!ledger.pluggy) return;
-      const r = applyBankData(ledger, data, windowStart, todayISO(now));
+      const r = applyBankData(ledger, data.bank, windowStart, todayISO(now));
+      const inv = applyInvestments(ledger, data.investments.investments, data.investments.itemIds, todayISO(now));
       ledger.pluggy.lastSync = now.toISOString();
       const parts = [
         r.accountsCreated && `${r.accountsCreated} new account${r.accountsCreated === 1 ? "" : "s"}`,
         r.added && `${r.added} new`,
         r.updated && `${r.updated} updated`,
         r.removed && `${r.removed} removed`,
+        inv.added && `${inv.added} new investment${inv.added === 1 ? "" : "s"}`,
+        inv.closed && `${inv.closed} investment${inv.closed === 1 ? "" : "s"} closed`,
       ].filter(Boolean);
       summary = parts.length ? `Bank sync: ${parts.join(", ")}.` : quiet ? "" : "Bank sync: everything up to date.";
     });
     if (summary) new Notice(summary);
+    // investments are optional per item, but a failure must not pass silently
+    if (data.investments.errors.length) new Notice(`Trimly: investments not updated: ${data.investments.errors.join("; ")}`);
   }
 
   changePassphrase() {

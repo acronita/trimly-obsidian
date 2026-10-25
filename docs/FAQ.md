@@ -23,6 +23,11 @@ Change *Folder* in settings, then move `ledger.trimly` into the new folder yours
 Yes, optionally, through Pluggy — see *Bank sync* in the README. Credit card purchases may show as
 pending until the bank settles them; they update in place on a later sync.
 
+**My investments don't show up.**
+They come from bank sync. The connected Pluggy item must include the investments product; if
+loading them fails, the sync shows a notice with Pluggy's error. Positions only have history from
+your first sync on, since Pluggy reports current values only.
+
 **I deleted an imported transaction and it came back.**
 Synced accounts mirror the bank for the last 90 days, so the next sync restores anything the bank
 still lists. Recategorize or edit the description instead; those changes are kept.

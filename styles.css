@@ -52,6 +52,12 @@
   gap: 12px;
   margin-bottom: 14px;
 }
+.trimly-top-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
 .trimly-month-nav {
   display: flex;
   align-items: center;
@@ -326,6 +332,15 @@ button.trimly-add {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.trimly-row-end {
+  text-align: right;
+}
+.trimly-inst-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px 0;
 }
 .trimly-inline-icon {
   display: inline-flex;
@@ -773,7 +788,8 @@ input.trimly-limit-input {
   border-radius: 12px;
   background: var(--background-modifier-hover);
 }
-.trimly-modal .trimly-segmented button {
+.trimly-modal .trimly-segmented button,
+.trimly-view .trimly-segmented button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -784,7 +800,8 @@ input.trimly-limit-input {
   box-shadow: none;
   color: var(--text-muted);
 }
-.trimly-modal .trimly-segmented button.is-active {
+.trimly-modal .trimly-segmented button.is-active,
+.trimly-view .trimly-segmented button.is-active {
   background: var(--background-primary);
   box-shadow: var(--shadow-s);
   color: var(--text-normal);
@@ -893,6 +910,9 @@ input.trimly-amount-input:focus {
     display: none;
   }
   .trimly-add span:not(.trimly-add-icon) {
+    display: none;
+  }
+  .trimly-segmented span:not(.trimly-seg-icon) {
     display: none;
   }
 }

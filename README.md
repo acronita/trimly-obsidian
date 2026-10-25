@@ -19,6 +19,9 @@ passphrase that never leaves your device.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives.
 - **Categories** — default expense/income categories, fully editable, with colors and icons.
+- **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
+  profit, allocation by class and institution, upcoming maturities, and every position grouped by
+  class. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
   through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
   purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).
@@ -71,6 +74,11 @@ the bank no longer lists are removed, and a manually deleted imported entry come
 description and notes on an imported entry are kept. The dashboard syncs on unlock (at most every
 6 hours) and from the refresh button. Categories are filled in only while your Pluggy plan includes
 categorization.
+
+Bank sync also imports the investment positions of each item (fixed income, treasury, stocks, real
+estate funds, funds, ETFs, retirement plans) when the item includes Pluggy's investments product.
+Each sync overwrites their values and records the day's portfolio total, so the history starts with
+your first sync. A position the item stops reporting is shown as closed.
 
 ## Development
 
