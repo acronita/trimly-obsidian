@@ -8,11 +8,13 @@ import {
   AccountType,
   Category,
   CategoryKind,
+  DueObligation,
   Frequency,
   Ledger,
   Movement,
   MovementType,
   Obligation,
+  ObligationFrequency,
   ObligationKind,
   Recurring,
   Settlement,
@@ -20,7 +22,10 @@ import {
   TxType,
   centsToInput,
   newId,
+  paidOn,
   parseAmount,
+  payableOccurrences,
+  paymentOf,
   settlementFor,
   todayISO,
 } from "./ledger";
@@ -280,7 +285,9 @@ export class TransactionModal extends Modal {
     private onSave: (tx: Transaction) => void,
     private onDelete: ((tx: Transaction) => void) | null,
     /** existing transactions only: saves it, then opens its recurring rule (a new one built from it when unlinked) */
-    private onRecurring: ((tx: Transaction) => void) | null = null
+    private onRecurring: ((tx: Transaction) => void) | null = null,
+    /** existing transactions only: saves it, then links it as the payment of an obligation occurrence (null unlinks it) */
+    private payment: { dateLabel: (iso: string) => string; onLink: (tx: Transaction, target: DueObligation | null) => void } | null = null
   ) {
     super(app);
     const firstAccount = ledger.accounts.find((a) => !a.archived)?.id ?? "";
@@ -330,6 +337,7 @@ export class TransactionModal extends Modal {
           })
         );
     }
+    if (this.payment) this.renderPayment(contentEl, errorEl, this.payment);
     footer(
       contentEl,
       errorEl,
@@ -337,6 +345,45 @@ export class TransactionModal extends Modal {
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
       () => this.close()
     );
+  }
+
+  /** Which obligation payment this transaction is, with a way to link or unlink it. */
+  private renderPayment(
+    contentEl: HTMLElement,
+    errorEl: HTMLElement,
+    { dateLabel, onLink }: NonNullable<TransactionModal["payment"]>
+  ) {
+    const m = t.modals.tx;
+    const link = (target: DueObligation | null) => {
+      const err = this.save();
+      if (err) return errorEl.setText(err);
+      this.close();
+      onLink(this.draft, target);
+    };
+    const linked = paymentOf(this.ledger, this.draft.id);
+    if (linked) {
+      new Setting(contentEl)
+        .setName(m.payment)
+        .setDesc(m.paymentOf(linked.obligation.name, dateLabel(linked.settlement.due)))
+        .addButton((b) => b.setButtonText(m.unlinkPayment).onClick(() => link(null)));
+      return;
+    }
+    if (this.draft.type === "income") return;
+    const options = payableOccurrences(this.ledger, this.draft);
+    if (options.length === 0) {
+      new Setting(contentEl).setName(m.payment).setDesc(m.noPayable);
+      return;
+    }
+    let picked = 0;
+    new Setting(contentEl)
+      .setName(m.payment)
+      .setDesc(m.paymentDesc)
+      .addDropdown((d) =>
+        d
+          .addOptions(Object.fromEntries(options.map((o, i) => [String(i), m.dueOption(o.obligation.name, dateLabel(o.due))])))
+          .onChange((v) => (picked = Number(v)))
+      )
+      .addButton((b) => b.setButtonText(m.linkPayment).onClick(() => link(options[picked])));
   }
 
   onClose() {
@@ -882,7 +929,7 @@ export class ObligationModal extends Modal {
     super(app);
     this.draft = existing
       ? { ...existing }
-      : { id: newId(), name: "", kind: "payment", frequency: "monthly", startDate: todayISO(), remindDays: 3, settled: [] };
+      : { id: newId(), name: "", kind: "payment", frequency: "monthly", day: 10, since: todayISO(), remindDays: 3, settled: [] };
   }
 
   onOpen() {
@@ -915,11 +962,39 @@ export class ObligationModal extends Modal {
       );
     new Setting(contentEl).setName(m.repeats).addDropdown((d) =>
       d
-        .addOptions(t.labels.frequency)
+        .addOptions({ monthly: t.labels.frequency.monthly, yearly: t.labels.frequency.yearly })
         .setValue(this.draft.frequency)
-        .onChange((v) => (this.draft.frequency = v as Frequency))
+        .onChange((v) => {
+          this.draft.frequency = v as ObligationFrequency;
+          this.render();
+        })
     );
-    dateSetting(contentEl, m.firstDue, this.draft.startDate, (v) => (this.draft.startDate = v));
+    const isDoc = this.draft.kind === "document";
+    const yearly = this.draft.frequency === "yearly";
+    let day = String(this.draft.day);
+    let endDay = String(this.draft.endDay ?? "");
+    let month = this.draft.month ?? 1;
+    let endMonth = this.draft.endMonth ?? month;
+    const months = Object.fromEntries(t.labels.months.map((name, i) => [String(i + 1), name]));
+    // yearly ones pick the month next to the day
+    const dayRow = (name: string, desc: string, value: string, onDay: (v: string) => void, monthValue: number, onMonth: (v: number) => void) => {
+      const row = new Setting(contentEl).setName(name).setDesc(desc);
+      if (yearly) row.addDropdown((d) => d.addOptions(months).setValue(String(monthValue)).onChange((v) => onMonth(Number(v))));
+      row.addText((text) => {
+        text.inputEl.type = "number";
+        text.setPlaceholder(m.dayPlaceholder);
+        text.setValue(value).onChange(onDay);
+      });
+    };
+    dayRow(
+      isDoc ? m.startDay : m.dueDay,
+      isDoc ? m.startDayDesc : yearly ? m.dueDayYearlyDesc : m.dueDayDesc,
+      day,
+      (v) => (day = v),
+      month,
+      (v) => (month = v)
+    );
+    if (isDoc) dayRow(m.endDay, m.endDayDesc, endDay, (v) => (endDay = v), endMonth, (v) => (endMonth = v));
     let amountValid = true;
     if (this.draft.kind === "payment") {
       new Setting(contentEl).setName(m.amount).addText((text) => {
@@ -936,23 +1011,43 @@ export class ObligationModal extends Modal {
       text.inputEl.type = "number";
       text.setValue(remind).onChange((v) => (remind = v));
     });
-    dateSetting(contentEl, m.endDate, this.draft.endDate ?? "", (v) => (this.draft.endDate = v || undefined));
     new Setting(contentEl).setName(m.notes).addTextArea((text) =>
       text.setValue(this.draft.notes ?? "").onChange((v) => (this.draft.notes = v || undefined))
     );
+    if (this.onDelete) {
+      new Setting(contentEl)
+        .setName(m.archived)
+        .setDesc(m.archivedDesc)
+        .addToggle((tg) => tg.setValue(!!this.draft.archived).onChange((v) => (this.draft.archived = v || undefined)));
+    }
     const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
     footer(
       contentEl,
       errorEl,
       () => {
         if (!this.draft.name.trim()) return t.common.addName;
-        if (!this.draft.startDate) return t.common.pickDate;
+        const first = Number(day);
+        const last = isDoc && endDay.trim() ? Number(endDay) : first;
+        const lastMonth = isDoc && yearly ? endMonth : month;
+        const validDay = (n: number) => Number.isInteger(n) && n >= 1 && n <= 31;
+        if (!validDay(first) || !validDay(last)) return m.dayInvalid;
+        if (lastMonth * 100 + last < month * 100 + first) return m.endBeforeStart;
         if (!amountValid) return t.common.notValidAmount;
         const days = Number(remind);
         if (!Number.isInteger(days) || days < 0 || days > 60) return m.remindInvalid;
         this.draft.remindDays = days;
         this.draft.name = this.draft.name.trim();
+        this.draft.day = first;
+        if (last !== first) this.draft.endDay = last;
+        else delete this.draft.endDay;
+        if (yearly) this.draft.month = month;
+        else delete this.draft.month;
+        if (yearly && lastMonth !== month) this.draft.endMonth = lastMonth;
+        else delete this.draft.endMonth;
         if (this.draft.kind !== "payment") delete this.draft.amount;
+        // a new one starts with the current month (or year), so what was already done in it can be recorded
+        const today = todayISO();
+        if (!this.onDelete) this.draft.since = yearly ? `${today.slice(0, 4)}-01-01` : `${today.slice(0, 7)}-01`;
         this.onSave(this.draft);
         return null;
       },
@@ -1004,11 +1099,21 @@ export class SettleModal extends Modal {
             .onChange((v) => (transactionId = v))
         );
     }
-    dateSetting(contentEl, m.date, date, (v) => (date = v));
+    const isPayment = this.obligation.kind === "payment";
+    new Setting(contentEl)
+      .setName(isPayment ? m.paidOn : m.sentOn)
+      .setDesc(isPayment ? m.paidOnDesc : "")
+      .addText((text) => {
+        text.inputEl.type = "date";
+        text.setValue(date);
+        text.onChange((v) => (date = v));
+      });
     if (this.obligation.notes) contentEl.createEl("p", { cls: "setting-item-description", text: this.obligation.notes });
     const settle = (status: Settlement["status"]) => {
-      const s: Settlement = { due: this.due, status, date: date || todayISO() };
-      if (status === "done" && transactionId) s.transactionId = transactionId;
+      const s: Settlement =
+        status === "done"
+          ? paidOn(this.obligation, this.due, date || todayISO(), transactionId || undefined)
+          : { due: this.due, status, date: date || todayISO() };
       this.close();
       this.onSettle(s);
     };
@@ -1026,7 +1131,7 @@ export class SettleModal extends Modal {
     }
     buttons
       .addButton((b) => b.setButtonText(m.skip).onClick(() => settle("skipped")))
-      .addButton((b) => b.setButtonText(m.done).setCta().onClick(() => settle("done")));
+      .addButton((b) => b.setButtonText(existing ? t.common.save : isPayment ? m.paid : m.sent).setCta().onClick(() => settle("done")));
   }
 
   onClose() {

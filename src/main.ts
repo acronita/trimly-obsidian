@@ -12,6 +12,7 @@ import {
   defaultLedger,
   foreignCurrencies,
   formatMoney,
+  linkObligationPayments,
   localeForCurrency,
   obligationReminders,
   postDueRecurring,
@@ -258,10 +259,10 @@ export default class TrimlyPlugin extends Plugin {
       const ledger = await this.store.load(passphrase);
       this.ledger = ledger;
       const posted = postDueRecurring(ledger, todayISO());
-      if (posted) {
-        await this.store.save(ledger);
-        new Notice(t.recurring.posted(posted));
-      }
+      const paid = linkObligationPayments(ledger, todayISO());
+      if (posted || paid) await this.store.save(ledger);
+      if (posted) new Notice(t.recurring.posted(posted));
+      if (paid) new Notice(t.obligations.autoLinked(paid));
       return null;
     } catch (e) {
       if (e instanceof WrongPassphraseError) return t.notices.wrongPassphrase;
@@ -428,6 +429,7 @@ export default class TrimlyPlugin extends Plugin {
       ledger.pluggy.lastSync = now.toISOString();
       // link the charges just imported to the recurring rules on synced accounts
       postDueRecurring(ledger, todayISO(now));
+      const paid = linkObligationPayments(ledger, todayISO(now));
       const n = t.notices;
       const parts = [
         r.accountsCreated && n.newAccounts(r.accountsCreated),
@@ -437,6 +439,7 @@ export default class TrimlyPlugin extends Plugin {
         inv.added && n.newInvestments(inv.added),
         inv.closed && n.closedInvestments(inv.closed),
         inv.movements && n.investmentMovements(inv.movements),
+        paid && t.obligations.autoLinked(paid),
       ].filter((x): x is string => !!x);
       // say when Pluggy reports no investments at all, so an empty Investments tab is explainable
       if (!quiet && !data.investments.errors.length && data.investments.investments.length === 0) {
