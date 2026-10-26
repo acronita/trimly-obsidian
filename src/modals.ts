@@ -8,6 +8,7 @@ import {
   AccountType,
   Category,
   CategoryKind,
+  DueObligation,
   Frequency,
   Ledger,
   Movement,
@@ -23,6 +24,8 @@ import {
   newId,
   paidOn,
   parseAmount,
+  payableOccurrences,
+  paymentOf,
   settlementFor,
   todayISO,
 } from "./ledger";
@@ -282,7 +285,9 @@ export class TransactionModal extends Modal {
     private onSave: (tx: Transaction) => void,
     private onDelete: ((tx: Transaction) => void) | null,
     /** existing transactions only: saves it, then opens its recurring rule (a new one built from it when unlinked) */
-    private onRecurring: ((tx: Transaction) => void) | null = null
+    private onRecurring: ((tx: Transaction) => void) | null = null,
+    /** existing transactions only: saves it, then links it as the payment of an obligation occurrence (null unlinks it) */
+    private payment: { dateLabel: (iso: string) => string; onLink: (tx: Transaction, target: DueObligation | null) => void } | null = null
   ) {
     super(app);
     const firstAccount = ledger.accounts.find((a) => !a.archived)?.id ?? "";
@@ -332,6 +337,7 @@ export class TransactionModal extends Modal {
           })
         );
     }
+    if (this.payment) this.renderPayment(contentEl, errorEl, this.payment);
     footer(
       contentEl,
       errorEl,
@@ -339,6 +345,45 @@ export class TransactionModal extends Modal {
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
       () => this.close()
     );
+  }
+
+  /** Which obligation payment this transaction is, with a way to link or unlink it. */
+  private renderPayment(
+    contentEl: HTMLElement,
+    errorEl: HTMLElement,
+    { dateLabel, onLink }: NonNullable<TransactionModal["payment"]>
+  ) {
+    const m = t.modals.tx;
+    const link = (target: DueObligation | null) => {
+      const err = this.save();
+      if (err) return errorEl.setText(err);
+      this.close();
+      onLink(this.draft, target);
+    };
+    const linked = paymentOf(this.ledger, this.draft.id);
+    if (linked) {
+      new Setting(contentEl)
+        .setName(m.payment)
+        .setDesc(m.paymentOf(linked.obligation.name, dateLabel(linked.settlement.due)))
+        .addButton((b) => b.setButtonText(m.unlinkPayment).onClick(() => link(null)));
+      return;
+    }
+    if (this.draft.type === "income") return;
+    const options = payableOccurrences(this.ledger, this.draft);
+    if (options.length === 0) {
+      new Setting(contentEl).setName(m.payment).setDesc(m.noPayable);
+      return;
+    }
+    let picked = 0;
+    new Setting(contentEl)
+      .setName(m.payment)
+      .setDesc(m.paymentDesc)
+      .addDropdown((d) =>
+        d
+          .addOptions(Object.fromEntries(options.map((o, i) => [String(i), m.dueOption(o.obligation.name, dateLabel(o.due))])))
+          .onChange((v) => (picked = Number(v)))
+      )
+      .addButton((b) => b.setButtonText(m.linkPayment).onClick(() => link(options[picked])));
   }
 
   onClose() {

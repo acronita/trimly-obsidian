@@ -103,6 +103,26 @@ button.trimly-add {
 .trimly-add-icon {
   display: flex;
 }
+button.trimly-add.is-icon {
+  padding: 0;
+  width: 34px;
+  justify-content: center;
+}
+.trimly-section-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.trimly-section-hint {
+  margin-bottom: 12px;
+  font-size: var(--font-ui-smaller);
+}
+.trimly-row.is-projected .trimly-amount {
+  opacity: 0.6;
+}
 .trimly-add-icon svg {
   width: 16px;
   height: 16px;
@@ -214,6 +234,55 @@ button.trimly-add {
 .trimly-hero-stat.is-accent {
   --trimly-tone: var(--interactive-accent);
 }
+.trimly-bill-callout {
+  --trimly-tone: var(--trimly-warn);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--trimly-radius);
+  border-left: 3px solid var(--trimly-tone);
+  background: color-mix(in srgb, var(--trimly-tone) 12%, transparent);
+  cursor: pointer;
+}
+.trimly-bill-callout.is-overdue {
+  --trimly-tone: var(--trimly-expense);
+}
+.trimly-bill-callout:hover {
+  background: color-mix(in srgb, var(--trimly-tone) 20%, transparent);
+}
+.trimly-bill-callout-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.trimly-bill-callout-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  column-gap: 10px;
+}
+.trimly-bill-callout-icon {
+  display: flex;
+  flex-shrink: 0;
+  color: var(--trimly-tone);
+}
+.trimly-bill-callout-icon svg {
+  width: 16px;
+  height: 16px;
+}
+.trimly-bill-callout .trimly-eyebrow {
+  color: var(--trimly-tone);
+}
+.trimly-bill-callout-value {
+  font-size: 1.15em;
+  font-weight: var(--font-bold);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
 .trimly-hero-stat-value {
   font-size: 1.15em;
   font-weight: var(--font-bold);
@@ -271,6 +340,15 @@ button.trimly-add {
 .trimly-card-title {
   font-weight: var(--font-semibold);
   font-size: var(--font-ui-medium);
+}
+.trimly-fold-head {
+  cursor: pointer;
+}
+.trimly-fold-head.is-folded {
+  margin-bottom: 0;
+}
+.trimly-hidden {
+  display: none;
 }
 .trimly-card-foot {
   margin-top: 10px;

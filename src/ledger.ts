@@ -176,6 +176,8 @@ export interface Obligation {
   notes?: string;
   /** occurrences dealt with */
   settled: Settlement[];
+  /** payments: description of the last transaction linked as its payment; later ones like it are linked automatically */
+  payee?: string;
 }
 
 export interface Settlement {
@@ -1079,27 +1081,62 @@ function words(s: string): string[] {
     .filter((w) => w.length >= 3);
 }
 
-/** The imported transaction that best fits the rule's next occurrence, if any. */
-function syncedCharge(ledger: Ledger, r: Recurring): Transaction | undefined {
-  const ruleWords = words(r.description);
+/** What a transaction is expected to look like, to find it among the ledger's. */
+export interface ExpectedTx {
+  /** description or name; sharing a word with it is the strongest sign */
+  text: string;
+  /** expected amount in cents; unset = any */
+  amount?: number;
+  /** expected date */
+  date: string;
+  /** farthest a match may be from `date`, in days */
+  maxDays: number;
+  /** without a shared word, how far (as a fraction) the amount may drift; unset = any amount */
+  amountTolerance?: number;
+  /** only transactions sharing a word with `text` match */
+  requireName?: boolean;
+}
+
+/**
+ * How well a transaction fits an expected one, lower is better; undefined when
+ * it does not fit. A shared word beats any amount; then the closest amount,
+ * then the closest date.
+ */
+export function matchScore(tx: Transaction, e: ExpectedTx): number | undefined {
+  const days = daysBetween(tx.date, e.date);
+  if (days > e.maxDays) return undefined;
+  const expected = words(e.text);
+  const named = words(tx.description).some((w) => expected.includes(w));
+  const drift = e.amount ? Math.abs(tx.amount - e.amount) / e.amount : 0;
+  if (!named && (e.requireName || (e.amountTolerance !== undefined && drift > e.amountTolerance))) return undefined;
+  return (named ? 0 : 1000) + drift * 100 + days;
+}
+
+/** The transaction among `txs` that best fits `e`, if any. */
+export function bestMatch(txs: Transaction[], e: ExpectedTx): Transaction | undefined {
   let best: Transaction | undefined;
   let bestScore = Infinity;
-  for (const tx of ledger.transactions) {
-    if (!tx.pluggyIds?.length || tx.recurringId || tx.type !== r.type || tx.accountId !== r.accountId) continue;
-    if (r.type === "transfer" && tx.toAccountId !== r.toAccountId) continue;
-    const days = daysBetween(tx.date, r.nextDate);
-    if (days > LINK_DAYS) continue;
-    const named = words(tx.description).some((w) => ruleWords.includes(w));
-    const drift = Math.abs(tx.amount - r.amount) / r.amount;
-    if (!named && drift > LINK_AMOUNT_TOLERANCE) continue;
-    // a matching name beats any amount; then the closest amount, then the closest date
-    const score = (named ? 0 : 1000) + drift * 100 + days;
-    if (score < bestScore) {
+  for (const tx of txs) {
+    const score = matchScore(tx, e);
+    if (score !== undefined && score < bestScore) {
       best = tx;
       bestScore = score;
     }
   }
   return best;
+}
+
+/** The imported transaction that best fits the rule's next occurrence, if any. */
+function syncedCharge(ledger: Ledger, r: Recurring): Transaction | undefined {
+  const pool = ledger.transactions.filter(
+    (tx) =>
+      tx.pluggyIds?.length &&
+      !tx.recurringId &&
+      tx.type === r.type &&
+      tx.accountId === r.accountId &&
+      (r.type !== "transfer" || tx.toAccountId === r.toAccountId)
+  );
+  return bestMatch(pool, { text: r.description, amount: r.amount, date: r.nextDate, maxDays: LINK_DAYS, amountTolerance: LINK_AMOUNT_TOLERANCE });
 }
 
 /**
@@ -1233,20 +1270,108 @@ export function paidOn(o: Obligation, due: string, date: string, transactionId?:
 export interface DueObligation {
   obligation: Obligation;
   due: string;
+  /** a credit card's bill, built from the card: paying it (a transfer into the card) settles it, not a mark */
+  cardId?: string;
+  /** a card bill not closed yet: its amount is what was charged so far */
+  projected?: boolean;
 }
 
-/** Open occurrences of every obligation due on or before `until`, soonest first. */
-export function dueObligations(ledger: Ledger, until: string): DueObligation[] {
-  return ledger.obligations
-    .flatMap((obligation) => openOccurrences(obligation, until).map((due) => ({ obligation, due })))
-    .sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.obligation.name.localeCompare(b.obligation.name)));
+/**
+ * What a payment is expected to cost: its usual amount, else what its last
+ * linked payment cost, else 0. Documents cost nothing.
+ */
+export function expectedAmount(ledger: Ledger, o: Obligation): number {
+  if (o.kind !== "payment") return 0;
+  if (o.amount) return o.amount;
+  const last = [...o.settled]
+    .filter((s) => s.transactionId)
+    .sort((a, b) => (a.due < b.due ? 1 : -1))
+    .map((s) => ledger.transactions.find((tx) => tx.id === s.transactionId))
+    .find((tx) => tx);
+  return last?.amount ?? 0;
+}
+
+/** What an open occurrence will cost, in the settings' currency; documents cost nothing. */
+export function dueAmount(ledger: Ledger, d: DueObligation): number {
+  if (d.cardId) return toBase(ledger, d.obligation.amount ?? 0, accountCurrency(ledger, d.cardId));
+  return expectedAmount(ledger, d.obligation);
+}
+
+/**
+ * The payments of `today`'s month, in the settings' currency: what is still to
+ * pay of what is due by the month's end (overdue ones from earlier months and
+ * open card bills included), and what was already paid of what is due in it.
+ * A bill paid without a linked transaction counts at its expected amount.
+ */
+export function monthPayments(ledger: Ledger, today: string): { toPay: number; paid: number; open: DueObligation[] } {
+  const month = monthOf(today);
+  const open = dueObligations(ledger, `${month}-31`, today);
+  const toPay = open.reduce((sum, d) => sum + dueAmount(ledger, d), 0);
+  let paid = 0;
+  for (const o of ledger.obligations) {
+    if (o.kind !== "payment") continue;
+    for (const s of o.settled) {
+      if (s.status !== "done" || monthOf(s.due) !== month) continue;
+      const tx = s.transactionId ? ledger.transactions.find((x) => x.id === s.transactionId) : undefined;
+      paid += tx ? baseAmount(ledger, tx) : expectedAmount(ledger, o);
+    }
+  }
+  for (const a of ledger.accounts) {
+    if (a.type !== "credit" || a.archived || !a.dueDay) continue;
+    for (const offset of [-2, -1, 0]) {
+      const bill = cardBill(ledger, a.id, today, offset);
+      if (bill.due && monthOf(bill.due) === month && bill.total > 0) paid += toBase(ledger, bill.total - bill.remaining, a.currency);
+    }
+  }
+  return { toPay, paid, open };
+}
+
+/** Days before a card bill's due date it is reminded of, like a new obligation's default. */
+const CARD_BILL_REMIND_DAYS = 3;
+
+/**
+ * Credit card bills as obligations, for each card with a due day: the last
+ * closed bill while part of it is unpaid, and the open bill as a projection of
+ * what was charged so far. They are not stored; the amount is what is left to pay.
+ */
+export function cardBillObligations(ledger: Ledger, today: string): DueObligation[] {
+  return ledger.accounts.flatMap((a) => {
+    const dueDay = a.dueDay;
+    if (a.type !== "credit" || a.archived || !dueDay) return [];
+    const { closed, open } = cardBills(ledger, a.id, today);
+    return [closed, open].flatMap((bill, i): DueObligation[] => {
+      if (!bill.due || bill.remaining <= 0) return [];
+      const projected = i === 1;
+      const obligation: Obligation = {
+        id: `card:${a.id}${projected ? ":open" : ""}`,
+        name: t.obligations.cardBill(a.name),
+        kind: "payment",
+        frequency: "monthly",
+        day: dueDay,
+        since: bill.start,
+        amount: bill.remaining,
+        remindDays: CARD_BILL_REMIND_DAYS,
+        settled: [],
+      };
+      return [projected ? { obligation, due: bill.due, cardId: a.id, projected } : { obligation, due: bill.due, cardId: a.id }];
+    });
+  });
+}
+
+/** Open occurrences of every obligation, card bills included, due on or before `until`, soonest first. */
+export function dueObligations(ledger: Ledger, until: string, today: string): DueObligation[] {
+  return [
+    ...ledger.obligations.flatMap((obligation) => openOccurrences(obligation, until).map((due) => ({ obligation, due }))),
+    ...cardBillObligations(ledger, today).filter((d) => d.due <= until),
+  ].sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.obligation.name.localeCompare(b.obligation.name)));
 }
 
 /** Open occurrences inside their reminder window on `today`, overdue ones included. */
 export function obligationReminders(ledger: Ledger, today: string): DueObligation[] {
-  const horizon = Math.max(0, ...ledger.obligations.map((o) => o.remindDays));
+  const horizon = Math.max(CARD_BILL_REMIND_DAYS, ...ledger.obligations.map((o) => o.remindDays));
   const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + horizon * 86_400_000));
-  return dueObligations(ledger, until).filter((d) => daysUntil(today, d.due) <= d.obligation.remindDays);
+  // an open card bill is not reminded of: it closes, and is reminded of then
+  return dueObligations(ledger, until, today).filter((d) => !d.projected && daysUntil(today, d.due) <= d.obligation.remindDays);
 }
 
 /** Mark one occurrence as done or skipped, replacing an earlier mark for the same period. */
@@ -1264,6 +1389,16 @@ export function unsettleObligation(o: Obligation, due: string) {
 /** Days around a due date searched for the payment of an obligation. */
 const PAYMENT_SEARCH_DAYS = 15;
 
+/** Ids of the transactions already linked to an obligation payment. */
+function linkedPayments(ledger: Ledger): Set<string | undefined> {
+  return new Set(ledger.obligations.flatMap((x) => x.settled.map((s) => s.transactionId)));
+}
+
+/** What the payment of an occurrence is expected to look like. */
+function expectedPayment(o: Obligation, due: string): ExpectedTx {
+  return { text: o.payee ? `${o.name} ${o.payee}` : o.name, amount: o.amount, date: due, maxDays: PAYMENT_SEARCH_DAYS };
+}
+
 /**
  * Transactions that may be the payment of an occurrence: money going out
  * (expenses and transfers, e.g. paying a card bill) near the due date and not
@@ -1271,16 +1406,90 @@ const PAYMENT_SEARCH_DAYS = 15;
  * amount, then closest date.
  */
 export function paymentCandidates(ledger: Ledger, o: Obligation, due: string): Transaction[] {
-  const taken = new Set(ledger.obligations.flatMap((x) => x.settled.map((s) => s.transactionId)));
+  const taken = linkedPayments(ledger);
   const own = settlementFor(o, due)?.transactionId;
-  const nameWords = words(o.name);
-  const score = (tx: Transaction) =>
-    (words(tx.description).some((w) => nameWords.includes(w)) ? 0 : 1000) +
-    (o.amount ? (Math.abs(tx.amount - o.amount) / o.amount) * 100 : 0) +
-    daysBetween(tx.date, due);
+  const expected = expectedPayment(o, due);
   return ledger.transactions
-    .filter((tx) => tx.type !== "income" && daysBetween(tx.date, due) <= PAYMENT_SEARCH_DAYS && (tx.id === own || !taken.has(tx.id)))
-    .sort((a, b) => score(a) - score(b));
+    .filter((tx) => tx.type !== "income" && (tx.id === own || !taken.has(tx.id)))
+    .map((tx) => ({ tx, score: matchScore(tx, expected) }))
+    .filter((x): x is { tx: Transaction; score: number } => x.score !== undefined)
+    .sort((a, b) => a.score - b.score)
+    .map((x) => x.tx);
+}
+
+/**
+ * Mark an occurrence paid by `tx`, on the day it happened, and remember it:
+ * its description, so later payments that look like it are linked
+ * automatically, and its amount as the usual one, to project the next.
+ */
+export function linkPayment(o: Obligation, due: string, tx: Transaction) {
+  settleObligation(o, { due, status: "done", date: tx.date, transactionId: tx.id });
+  learnPayment(o, tx);
+}
+
+/** Remember a payment's description and amount for the next ones. */
+export function learnPayment(o: Obligation, tx: Transaction) {
+  o.payee = tx.description;
+  o.amount = tx.amount;
+}
+
+/** The obligation occurrence a transaction paid, if it is linked to one. */
+export function paymentOf(ledger: Ledger, txId: string): { obligation: Obligation; settlement: Settlement } | undefined {
+  for (const obligation of ledger.obligations) {
+    const settlement = obligation.settled.find((s) => s.transactionId === txId);
+    if (settlement) return { obligation, settlement };
+  }
+  return undefined;
+}
+
+/** Days around a transaction searched for the bill it may have paid, when linking it by hand. */
+const PAYABLE_DAYS = 45;
+
+/**
+ * For each payment obligation, the occurrence a transaction may have paid: the
+ * one due closest to its date, within PAYABLE_DAYS, not linked to another
+ * transaction yet. Likeliest first (same name, then amount, then date).
+ */
+export function payableOccurrences(ledger: Ledger, tx: Transaction): DueObligation[] {
+  const out: { d: DueObligation; score: number }[] = [];
+  if (tx.type === "income") return [];
+  for (const obligation of ledger.obligations) {
+    if (obligation.kind !== "payment" || obligation.archived) continue;
+    let best: { d: DueObligation; score: number } | undefined;
+    for (const due of dueDates(obligation)) {
+      if (due > tx.date && daysBetween(due, tx.date) > PAYABLE_DAYS) break;
+      const linked = settlementFor(obligation, due)?.transactionId;
+      if (linked && linked !== tx.id) continue;
+      const score = matchScore(tx, { ...expectedPayment(obligation, due), maxDays: PAYABLE_DAYS });
+      if (score !== undefined && (!best || score < best.score)) best = { d: { obligation, due }, score };
+    }
+    if (best) out.push(best);
+  }
+  return out.sort((a, b) => a.score - b.score).map((x) => x.d);
+}
+
+/**
+ * Link the payments of obligations that were linked to a transaction before
+ * (so they know what their payment looks like) to the transactions that look
+ * like it: same words as that payment, near the due date, up to `today`.
+ * Occurrences already marked are left alone. Returns how many were linked.
+ */
+export function linkObligationPayments(ledger: Ledger, today: string): number {
+  const taken = linkedPayments(ledger);
+  const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + PAYMENT_SEARCH_DAYS * 86_400_000));
+  let linked = 0;
+  for (const o of ledger.obligations) {
+    if (o.kind !== "payment" || !o.payee) continue;
+    for (const due of openOccurrences(o, until)) {
+      const pool = ledger.transactions.filter((tx) => tx.type !== "income" && tx.date <= today && !taken.has(tx.id));
+      const tx = bestMatch(pool, { ...expectedPayment(o, due), text: o.payee, requireName: true });
+      if (!tx) continue;
+      linkPayment(o, due, tx);
+      taken.add(tx.id);
+      linked++;
+    }
+  }
+  return linked;
 }
 
 /** Drop references to a deleted category so transactions show as uncategorized. */

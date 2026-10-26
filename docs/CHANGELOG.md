@@ -1,5 +1,50 @@
 # Changelog
 
+## 0.11.0 — 2026-10-26
+
+- 2026-10-26 — The *Obrigações* tab is split by a switch into *A fazer* (what is due in the next 30
+  days, in *Atrasadas*, *Próximos 7 dias* and *De 8 a 30 dias* cards, with *Feitas recentemente*
+  folded below) and *Cadastradas* (everything registered, to edit, in *Faturas de cartão*, *Contas a
+  pagar* and *Documentos* cards, alphabetical in each), each with a one-line hint, and a
+  *Nova obrigação* button beside the switch. The summary chips show amounts, not just counts:
+  overdue, due in 7 days and *A pagar neste mês*, card bills and projections included; amounts
+  there and in both lists are red when there is something to pay and neutral at R$ 0,00. *A fazer*
+  is a timeline: each item by the next date that matters (a document's window opening while it is
+  ahead, else the due date), soonest first. The month total is what is left to pay of everything due by the month's end (overdue
+  ones included), with what was already paid of this month's bills under it (*R$ … já pago*: linked
+  transactions, else the expected amount, plus card bill payments), so the month's whole cost is
+  visible (`monthPayments`). A bill is
+  projected at its usual amount, which now follows its last linked payment (linking a payment sets
+  it), else at its last linked payment's amount, else at an explicit R$ 0,00. A card's open bill
+  shows up too, as a projection (*previsão, fatura ainda aberta*) at what was charged so far, and is
+  not reminded of until it closes. The closed bill box on cards puts its label on its own line and
+  wraps the amount and due date, so it fits narrow panes. The header's *+ Nova transação* is now a
+  *+* button that opens a menu: transaction, recurring, obligation, account or category
+  (investments: position or movement). Why: the tab mixed what to do with what is registered, the
+  totals were 0 without usual amounts and left out what was already paid, open card bills were missing, the add button was easy to
+  miss, and the closed bill box was cut in narrow panes. Files touched: `src/ledger.ts`,
+  `src/view.ts`, `src/styles/index.css`, `src/i18n/*`, `test/obligations.test.ts`,
+  `test/card-bills.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `manifest.json`, `package.json`, `versions.json`.
+- 2026-10-26 — A transaction can be linked as the payment of a bill from the transaction editor
+  (*Pagamento de obrigação*, shown for every expense or transfer: each bill offers its occurrence
+  due closest to the transaction, within 45 days, or the field says no bill is due nearby; a linked
+  transaction can be unlinked there), besides the bill's own
+  *Transação do pagamento* field. A linked bill remembers the transaction's description (new
+  optional `payee` field on obligations; ledger version unchanged) and its next payments that look
+  like it — sharing a word with it, outgoing, within 15 days of the due date — are linked by
+  themselves on unlock, after bank sync and when a transaction is saved, with a notice saying how
+  many. The similarity check is now one generic function (`matchScore`/`bestMatch`) used by synced
+  recurring rules, payment suggestions and this. Credit cards with a due day now appear in
+  *Obrigações*: the last closed bill while part of it is unpaid, with what is left, reminded 3
+  days before; clicking it opens the bill, and paying it removes it. *Feitas recentemente* is
+  folded by default, and the other two lists are renamed *A fazer nos próximos 30 dias* and
+  *Obrigações cadastradas*. In *Contas* and the overview, a card's closed bill still to pay is a
+  tinted box (orange, red once overdue) with its amount and due date, instead of a muted line;
+  clicking it opens that bill. Why: linking each month's bill by hand was repetitive, card bills were
+  missing from the checklist, the tab was crowded and its lists easy to mix up, and an unpaid closed bill was easy to miss. Files touched:
+  `src/ledger.ts`, `src/main.ts`, `src/modals.ts`, `src/view.ts`, `src/styles/index.css`,
+  `src/i18n/*`, `test/obligations.test.ts`, `test/card-bills.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`.
 ## 0.10.0 — 2026-10-25
 
 - 2026-10-25 — Obligations are set by day, not by date. Bills take a due day; documents a start
