@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   defaultLedger,
   dueObligations,
+  estimatedBills,
   expectedAmount,
   linkObligationPayments,
   linkPayment,
@@ -248,4 +249,16 @@ test("obligations saved with full dates (0.9.0) load as days, and past end dates
   assert.deepEqual([weekly.frequency, weekly.day], ["monthly", 5]);
   // the months already open stay open after the migration
   assert.deepEqual(openOccurrences(monthly, TODAY), ["2026-08-10", "2026-09-10", "2026-10-10"]);
+});
+
+test("the recurring tab's estimate of bills paid by hand counts each once, per month", () => {
+  const light = obligation({ amount: 180_00 });
+  const ipva = obligation({ id: "ipva", name: "IPVA", frequency: "yearly", month: 1, amount: 1200_00 });
+  const irpf = obligation({ id: "irpf", name: "IRPF", kind: "document" });
+  const old = obligation({ id: "old", amount: 99_00, archived: true });
+  // rent already posted by a recurring rule: counting it here too would charge it twice
+  const rent = obligation({ id: "rent", name: "Aluguel", amount: 2000_00, settled: [{ due: "2026-10-10", status: "done", date: "2026-10-10", transactionId: "r1" }] });
+  const l = ledgerWith(light, ipva, irpf, old, rent);
+  l.transactions.push({ id: "r1", date: "2026-10-10", type: "expense", amount: 2000_00, accountId: l.accounts[0].id, description: "Aluguel", recurringId: "rule" });
+  assert.deepEqual(estimatedBills(l).map((b) => [b.obligation.id, b.monthly]), [["light", 180_00], ["ipva", 100_00]]);
 });
