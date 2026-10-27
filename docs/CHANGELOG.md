@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.12.4 — 2026-10-27
+
+- 2026-10-27 — The card's *Dia de fechamento* setting is now *Último dia da fatura*, and its
+  description says to use the day before when the bank's closing day already sends purchases to
+  the next bill (as at Nubank). Why: the field holds the last day of the cycle, but its name read
+  as the bank's closing day, so a Nubank card set to its closing day put the bill payment made that
+  day on the previous bill. Files touched: `src/i18n/*`, `docs/FAQ.md`.
+
 ## 0.12.3 — 2026-10-27
 
 - 2026-10-27 — Reverts 0.12.1: a card bill's cycle again includes its closing day, so a purchase on

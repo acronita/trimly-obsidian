@@ -547,8 +547,9 @@ export const en: Strings = {
       openingDesc: "Balance before your first recorded transaction. Use a negative value for debt.",
       archived: "Archived",
       archivedDesc: "Hide from pickers and the overview. History is kept.",
-      closingDay: "Closing day",
-      closingDayDesc: "Last day of the bill cycle; purchases after it go to the next bill. Empty: the bill follows the month.",
+      closingDay: "Last day of the bill",
+      closingDayDesc:
+        "Last day a purchase still goes into the bill that is closing. If the bank says the bill closes on day X and that day's purchases already go to the next one (as at Nubank), use X − 1. Empty: the bill follows the month.",
       dueDay: "Due day",
       dueDayDesc: "Day the closed bill is due.",
       dayInvalid: "Use a day between 1 and 31.",
