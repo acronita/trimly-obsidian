@@ -77,8 +77,7 @@ categorization, edit the two entries by hand: delete one and turn the other into
 
 **My credit card bill amount looks wrong.**
 Set the card's closing day (and due day) in its account modal: without it the bill follows the
-calendar month. A bill closes on its closing day, so purchases made that day go to the next
-bill. Synced cards take both from the bank when blank, and their limit on every sync. A payment only counts when it is
+calendar month. Synced cards take both from the bank when blank, and their limit on every sync. A payment only counts when it is
 a transfer from another account into the card; a bill paid from a bank Trimly doesn't sync shows
 as income on the card and lowers the open bill instead. Turn it into a transfer from the paying
 account to fix that.

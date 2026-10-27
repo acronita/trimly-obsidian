@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.12.3 — 2026-10-27
+
+- 2026-10-27 — Reverts 0.12.1: a card bill's cycle again includes its closing day, so a purchase on
+  that day stays in the bill closing, which only shows as closed the next day. Why: that matches
+  the user's cards after all. Files touched: `src/ledger.ts`, `src/view.ts`,
+  `test/card-bills.test.ts`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`.
+
 ## 0.12.2 — 2026-10-27
 
 - 2026-10-27 — A card bill payment that the bank reports twice on the card is counted once. Some
