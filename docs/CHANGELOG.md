@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.12.1 — 2026-10-27
+
+- 2026-10-27 — A card bill now closes on its closing day: the cycle runs from the previous closing
+  day to the day before the next one, so a purchase on the closing day goes to the next bill, and
+  payments from the closing day on pay the bill that just closed. Bills gain an `end` field (last
+  day of the cycle), used for the period shown and the bill's month. A card with no closing day
+  still follows the calendar month. Why: on its closing day the bill still showed as open and was
+  not counted as an obligation, unlike Brazilian banks, where the closing day is the best day to
+  buy. Files touched: `src/ledger.ts`, `src/view.ts`, `test/card-bills.test.ts`, `docs/FAQ.md`,
+  `docs/ARCHITECTURE.md`.
+
 ## 0.12.0 — 2026-10-26
 
 - 2026-10-26 — The *Recorrentes* tab gets a read-only *Contas variáveis* card below *Assinaturas*:
