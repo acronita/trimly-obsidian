@@ -152,7 +152,7 @@ function isOwnTransfer(leg: Leg): boolean {
  * a transfer; a bank-to-bank move only pairs when Pluggy says it is a
  * same-person transfer, since equal amounts between banks are often unrelated.
  * Some banks (C6, Nubank) report a paid bill on the card a second time, under
- * another name; that copy is dropped, or it would count as income.
+ * another name and any category; that copy is dropped, or it would count as income.
  */
 function pairTransfers(legs: Leg[]): Rec[] {
   const ins = legs.filter((l) => l.cents > 0);
@@ -188,7 +188,7 @@ function pairTransfers(legs: Leg[]): Rec[] {
   const copied = new Set<Leg>();
   for (const l of legs) {
     if (used.has(l)) continue;
-    if (l.onCard && l.cents > 0 && (l.path.length === 0 || isOwnTransfer(l))) {
+    if (l.onCard && l.cents > 0) {
       const paid = payments.find(
         (p) => !copied.has(p) && p.accountId === l.accountId && p.cents === l.cents && daysBetween(p.date, l.date) <= TRANSFER_MATCH_DAYS
       );
