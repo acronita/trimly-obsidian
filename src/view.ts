@@ -38,6 +38,8 @@ import {
   monthlyAmount,
   monthlyHistory,
   netWorth,
+  estimatedBills,
+  pendingRecurringIncome,
   openAssets,
   parseAmount,
   portfolioInvested,
@@ -490,8 +492,14 @@ export class TrimlyView extends ItemView {
     const stats = hero.createDiv("trimly-hero-stats");
     this.heroStat(stats, t.common.income, sum.income, "arrow-down-left", "is-income");
     this.heroStat(stats, t.common.expenses, sum.expense, "arrow-up-right", "is-expense");
-    const rate = sum.income > 0 ? Math.round((sum.net / sum.income) * 100) : null;
-    this.heroStat(stats, rate === null ? t.common.net : t.overview.saved(rate), sum.net, "piggy-bank", sum.net >= 0 ? "is-accent" : "is-expense");
+    // before a late payday, show how the month ends once the expected income lands
+    const pending = pendingRecurringIncome(ledger, this.month);
+    const income = sum.income + pending;
+    const net = sum.net + pending;
+    const rate = income > 0 ? Math.round((net / income) * 100) : null;
+    const label = rate === null ? t.common.net : pending > 0 ? t.overview.projected(rate) : t.overview.saved(rate);
+    const stat = this.heroStat(stats, label, net, "piggy-bank", net >= 0 ? "is-accent" : "is-expense");
+    if (pending > 0) stat.createDiv({ cls: "trimly-hero-stat-sub", text: t.overview.actual(this.money(sum.net)) });
     if (sum.income > 0 || sum.expense > 0) {
       const flow = hero.createDiv("trimly-flow");
       const spentPct = sum.income > 0 ? Math.min(100, (sum.expense / sum.income) * 100) : 100;
@@ -569,12 +577,14 @@ export class TrimlyView extends ItemView {
     wrap.addEventListener("click", () => this.showAccountTransactions(a.id));
   }
 
-  private heroStat(parent: HTMLElement, label: string, cents: number, icon: string, cls: string) {
+  /** Returns the text column, for an optional line under the value. */
+  private heroStat(parent: HTMLElement, label: string, cents: number, icon: string, cls: string): HTMLElement {
     const el = parent.createDiv(`trimly-hero-stat ${cls}`);
     setIcon(el.createDiv("trimly-hero-stat-icon"), icon);
     const txt = el.createDiv();
     txt.createDiv({ cls: "trimly-eyebrow", text: label });
     txt.createDiv({ cls: "trimly-hero-stat-value", text: this.money(cents) });
+    return txt;
   }
 
   private renderCashFlowCard(parent: HTMLElement, ledger: Ledger) {
@@ -1094,7 +1104,14 @@ export class TrimlyView extends ItemView {
     chip(t.recurring.fixedCosts, `−${this.money(Math.round(monthlyOut))}`, "is-expense");
     chip(t.recurring.leftAfterFixed, this.money(Math.round(monthlyIn - monthlyOut)), monthlyIn >= monthlyOut ? "is-income" : "is-expense");
 
-    const card = this.card(body, t.recurring.title, { label: t.common.add, onClick: () => this.editRecurring(null) });
+    const bar = body.createDiv("trimly-section-bar");
+    bar.createDiv({ cls: "trimly-muted", text: t.recurring.hint });
+    const add = bar.createEl("button", { cls: "mod-cta trimly-add" });
+    setIcon(add.createSpan("trimly-add-icon"), "plus");
+    add.createSpan({ text: t.recurring.add });
+    add.addEventListener("click", () => this.editRecurring(null));
+
+    const card = this.card(body, t.recurring.title);
     if (ledger.recurring.length === 0) {
       this.empty(card, "repeat", t.recurring.empty, {
         label: t.recurring.add,
@@ -1105,6 +1122,33 @@ export class TrimlyView extends ItemView {
     for (const r of sorted) if (!r.subscription) this.recurringRow(card, ledger, r);
 
     this.renderSubscriptions(body, ledger, sorted.filter((r) => r.subscription));
+    this.renderEstimatedBills(body, ledger);
+  }
+
+  /** Bills paid by hand, from Obligations, read only: completes the month's outflow without posting anything. */
+  private renderEstimatedBills(body: HTMLElement, ledger: Ledger) {
+    const bills = estimatedBills(ledger);
+    if (bills.length === 0) return;
+    const card = this.card(body, t.recurring.estimatedBills, { label: t.recurring.obligationsLink, onClick: () => this.goTab("obligations") });
+    card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.recurring.estimatedBillsHint });
+    let monthly = 0;
+    for (const { obligation: o, monthly: m } of bills) {
+      monthly += m;
+      const row = card.createDiv("trimly-row is-clickable");
+      this.iconTile(row, OBLIGATION_ICONS[o.kind], NEUTRAL);
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: o.name });
+      const parts = [t.labels.frequency[o.frequency]];
+      if (o.frequency === "yearly") parts.push(t.recurring.perMonth(this.money(Math.round(m))));
+      main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
+      row.createDiv({ cls: "trimly-amount is-expense", text: `−${this.money(expectedAmount(ledger, o))}` });
+      row.addEventListener("click", () => this.editObligation(o.id));
+    }
+    const foot = card.createDiv("trimly-total-foot");
+    foot.createDiv({ cls: "trimly-eyebrow", text: t.recurring.estimatedBillsTotal });
+    const sums = foot.createDiv("trimly-total-foot-values");
+    sums.createDiv({ cls: "trimly-total-foot-value is-expense", text: t.recurring.perMonth(this.money(Math.round(monthly))) });
+    sums.createDiv({ cls: "trimly-muted", text: t.recurring.perYear(this.money(Math.round(monthly * 12))) });
   }
 
   /** What each subscription costs per year and how its price moved, to judge whether it is worth keeping. */

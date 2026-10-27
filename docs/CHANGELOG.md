@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.12.0 — 2026-10-26
+
+- 2026-10-26 — The *Recorrentes* tab gets a read-only *Contas variáveis* card below *Assinaturas*:
+  every active payment obligation with its expected amount (yearly ones also shown per month,
+  `estimatedBills`), costliest first, and a monthly and yearly total at the bottom; a row opens the
+  obligation, the header links to *Obrigações*. Card bills are left out (their purchases are already
+  transactions), and so is a bill whose linked payment was posted by a recurring rule, so nothing is
+  counted twice. No recurring rule or transaction is created from obligations, and the summary chips
+  still show recurring rules only. Why: the tab is where the monthly outflow is forecast, and bills
+  paid by hand were missing from it. Files touched: `src/ledger.ts`, `src/view.ts`, `src/i18n/*`,
+  `test/obligations.test.ts`, `README.md`.
+- 2026-10-26 — The *Recorrentes* tab gets the same action bar as *Obrigações*: under the summary
+  chips, a one-line hint of what the tab is for and a *+ Nova recorrente* button, which replaces the
+  small *Adicionar* link in the list's card header. Why: the add action was easy to miss and the two
+  tabs looked different for the same action. Files touched: `src/view.ts`, `src/i18n/*`.
+- 2026-10-26 — The overview's savings stat counts recurring income still due this month (occurrences
+  not yet posted or linked, `pendingRecurringIncome`): while a salary is pending it reads *Poupança
+  prevista · X%* with the projected amount, and *Realizado até agora: …* under it; once the income is
+  received it goes back to *Poupado · X%*. Income, expenses, the spent bar and the cash-flow chart
+  still show only what happened. Why: with a salary paid on the last (or second-to-last) day of the
+  month, the stat was negative all month until payday. Files touched: `src/ledger.ts`, `src/view.ts`,
+  `src/styles/index.css`, `src/i18n/*`, `test/ledger.test.ts`, `README.md`.
+
 ## 0.11.0 — 2026-10-26
 
 - 2026-10-26 — The *Obrigações* tab is split by a switch into *A fazer* (what is due in the next 30

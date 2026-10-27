@@ -10,6 +10,7 @@ import {
   nextOccurrence,
   parseAmount,
   parseLedger,
+  pendingRecurringIncome,
   postDueRecurring,
   removeCategory,
   spendingByCategory,
@@ -61,6 +62,24 @@ test("balances follow transactions, transfers move money between accounts", () =
 
 test("monthly summary excludes transfers, which are not income or spending", () => {
   assert.deepEqual(monthSummary(ledger(), "2026-10"), { income: 5000_00, expense: 50_00, net: 4950_00 });
+});
+
+test("a salary not yet received still counts toward the month it is due, so the overview isn't negative until payday", () => {
+  const l = ledger();
+  l.recurring.push({ id: "sal", description: "Salary", type: "income", amount: 6000_00, accountId: "bank", frequency: "monthly", startDate: "2026-09-30", nextDate: "2026-10-30" });
+  l.recurring.push({ id: "rent", description: "Rent", type: "expense", amount: 2000_00, accountId: "bank", frequency: "monthly", startDate: "2026-09-05", nextDate: "2026-11-05" });
+  assert.equal(pendingRecurringIncome(l, "2026-10"), 6000_00);
+  assert.equal(pendingRecurringIncome(l, "2026-11"), 6000_00); // next payday, once October's is in
+  assert.equal(pendingRecurringIncome(l, "2026-09"), 0); // past months show only what happened
+  // once received, the rule moves on and the month's income is no longer counted twice
+  postDueRecurring(l, "2026-10-30");
+  assert.equal(pendingRecurringIncome(l, "2026-10"), 0);
+});
+
+test("pending income stops at the rule's end date and counts every weekly occurrence left", () => {
+  const l = ledger();
+  l.recurring.push({ id: "w", description: "Gig", type: "income", amount: 100_00, accountId: "bank", frequency: "weekly", startDate: "2026-10-02", nextDate: "2026-10-09", endDate: "2026-10-23" });
+  assert.equal(pendingRecurringIncome(l, "2026-10"), 300_00); // 9, 16, 23; 30 is past endDate
 });
 
 test("spending groups by category, uncategorized under empty key", () => {

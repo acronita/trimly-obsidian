@@ -1012,6 +1012,27 @@ export function monthlyHistory(ledger: Ledger, lastMonth: string, count: number)
   return out;
 }
 
+/**
+ * Income still expected in `month` from recurring rules, in the settings'
+ * currency: occurrences in that month not yet posted (or linked to a synced
+ * transaction). Lets the overview show how the month ends before a late payday.
+ */
+export function pendingRecurringIncome(ledger: Ledger, month: string): number {
+  let total = 0;
+  for (const r of ledger.recurring) {
+    if (r.type !== "income") continue;
+    const anchorDay = Number(r.startDate.slice(8, 10));
+    let date = r.nextDate;
+    // guard against a corrupted rule looping forever
+    for (let i = 0; i < 1000 && monthOf(date) <= month; i++) {
+      if (r.endDate && date > r.endDate) break;
+      if (monthOf(date) === month) total += toBase(ledger, r.amount, accountCurrency(ledger, r.accountId));
+      date = nextOccurrence(date, r.frequency, anchorDay);
+    }
+  }
+  return total;
+}
+
 /** Recurring occurrences due between `from` and `to` (inclusive), soonest first. */
 export function upcomingRecurring(ledger: Ledger, from: string, to: string): Recurring[] {
   return ledger.recurring
@@ -1289,6 +1310,24 @@ export function expectedAmount(ledger: Ledger, o: Obligation): number {
     .map((s) => ledger.transactions.find((tx) => tx.id === s.transactionId))
     .find((tx) => tx);
   return last?.amount ?? 0;
+}
+
+/**
+ * The bills paid by hand, each with what it costs per month on average, in
+ * cents: expected amounts of active payment obligations (yearly ones ÷ 12),
+ * costliest first. Card bills are not obligations (their purchases are already
+ * transactions), and a bill paid by a recurring rule is left out, since the
+ * recurring totals already count it.
+ */
+export function estimatedBills(ledger: Ledger): { obligation: Obligation; monthly: number }[] {
+  const out = [];
+  for (const o of ledger.obligations) {
+    if (o.kind !== "payment" || o.archived) continue;
+    const paidByRule = o.settled.some((s) => ledger.transactions.find((tx) => tx.id === s.transactionId)?.recurringId);
+    if (paidByRule) continue;
+    out.push({ obligation: o, monthly: expectedAmount(ledger, o) / (o.frequency === "yearly" ? 12 : 1) });
+  }
+  return out.sort((a, b) => b.monthly - a.monthly);
 }
 
 /** What an open occurrence will cost, in the settings' currency; documents cost nothing. */

@@ -8,7 +8,8 @@ passphrase that never leaves your device.
 
 ## Features
 
-- **Overview** — net worth, the month's income, expenses and savings rate, a 6-month cash-flow chart,
+- **Overview** — net worth, the month's income, expenses and savings rate (projected with recurring
+  income still due this month, e.g. a salary paid on the last days, with the actual figure under it), a 6-month cash-flow chart,
   spending by category (donut), account balances, recent activity and upcoming bills. Navigate month
   by month.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
@@ -22,6 +23,8 @@ passphrase that never leaves your device.
   posted automatically when their date arrives. On bank-synced accounts nothing is posted: the
   charge imported from the bank is linked to the rule instead, so it is never counted twice.
   *Tornar recorrente* in a transaction's editor turns it into a rule, linked as its first occurrence.
+  Below the subscriptions, *Contas variáveis* lists the bills paid by hand (from *Obrigações*, card
+  bills excluded) at their usual amount, with the monthly total, read only.
 - **Subscriptions** — mark a recurring expense as a subscription to list it apart with its yearly
   cost, last charge and price changes, to judge whether it is still worth paying for.
 - **Obrigações (obligations)** — a checklist of what you must do by hand by a due date: bills to
