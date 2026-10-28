@@ -1,5 +1,5 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
-import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
+import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { fetchBenchmarks } from "./bcb";
@@ -419,7 +419,7 @@ export default class TrimlyPlugin extends Plugin {
     const windowStart = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - SYNC_WINDOW_DAYS));
     let data;
     try {
-      data = await fetchBankData(config, windowStart);
+      data = await fetchBankData(config, toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - SYNC_HISTORY_DAYS)));
     } catch (e) {
       new Notice(t.notices.syncFailed((e as Error).message));
       return;

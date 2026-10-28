@@ -297,3 +297,19 @@ test("a synced rule waits for its charge while sync has not caught up", () => {
   // sync last ran 11 days after due without the charge: skipped; October is after the last sync, so it waits
   assert.equal(rule.nextDate, "2026-10-22");
 });
+
+test("history older than the window is imported, re-linked when its id changes, and never removed", () => {
+  const l = fresh();
+  // the fetch reaches a year back; WINDOW only limits what may be removed
+  applyBankData(l, data([tx("old", "p-card", "2025-11-28", 50, "DEBIT")]), WINDOW, TODAY);
+  const old = l.transactions.find((t) => t.description === "old");
+  assert.ok(old);
+  old.notes = "kept";
+  // Pluggy re-created it with a new id: the same entry is re-linked, not duplicated
+  applyBankData(l, data([tx("old-2", "p-card", "2025-11-28", 50, "DEBIT")]), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 1);
+  assert.equal(l.transactions[0].notes, "kept");
+  // a later sync that no longer returns it leaves it alone, since it is before the window
+  applyBankData(l, data([]), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 1);
+});

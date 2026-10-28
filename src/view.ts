@@ -90,6 +90,8 @@ export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 type Mode = "accounts" | "investments";
 type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets";
 
+/** How many bills ahead of the open one can be browsed, to see the installments to come. */
+const FUTURE_BILLS = 12;
 const MODES: { id: Mode; label: () => string; icon: string }[] = [
   { id: "accounts", label: () => t.header.modeAccounts, icon: "wallet" },
   { id: "investments", label: () => t.header.modeInvestments, icon: "trending-up" },
@@ -821,8 +823,7 @@ export class TrimlyView extends ItemView {
     label.createDiv({ cls: "trimly-muted", text: t.accounts.billPeriod(this.shortDate(bill.start), this.shortDate(bill.end)) });
     const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.accounts.nextBill } });
     setIcon(next, "chevron-right");
-    // future bills only hold installments, so they are shown while some is expected
-    if (this.billOffset >= 0 && cardBill(ledger, card.id, today, this.billOffset + 1).planned === 0) next.disabled = true;
+    if (this.billOffset >= FUTURE_BILLS) next.disabled = true;
     else next.addEventListener("click", () => go(this.billOffset + 1));
     if (this.billOffset !== 0) nav.createEl("button", { cls: "trimly-pill", text: t.accounts.currentBill }).addEventListener("click", () => go(0));
     const status =

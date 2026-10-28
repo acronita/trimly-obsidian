@@ -18,8 +18,9 @@ passphrase that never leaves your device.
   grouped into accounts, credit cards and investments; credit cards show their current bill and
   limit, and their transactions are browsed bill by bill (closing and due day)
   without losing history. Installment purchases (*compras parceladas*) show which installment each
-  charge is (3/10), and the installments still to come are counted in the next bills, which can be
-  browsed ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
+  charge is (3/10), and the installments the bank has not charged are counted in their bills (one a
+  month after the latest charge, even when the bank only ever reports the first), which can be
+  browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
 - **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
@@ -116,8 +117,8 @@ Everything still works fully manually if you skip this.
    **Item ID**.
 4. In *Settings → Trimly → Bank sync*, enter the client ID, secret and item IDs, then **Connect**.
 
-Each sync fetches the last 90 days. Trimly creates one account per bank account or card, keeps its
-balance equal to the bank's, and treats the bank as the source of truth for those 90 days: entries
+Each sync fetches the last 12 months (what Open Finance keeps). Trimly creates one account per bank account or card, keeps its
+balance equal to the bank's, and treats the bank as the source of truth for the last 90 days: entries
 the bank no longer lists are removed, and a manually deleted imported entry comes back. Your category,
 description and notes on an imported entry are kept. The dashboard syncs on unlock (at most every
 6 hours) and from the refresh button. Categories are filled in only while your Pluggy plan includes

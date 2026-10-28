@@ -67,8 +67,8 @@ market move happen between the same two syncs. CDI and IPCA come from the Centra
 only counts months that are over and published.
 
 **I deleted an imported transaction and it came back.**
-Synced accounts mirror the bank for the last 90 days, so the next sync restores anything the bank
-still lists. Recategorize or edit the description instead; those changes are kept.
+Synced accounts mirror the bank for the last 90 days (12 months are imported), so the next sync
+restores anything the bank still lists. Recategorize or edit the description instead; those changes are kept.
 
 **Transfers between my own banks show up as income and expense.**
 Trimly only pairs a move between two banks into a transfer when Pluggy categorizes it as a
@@ -90,6 +90,8 @@ Synced cards take the installment from Pluggy, or from a mark at the end of the 
 ("LOJA 03/10", "PARC 3/10", "Parcela 3 de 10") when the bank sends none. A purchase whose
 charges carry neither is a plain charge. The remaining installments are projected at the latest
 charge's amount, one a month after it, and replaced by the real charges as the bank sends them.
+Some banks only ever report the first installment: the projected ones still count in their bills,
+closed ones included, so the bill totals stay right.
 
 **Why didn't I get an obligation reminder on my phone?**
 Reminders come from Trimly itself, so they only fire while Obsidian is open and Trimly is

@@ -12,8 +12,10 @@
 import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
-/** How far back each sync fetches and reconciles. */
+/** How far back each sync reconciles: synced transactions in it that Pluggy no longer returns are removed. */
 export const SYNC_WINDOW_DAYS = 90;
+/** How far back each sync fetches, so older history is imported too (Open Finance keeps 12 months). */
+export const SYNC_HISTORY_DAYS = 365;
 /** Max days between the two legs of a transfer between own accounts. */
 const TRANSFER_MATCH_DAYS = 5;
 /** Max date drift when re-linking a transaction that came back with a new id. */
@@ -271,8 +273,9 @@ function relink(tx: Transaction, rec: Rec): boolean {
 }
 
 /**
- * Merge `data` (fetched from `windowStart` on) into the ledger: create Trimly
- * accounts for new Pluggy accounts, reconcile transactions in the window, and
+ * Merge `data` into the ledger: create Trimly accounts for new Pluggy accounts,
+ * add or re-link every fetched transaction, remove the synced ones dated
+ * `windowStart` or later that Pluggy no longer returns, and
  * set each synced account's opening balance so its balance today matches the bank.
  * Mutates the ledger.
  */
@@ -354,8 +357,9 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (relink(tx, rec)) result.updated++;
   }
 
+  // any date may be re-linked, since the fetch reaches further back than the window
   const stale = ledger.transactions.filter(
-    (t) => t.pluggyIds?.length && !matched.has(t) && t.date >= windowStart && (synced.has(t.accountId) || synced.has(t.toAccountId ?? ""))
+    (t) => t.pluggyIds?.length && !matched.has(t) && (synced.has(t.accountId) || synced.has(t.toAccountId ?? ""))
   );
   for (const rec of unmatched) {
     let best: Transaction | null = null;
@@ -390,7 +394,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     result.added++;
   }
 
-  const gone = new Set(stale.filter((t) => !matched.has(t)));
+  const gone = new Set(stale.filter((t) => !matched.has(t) && t.date >= windowStart));
   if (gone.size) {
     ledger.transactions = ledger.transactions.filter((t) => !gone.has(t));
     result.removed = gone.size;

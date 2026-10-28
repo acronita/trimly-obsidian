@@ -81,10 +81,12 @@ test("an installment expected in the open bill but not charged yet counts in its
   assert.equal(projected?.obligation.amount, 70_00);
 });
 
-test("closed bills never get projected installments, only what was charged", () => {
+test("installments the bank never reports still count in their bills, closed ones included", () => {
+  // some banks only report 1/3; 2/3 belongs to the bill that closed on Oct 3, 3/3 to the open one
   const l = ledger([charge("a", "2026-08-15", 70_00, 1, 3)]);
-  // 2/3 was expected on Sep 15, in the bill that closed on Oct 3, but the bank never charged it
-  assert.equal(cardBill(l, "card", "2026-10-25", -1).total, 0);
+  assert.deepEqual([cardBill(l, "card", "2026-10-25", -1).total, cardBill(l, "card", "2026-10-25", -1).planned], [70_00, 70_00]);
+  assert.equal(cardBill(l, "card", "2026-10-25", 0).planned, 70_00);
+  assert.equal(cardBill(l, "card", "2026-10-25", 1).planned, 0);
 });
 
 test("manual cards post each installment when its date comes", () => {

@@ -644,7 +644,7 @@ export interface CardBill {
   paid: number;
   /** part of `total` not paid yet */
   remaining: number;
-  /** installments expected in this cycle but not charged yet (open and future bills only), included in `total` */
+  /** installments expected in this cycle that the bank did not charge (yet), included in `total` */
   planned: number;
 }
 
@@ -783,7 +783,10 @@ export function cardBill(ledger: Ledger, accountId: string, today: string, offse
     else if (tx.date < prev) prevTotal -= v;
   }
   paid += Math.max(0, prevPaid - Math.max(0, prevTotal));
-  const planned = close > today ? futureInstallments(ledger, accountId, prev).filter((p) => p.date < close).reduce((s, p) => s + p.amount, 0) : 0;
+  // some banks only report a purchase's first installment, so the rest count in their bills even once closed
+  const planned = futureInstallments(ledger, accountId, prev)
+    .filter((p) => p.date < close)
+    .reduce((s, p) => s + p.amount, 0);
   total += planned;
   return {
     start: prev,
