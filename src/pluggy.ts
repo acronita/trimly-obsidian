@@ -1,5 +1,5 @@
 import { RequestUrlResponse, requestUrl } from "obsidian";
-import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "./bank-sync";
+import type { BankData, PluggyAccount, PluggyBill, PluggyCategory, PluggyTransaction } from "./bank-sync";
 import type { PluggyInvestment, PluggyInvestmentTransaction } from "./investment-sync";
 import { t } from "./i18n";
 import type { PluggyConfig } from "./ledger";
@@ -54,6 +54,21 @@ async function fetchTransactions(apiKey: string, accountId: string, dateFrom: st
     const after = page.next ? new URL(page.next, BASE).searchParams.get("after") : null;
     if (!after) break;
     params.after = after;
+  }
+  return out;
+}
+
+/** A credit card's bills; empty when the bank does not report them. */
+async function fetchBills(apiKey: string, accountId: string): Promise<PluggyBill[]> {
+  const out: PluggyBill[] = [];
+  try {
+    for (let page = 1; page <= MAX_PAGES; page++) {
+      const res = await get<{ results: PluggyBill[]; totalPages?: number }>(apiKey, "/bills", { accountId, page: String(page) }, t.errors.loadingBills);
+      out.push(...res.results.map((b) => ({ ...b, accountId })));
+      if (!res.totalPages || page >= res.totalPages) break;
+    }
+  } catch {
+    // the card's closing and due days stand in
   }
   return out;
 }
@@ -128,19 +143,21 @@ async function fetchInvestmentTransactions(apiKey: string, investment: PluggyInv
 
 /**
  * Accounts of every configured item plus their transactions dated `dateFrom` or
- * later, and the items' investment positions. A failure loading investments
+ * later, the cards' bills, and the items' investment positions. A failure loading investments
  * (e.g. the item has no investments product) does not fail the bank sync.
  */
 export async function fetchBankData(config: PluggyConfig, dateFrom: string): Promise<SyncData> {
   const apiKey = await authenticate(config);
   const accounts: PluggyAccount[] = [];
   const transactions: PluggyTransaction[] = [];
+  const bills: PluggyBill[] = [];
   const investments: InvestmentData = { investments: [], itemIds: [], errors: [] };
   for (const itemId of config.itemIds) {
     const page = await get<{ results: PluggyAccount[] }>(apiKey, "/accounts", { itemId }, t.errors.loadingAccounts(itemId));
     for (const acc of page.results) {
       accounts.push(acc);
       transactions.push(...(await fetchTransactions(apiKey, acc.id, dateFrom)));
+      if (acc.type === "CREDIT") bills.push(...(await fetchBills(apiKey, acc.id)));
     }
     let positions: PluggyInvestment[];
     try {
@@ -163,5 +180,5 @@ export async function fetchBankData(config: PluggyConfig, dateFrom: string): Pro
       investments.investments.push(p);
     }
   }
-  return { bank: { accounts, transactions, categories: await fetchCategories(apiKey) }, investments };
+  return { bank: { accounts, transactions, bills, categories: await fetchCategories(apiKey) }, investments };
 }

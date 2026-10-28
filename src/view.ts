@@ -809,8 +809,8 @@ export class TrimlyView extends ItemView {
     setIcon(prev, "chevron-left");
     prev.addEventListener("click", () => go(this.billOffset - 1));
     const label = nav.createDiv();
-    label.createDiv({ cls: "trimly-bill-title", text: t.accounts.billOf(this.monthLabel(monthOf(bill.close))) });
-    label.createDiv({ cls: "trimly-muted", text: t.accounts.billPeriod(this.shortDate(bill.start), this.shortDate(bill.close)) });
+    label.createDiv({ cls: "trimly-bill-title", text: t.accounts.billOf(this.monthLabel(monthOf(bill.end))) });
+    label.createDiv({ cls: "trimly-muted", text: t.accounts.billPeriod(this.shortDate(bill.start), this.shortDate(bill.end)) });
     const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.accounts.nextBill } });
     setIcon(next, "chevron-right");
     if (this.billOffset >= 0) next.disabled = true;
@@ -831,14 +831,14 @@ export class TrimlyView extends ItemView {
     chip(t.accounts.billDue, bill.due ? this.shortDate(bill.due) : "—");
 
     const charges = sortTransactions(
-      ledger.transactions.filter((tx) => tx.date >= bill.start && tx.date <= bill.close && !isCardPayment(tx, card.id) && this.matchesFilter(tx))
+      ledger.transactions.filter((tx) => tx.date >= bill.start && tx.date <= bill.end && !isCardPayment(tx, card.id) && this.matchesFilter(tx))
     );
     if (charges.length) this.renderDays(wrap, ledger, charges);
     else this.empty(wrap.createDiv("trimly-card"), "credit-card", t.accounts.billEmpty);
 
     if (this.billOffset < 0) {
-      const until = cardBill(ledger, card.id, today, this.billOffset + 1).close;
-      const payments = sortTransactions(ledger.transactions.filter((tx) => isCardPayment(tx, card.id) && tx.date > bill.close && tx.date <= until));
+      const until = cardBill(ledger, card.id, today, this.billOffset + 1).end;
+      const payments = sortTransactions(ledger.transactions.filter((tx) => isCardPayment(tx, card.id) && tx.date > bill.end && tx.date <= until));
       if (payments.length) {
         wrap.createDiv({ cls: "trimly-section-title", text: t.accounts.billPayments });
         const box = wrap.createDiv("trimly-card trimly-day-card");

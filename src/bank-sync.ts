@@ -50,6 +50,15 @@ export interface PluggyTransaction {
   categoryId?: string | null;
 }
 
+export interface PluggyBill {
+  id: string;
+  /** set by the client: Pluggy lists bills per account */
+  accountId: string;
+  /** ISO timestamps */
+  dueDate: string;
+  billClosingDate?: string | null;
+}
+
 export interface PluggyCategory {
   id: string;
   description: string;
@@ -59,6 +68,8 @@ export interface PluggyCategory {
 export interface BankData {
   accounts: PluggyAccount[];
   transactions: PluggyTransaction[];
+  /** credit card bills; missing for cards whose bank does not report them */
+  bills?: PluggyBill[];
   /** empty when the Pluggy plan has no categorization */
   categories: PluggyCategory[];
 }
@@ -270,6 +281,14 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (acc.type === "credit" && p.creditData?.creditLimit) acc.creditLimit = cents(p.creditData.creditLimit);
     if (p.currencyCode) acc.currency = p.currencyCode;
     byPluggyId.set(p.id, acc);
+  }
+
+  // the bank's bill dates; a bill seen again (same due date) takes its latest closing date
+  for (const b of data.bills ?? []) {
+    const acc = byPluggyId.get(b.accountId);
+    if (acc?.type !== "credit" || !b.billClosingDate) continue;
+    const bill = { close: b.billClosingDate.slice(0, 10), due: b.dueDate.slice(0, 10) };
+    acc.billDates = [...(acc.billDates ?? []).filter((d) => d.due !== bill.due), bill].sort((x, y) => (x.close < y.close ? -1 : 1));
   }
 
   const categories = new Map(data.categories.map((c) => [c.id, c]));

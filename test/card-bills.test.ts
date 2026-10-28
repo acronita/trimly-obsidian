@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cardBill, cardBillObligations, cardBills, dueObligations, monthPayments, obligationReminders } from "../src/ledger.ts";
-import type { Ledger, Transaction } from "../src/ledger.ts";
+import type { Account, Ledger, Transaction } from "../src/ledger.ts";
 
 /** Card closing on the 3rd, due on the 10th, with a checking account paying it. */
-function ledger(transactions: Transaction[], card: { closingDay?: number; dueDay?: number } = { closingDay: 3, dueDay: 10 }): Ledger {
+function ledger(transactions: Transaction[], card: Partial<Account> = { closingDay: 3, dueDay: 10 }): Ledger {
   return {
     version: 1,
     accounts: [
@@ -35,8 +35,8 @@ test("bills split card charges by cycle instead of adding up the whole history",
   const l = ledger([buy("old", "2026-08-20", 300_00), buy("sep", "2026-09-20", 100_00), buy("oct", "2026-10-15", 40_00)]);
   const { closed, open } = cardBills(l, "card", "2026-10-25");
   // the September bill closed on Oct 3rd; the August purchase belongs to an older bill
-  assert.deepEqual([closed.start, closed.close, closed.due, closed.total], ["2026-09-04", "2026-10-03", "2026-10-10", 100_00]);
-  assert.deepEqual([open.start, open.close, open.due, open.total], ["2026-10-04", "2026-11-03", "2026-11-10", 40_00]);
+  assert.deepEqual([closed.start, closed.end, closed.close, closed.due, closed.total], ["2026-09-03", "2026-10-02", "2026-10-03", "2026-10-10", 100_00]);
+  assert.deepEqual([open.start, open.end, open.close, open.due, open.total], ["2026-10-03", "2026-11-02", "2026-11-03", "2026-11-10", 40_00]);
 });
 
 test("a payment after the closing pays the closed bill, not the open one", () => {
@@ -62,18 +62,29 @@ test("a refund lowers the bill of its own cycle", () => {
   assert.equal(cardBills(l, "card", "2026-10-25").open.total, 25_00);
 });
 
-test("the bill closing today is still open, its purchases included", () => {
-  const l = ledger([buy("close-day", "2026-11-03", 10_00)]);
-  const { open } = cardBills(l, "card", "2026-11-03");
-  assert.equal(open.close, "2026-11-03");
-  assert.equal(open.total, 10_00);
+test("a bill closes on its closing day, and that day's purchases go to the next bill", () => {
+  // like Brazilian banks: the closing day is the best day to buy
+  const l = ledger([buy("before", "2026-11-02", 30_00), buy("close-day", "2026-11-03", 10_00)]);
+  const { closed, open } = cardBills(l, "card", "2026-11-03");
+  assert.deepEqual([closed.close, closed.total], ["2026-11-03", 30_00]);
+  assert.deepEqual([open.start, open.close, open.total], ["2026-11-03", "2026-12-03", 10_00]);
+  assert.deepEqual(obligationReminders(l, "2026-11-08").map((d) => [d.due, d.obligation.amount]), [["2026-11-10", 30_00]]);
 });
 
 test("without a closing day the cycle is the calendar month; without a due day there is no due date", () => {
   const l = ledger([buy("oct", "2026-10-15", 40_00)], {});
   const { closed, open } = cardBills(l, "card", "2026-10-25");
-  assert.deepEqual([closed.close, open.start, open.close, open.due], ["2026-09-30", "2026-10-01", "2026-10-31", undefined]);
+  assert.deepEqual([closed.end, open.start, open.end, open.due], ["2026-09-30", "2026-10-01", "2026-10-31", undefined]);
   assert.equal(open.total, 40_00);
+});
+
+test("the bank's own bill dates win over the card's days, which still cover the other months", () => {
+  // a bank that moves its closing: October's bill closed on the 22nd and is due Nov 1
+  const card = { closingDay: 3, dueDay: 10, billDates: [{ close: "2026-10-22", due: "2026-11-01" }] };
+  const l = ledger([buy("before", "2026-10-21", 30_00), buy("close-day", "2026-10-22", 10_00)], card);
+  const { closed, open } = cardBills(l, "card", "2026-10-25");
+  assert.deepEqual([closed.start, closed.close, closed.due, closed.total], ["2026-09-03", "2026-10-22", "2026-11-01", 30_00]);
+  assert.deepEqual([open.start, open.close, open.due, open.total], ["2026-10-22", "2026-11-03", "2026-11-10", 10_00]);
 });
 
 test("a closing day past the end of a short month falls on its last day", () => {
@@ -85,7 +96,7 @@ test("a closing day past the end of a short month falls on its last day", () => 
 test("an older bill counts the payments made in the cycle after it closed", () => {
   const l = ledger([buy("aug", "2026-08-20", 300_00), pay("p-aug", "2026-09-08", 300_00), buy("sep", "2026-09-20", 100_00)]);
   const aug = cardBill(l, "card", "2026-10-25", -2);
-  assert.deepEqual([aug.start, aug.close, aug.total, aug.paid, aug.remaining], ["2026-08-04", "2026-09-03", 300_00, 300_00, 0]);
+  assert.deepEqual([aug.start, aug.close, aug.total, aug.paid, aug.remaining], ["2026-08-03", "2026-09-03", 300_00, 300_00, 0]);
   // the August payment does not leak into the September bill
   assert.equal(cardBill(l, "card", "2026-10-25", -1).remaining, 100_00);
 });

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.13.0 — 2026-10-27
+
+- 2026-10-27 — Synced cards follow the bank's own bill dates. Bank sync fetches each card's bills
+  (Pluggy `GET /bills`) and keeps their closing and due dates on the account (`billDates`, new
+  optional field); a bill uses the bank's dates for its month, and the closing and due days only
+  stand in for months the bank gives no date for, or for banks that do not report bills. The
+  setting is *Dia de fechamento* again and means the bank's closing day: that day's purchases go to
+  the next bill and a payment made on it pays the bill that just closed (as in 0.12.1). Why: some
+  banks (Rico) move the closing day every month, and the bank's closing day, not the day before, is
+  what both the user and Pluggy know. Files touched: `src/ledger.ts`, `src/bank-sync.ts`,
+  `src/pluggy.ts`, `src/view.ts`, `src/i18n/*`, `test/card-bills.test.ts`,
+  `test/bank-sync.test.ts`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`.
+
 ## 0.12.4 — 2026-10-27
 
 - 2026-10-27 — The card's *Dia de fechamento* setting is now *Último dia da fatura*, and its
