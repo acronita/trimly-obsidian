@@ -9,9 +9,12 @@
   projected, one per bill after the latest charge's bill (dated on the day that bill opens), into the open bill (when not charged yet) and
   the next ones, closed bills included, since some banks only ever report the first installment:
   the bill view now browses up to 12 bills ahead, with a *Parcelas previstas* list and chip, and
-  the card tile shows *Parcelas futuras*. Banks that date every installment on the purchase day
-  (Rico) have each one after the 1st moved to the day its bill opens, so it lands on the right
-  bill. A bill is now named after the month it is due, as the banks do (*Fatura de novembro* is
+  the card tile shows *Parcelas futuras*. Synced card charges keep the bill the bank put them on
+  (new optional `billMonth` on transactions: the month the bill closes, from Pluggy's
+  `billForecastDate`, moved one month per installment after the 1st, since installments carry the
+  purchase's), and bills count charges by it instead of by date, so Rico's fees posted on the
+  closing day stay on the bill that closes and installments dated on the purchase day land on
+  their own bill. A bill is now named after the month it is due, as the banks do (*Fatura de novembro* is
   due in November). Transactions show
   a 3/10 badge and their modal says how much is left. On cards that are not synced, a new purchase
   takes a number of installments (the amount is the total; the 1st installment takes the cents that

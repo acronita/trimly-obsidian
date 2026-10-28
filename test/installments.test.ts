@@ -173,8 +173,8 @@ test("bank sync keeps which installment a card charge is, from Pluggy or from th
   assert.equal(by("MERCADO"), undefined);
 });
 
-test("installments the bank dates on the purchase day go to the bill after the previous one", () => {
-  // Rico lists Amazon 2/2 dated Sep 6, like 1/2, but on the bill due Nov 1 (closing Sep 25 and Oct 27)
+test("synced charges go on the bill the bank says, whatever their date (Rico)", () => {
+  // Rico closes around the 24th-27th and is due on the 1st; its bill months come from Pluggy's billForecastDate
   const l = defaultLedger();
   l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"] };
   l.accounts.push({
@@ -185,31 +185,45 @@ test("installments the bank dates on the purchase day go to the bill after the p
     pluggyId: "p-rico",
     closingDay: 22,
     dueDay: 1,
-    billDates: [
-      { close: "2026-08-26", due: "2026-09-01" },
-      { close: "2026-09-25", due: "2026-10-01" },
-      { close: "2026-10-27", due: "2026-11-01" },
-    ],
+    // the bank gave the September closing, not the October one
+    billDates: [{ close: "2026-09-24", due: "2026-10-01" }],
   });
-  const amazon = (id: string, number: number): PluggyTransaction => ({
+  const charge = (id: string, date: string, amount: number, forecast: string, installment?: [number, number]): PluggyTransaction => ({
     id,
     accountId: "p-rico",
-    date: "2026-09-06T00:00:00.000Z",
-    description: "AMAZON BR",
-    amount: 272.21,
+    date: `${date}T03:00:00.000Z`,
+    description: id,
+    amount,
     type: "DEBIT",
     status: "POSTED",
-    creditCardMetadata: { installmentNumber: number, totalInstallments: 2, purchaseDate: "2026-09-06T00:00:00.000Z" },
+    creditCardMetadata: {
+      billForecastDate: forecast,
+      ...(installment ? { installmentNumber: installment[0], totalInstallments: installment[1] } : {}),
+    },
   });
   applyBankData(
     l,
-    { accounts: [{ id: "p-rico", type: "CREDIT", name: "Rico", balance: 0 }], transactions: [amazon("a1", 1), amazon("a2", 2)], categories: [] },
+    {
+      accounts: [{ id: "p-rico", type: "CREDIT", name: "Rico", balance: 0 }],
+      transactions: [
+        // fees posted on the closing day stay on the bill that closes
+        charge("multa-set", "2026-09-24", 3.07, "2026-09"),
+        charge("amazon", "2026-09-06", 272.21, "2026-09", [1, 2]),
+        // the October bill closed on the 26th, a date the bank did not give
+        charge("multa-out", "2026-10-26", 16.67, "2026-10"),
+        // a later installment carries the purchase date and the 1st installment's month
+        charge("paypal", "2026-08-22", 189.51, "2026-06", [3, 3]),
+      ],
+      categories: [],
+    },
     "2026-08-01",
     "2026-10-28"
   );
-  const due = (offset: number) => cardBill(l, "rico", "2026-10-28", offset);
-  assert.deepEqual([due(-2).due, due(-2).total], ["2026-10-01", 272_21]);
-  assert.deepEqual([due(-1).due, due(-1).total], ["2026-11-01", 272_21]);
-  // both installments came from the bank, so nothing is projected
-  assert.deepEqual(futureInstallments(l, "rico"), []);
+  const bill = (offset: number) => cardBill(l, "rico", "2026-10-28", offset);
+  // the bill due Oct 1: September fee and Amazon 1/2
+  assert.deepEqual([bill(-2).due, bill(-2).total], ["2026-10-01", 3_07 + 272_21]);
+  // the bill due Nov 1: the October fee and Amazon 2/2, which Pluggy does not send yet
+  assert.deepEqual([bill(-1).due, bill(-1).total, bill(-1).planned], ["2026-11-01", 16_67 + 272_21, 272_21]);
+  // PayPal 3/3, bought in June, is on the bill closing in August
+  assert.equal(bill(-3).total, 189_51);
 });

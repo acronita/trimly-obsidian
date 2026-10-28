@@ -28,6 +28,7 @@ import {
   baseAmount,
   cardBill,
   cardBills,
+  chargeBillMonth,
   futureInstallments,
   installmentFromDescription,
   isCardPayment,
@@ -843,13 +844,15 @@ export class TrimlyView extends ItemView {
     if (bill.planned) chip(t.accounts.billPlanned, this.money(bill.planned, card.currency));
 
     const charges = sortTransactions(
-      ledger.transactions.filter((tx) => tx.date >= bill.start && tx.date <= bill.end && !isCardPayment(tx, card.id) && this.matchesFilter(tx))
+      ledger.transactions.filter(
+        (tx) => tx.accountId === card.id && !isCardPayment(tx, card.id) && chargeBillMonth(ledger, tx) === monthOf(bill.close) && this.matchesFilter(tx)
+      )
     );
     if (charges.length) this.renderDays(wrap, ledger, charges);
     else if (!bill.planned) this.empty(wrap.createDiv("trimly-card"), "credit-card", t.accounts.billEmpty);
 
     if (bill.planned) {
-      const planned = futureInstallments(ledger, card.id, bill.start).filter((p) => p.date < bill.close);
+      const planned = futureInstallments(ledger, card.id).filter((p) => p.month === monthOf(bill.close));
       wrap.createDiv({ cls: "trimly-section-title", text: t.accounts.billPlanned });
       const box = wrap.createDiv("trimly-card trimly-day-card");
       for (const p of planned) this.plannedRow(box, ledger, p, card);
@@ -948,7 +951,9 @@ export class TrimlyView extends ItemView {
       foot.createSpan({ cls: "trimly-muted", text: t.accounts.available(this.money(Math.max(0, a.creditLimit - used), a.currency)) });
       foot.createSpan({ cls: "trimly-muted", text: t.accounts.limit(this.money(a.creditLimit, a.currency)) });
     }
-    const future = futureInstallments(ledger, a.id, open.close).reduce((sum, p) => sum + p.amount, 0);
+    const future = futureInstallments(ledger, a.id)
+      .filter((p) => p.month > monthOf(open.close))
+      .reduce((sum, p) => sum + p.amount, 0);
     if (future) tile.createDiv({ cls: "trimly-muted", text: t.accounts.futureInstallments(this.money(future, a.currency)) });
     this.closedBillCallout(tile, a, closed, today);
     tile.addEventListener("click", () => this.editAccount(a.id));

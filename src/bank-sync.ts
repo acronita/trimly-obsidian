@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, closingAfter, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId } from "./ledger.ts";
+import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId, shiftMonth } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync reconciles: synced transactions in it that Pluggy no longer returns are removed. */
@@ -51,7 +51,12 @@ export interface PluggyTransaction {
   amountInAccountCurrency?: number | null;
   categoryId?: string | null;
   /** credit cards: installment purchases carry which installment this charge is */
-  creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null; purchaseDate?: string | null } | null;
+  creditCardMetadata?: {
+    installmentNumber?: number | null;
+    totalInstallments?: number | null;
+    /** "YYYY-MM": month the charge's bill closes in; for installments, the 1st installment's */
+    billForecastDate?: string | null;
+  } | null;
 }
 
 export interface PluggyBill {
@@ -123,6 +128,7 @@ interface Leg {
   /** category descriptions, leaf first; empty when uncategorized */
   path: string[];
   installment?: Transaction["installment"];
+  billMonth?: string;
 }
 
 /** What the ledger should contain for one or two legs. */
@@ -138,6 +144,7 @@ interface Rec {
   path: string[];
   original?: Transaction["original"];
   installment?: Transaction["installment"];
+  billMonth?: string;
 }
 
 function cents(value: number): number {
@@ -233,6 +240,7 @@ function pairTransfers(legs: Leg[]): Rec[] {
       path: l.path,
       original: l.original,
       installment: l.installment,
+      billMonth: l.billMonth,
     });
   }
   return recs;
@@ -261,6 +269,8 @@ function relink(tx: Transaction, rec: Rec): boolean {
   else delete tx.original;
   if (rec.installment) tx.installment = rec.installment;
   else delete tx.installment;
+  if (rec.billMonth) tx.billMonth = rec.billMonth;
+  else delete tx.billMonth;
   if (tx.type !== rec.type || tx.accountId !== rec.accountId || tx.toAccountId !== rec.toAccountId) {
     tx.type = rec.type;
     tx.accountId = rec.accountId;
@@ -327,16 +337,15 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
         ? cents(t.amountInAccountCurrency)
         : convert(ledger, cents(t.amount), t.currencyCode!, acc.currency!);
     const installment = onCard && !moneyIn ? installmentOf(t) : undefined;
-    let date = t.date.slice(0, 10);
-    // some banks (Rico) date every installment on the purchase day; each one belongs to the bill after the previous
-    if (installment && installment.number > 1 && t.creditCardMetadata?.purchaseDate?.slice(0, 10) === date) {
-      date = closingAfter(ledger, acc.id, date, installment.number - 1);
-    }
+    // the bill the bank put the charge on: installments carry the purchase date, so their date can't tell
+    const forecast = t.creditCardMetadata?.billForecastDate?.slice(0, 7);
+    const billMonth = onCard && forecast && /^\d{4}-\d{2}$/.test(forecast) ? shiftMonth(forecast, (installment?.number ?? 1) - 1) : undefined;
     legs.push({
       pid: t.id,
       accountId: acc.id,
       onCard,
-      date,
+      date: t.date.slice(0, 10),
+      billMonth,
       cents: moneyIn ? charged : -charged,
       original: foreign ? { currency: t.currencyCode!, amount: cents(t.amount) } : undefined,
       description: t.description,
@@ -393,6 +402,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (rec.toAccountId) tx.toAccountId = rec.toAccountId;
     if (rec.original) tx.original = rec.original;
     if (rec.installment) tx.installment = rec.installment;
+    if (rec.billMonth) tx.billMonth = rec.billMonth;
     const categoryId = mapCategory(ledger, rec);
     if (categoryId) tx.categoryId = categoryId;
     if (rec.pending) tx.pending = true;
