@@ -1206,6 +1206,8 @@ export function sortTransactions(txs: Transaction[]): Transaction[] {
 const LINK_DAYS = 7;
 /** How far a synced charge's amount may be from the rule's and still match without a matching description. */
 const LINK_AMOUNT_TOLERANCE = 0.2;
+/** How far it may be even with a matching description: covers a price change, not another charge at the same place. */
+const LINK_NAMED_AMOUNT_TOLERANCE = 0.5;
 
 /** Average cost of a rule per month, in cents (weekly × 52/12, yearly ÷ 12). */
 export function monthlyAmount(r: Recurring): number {
@@ -1235,9 +1237,24 @@ export function linkToRule(ledger: Ledger, rule: Recurring, txId: string) {
   for (let i = 0; i < 1000 && rule.nextDate <= tx.date; i++) rule.nextDate = nextOccurrence(rule.nextDate, rule.frequency, anchorDay);
 }
 
+/**
+ * Delete a rule. Its transactions stay, unlinked: they are no longer occurrences
+ * of anything, and a synced one is free to be matched by a rule made again.
+ */
+export function removeRecurring(ledger: Ledger, ruleId: string) {
+  ledger.recurring = ledger.recurring.filter((r) => r.id !== ruleId);
+  for (const tx of ledger.transactions) if (tx.recurringId === ruleId) delete tx.recurringId;
+}
+
 export function ruleTransactions(ledger: Ledger, ruleId: string): Transaction[] {
   return ledger.transactions.filter((tx) => tx.recurringId === ruleId).sort((a, b) => (a.date < b.date ? -1 : 1));
 }
+
+/** Wording banks put on any entry of a kind ("Transferência Recebida", "Compra no débito"): it names nobody. */
+const GENERIC_WORDS = new Set([
+  "transferencia", "recebida", "recebido", "enviada", "enviado", "pix", "ted", "doc",
+  "pagamento", "compra", "debito", "credito", "deposito", "boleto",
+]);
 
 function words(s: string): string[] {
   return s
@@ -1245,7 +1262,7 @@ function words(s: string): string[] {
     .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .split(/[^a-z0-9]+/)
-    .filter((w) => w.length >= 3);
+    .filter((w) => w.length >= 3 && !GENERIC_WORDS.has(w));
 }
 
 /** What a transaction is expected to look like, to find it among the ledger's. */
@@ -1301,7 +1318,8 @@ function syncedCharge(ledger: Ledger, r: Recurring): Transaction | undefined {
       !tx.recurringId &&
       tx.type === r.type &&
       tx.accountId === r.accountId &&
-      (r.type !== "transfer" || tx.toAccountId === r.toAccountId)
+      (r.type !== "transfer" || tx.toAccountId === r.toAccountId) &&
+      Math.abs(tx.amount - r.amount) <= r.amount * LINK_NAMED_AMOUNT_TOLERANCE
   );
   return bestMatch(pool, { text: r.description, amount: r.amount, date: r.nextDate, maxDays: LINK_DAYS, amountTolerance: LINK_AMOUNT_TOLERANCE });
 }

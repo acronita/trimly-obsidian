@@ -69,6 +69,7 @@ import {
   unsettleObligation,
   windowStart,
   removeCategory,
+  removeRecurring,
   removeManualAsset,
   removeManualMovement,
   saveAsset,
@@ -2462,9 +2463,7 @@ function openRecurringModal(plugin: TrimlyPlugin, existing: Recurring | null, fr
             t.recurring.deleteConfirm(rec.description),
             t.common.delete,
             () =>
-              void plugin.mutate((l) => {
-                l.recurring = l.recurring.filter((r) => r.id !== rec.id);
-              })
+              void plugin.mutate((l) => removeRecurring(l, rec.id))
           ).open()
       : null
   ).open();

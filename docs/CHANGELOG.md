@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.14.1 — 2026-10-28
+
+- 2026-10-28 — A recurring rule on a synced account no longer links a charge just because it shares
+  generic bank wording ("Transferência Recebida", "Pix", "Compra", "Débito"…), and a charge that
+  shares the name must still be within 50% of the rule's amount. Why: making a R$ 4.210 *Transferência
+  Recebida* recurring linked a R$ 1.000 transfer from someone else days before the next occurrence,
+  and the rule took its amount. Deleting a rule now also unlinks its transactions (they stay), so
+  a wrong link is fixed by deleting the rule and making it again. Files touched: `src/ledger.ts`,
+  `src/view.ts`, `test/bank-sync.test.ts`, `test/ledger.test.ts`, `docs/ARCHITECTURE.md`.
+
 ## 0.14.0 — 2026-10-28
 
 - 2026-10-28 — Installment purchases (*compras parceladas*). A card charge keeps which installment
