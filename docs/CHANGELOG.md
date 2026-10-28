@@ -6,6 +6,10 @@
   *Contas variáveis*), and *Sobra / mês* (was *Sobra após fixos*) now subtracts it too. Why: the
   leftover only counted fixed rules, so bills paid by hand made the month look better than it is.
   Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `README.md`.
+- 2026-10-28 — The Overview's projected savings no longer shows *Realizado até agora* under it.
+  Why: the line was unclear next to the projection and ran past the card's edge; what already
+  happened is in the income and expense stats beside it. Files touched: `src/view.ts`,
+  `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`.
 - 2026-10-28 — The month browsed goes back to this month when switching tabs or modes, or opening
   Trimly again while it is already open. Why: browsing September in Transactions left the
   Dashboard on September too, where positions synced later counted as zero, so investments looked

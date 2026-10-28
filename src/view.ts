@@ -514,8 +514,7 @@ export class TrimlyView extends ItemView {
     const net = sum.net + pending;
     const rate = income > 0 ? Math.round((net / income) * 100) : null;
     const label = rate === null ? t.common.net : pending > 0 ? t.overview.projected(rate) : t.overview.saved(rate);
-    const stat = this.heroStat(stats, label, net, "piggy-bank", net >= 0 ? "is-accent" : "is-expense");
-    if (pending > 0) stat.createDiv({ cls: "trimly-hero-stat-sub", text: t.overview.actual(this.money(sum.net)) });
+    this.heroStat(stats, label, net, "piggy-bank", net >= 0 ? "is-accent" : "is-expense");
     if (sum.income > 0 || sum.expense > 0) {
       const flow = hero.createDiv("trimly-flow");
       const spentPct = sum.income > 0 ? Math.min(100, (sum.expense / sum.income) * 100) : 100;

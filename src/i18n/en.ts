@@ -141,7 +141,6 @@ export const en: Strings = {
       `Across ${accounts} ${s(accounts, "account", "accounts")}${invested ? ` and ${invested} invested` : ""}, end of ${month}`,
     saved: (rate: number) => `Saved · ${rate}%`,
     projected: (rate: number) => `Projected savings · ${rate}%`,
-    actual: (v: string) => `So far: ${v}`,
     incomeSpent: (pct: number) => `${pct}% of income spent`,
     noIncome: "No income recorded this month",
     accounts: "Accounts",

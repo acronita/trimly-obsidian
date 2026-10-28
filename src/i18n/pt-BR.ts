@@ -146,7 +146,6 @@ export const ptBR = {
       `Em ${accounts} ${s(accounts, "conta", "contas")}${invested ? ` e ${invested} investidos` : ""}, final de ${month}`,
     saved: (rate: number) => `Poupado · ${rate}%`,
     projected: (rate: number) => `Poupança prevista · ${rate}%`,
-    actual: (v: string) => `Realizado até agora: ${v}`,
     incomeSpent: (pct: number) => `${pct}% da receita gasto`,
     noIncome: "Nenhuma receita registrada neste mês",
     accounts: "Contas",
