@@ -704,7 +704,10 @@ export function installmentFromDescription(description: string): Transaction["in
   return number >= 1 && total >= 2 && number <= total ? { number, total } : undefined;
 }
 
-/** The installments of each purchase on a card still to be charged, dated `from` or later, soonest first. */
+/**
+ * The installments of each purchase on a card still to be charged, one per bill
+ * after the latest charged one, dated `from` or later, soonest first.
+ */
 export function futureInstallments(ledger: Ledger, accountId: string, from = ""): PlannedInstallment[] {
   // a purchase's installments share the description (without the mark), the count and the first month
   const latest = new Map<string, Transaction>();
@@ -716,13 +719,18 @@ export function futureInstallments(ledger: Ledger, accountId: string, from = "")
     const seen = latest.get(key);
     if (!seen || seen.installment!.number < inst.number) latest.set(key, tx);
   }
+  const acc = ledger.accounts.find((a) => a.id === accountId);
   const out: PlannedInstallment[] = [];
   for (const last of latest.values()) {
     const { number, total } = last.installment!;
-    const anchorDay = Number(last.date.slice(8, 10));
-    let date = last.date;
+    // each installment goes to the bill after the previous one's, dated on the day that bill opens
+    // (its previous closing), since the closing day may move from month to month
+    const [y, m] = last.date.split("-").map(Number);
+    let month = m - 1;
     for (let n = number + 1; n <= total; n++) {
-      date = nextOccurrence(date, "monthly", anchorDay);
+      let date = closeIn(acc, y, month);
+      for (let i = 0; i < 3 && date <= last.date; i++) date = closeIn(acc, y, ++month);
+      month++;
       if (date >= from) out.push({ last, number: n, total, date, amount: last.amount });
     }
   }

@@ -29,14 +29,15 @@ const charge = (id: string, date: string, amount: number, number: number, total:
   installment: { number, total },
 });
 
-test("an installment purchase projects its remaining installments, one per month", () => {
+test("an installment purchase projects its remaining installments, one per bill", () => {
   const l = ledger([charge("a", "2026-09-15", 100_00, 2, 4)]);
   const planned = futureInstallments(l, "card");
   assert.deepEqual(
     planned.map((p) => [p.number, p.date, p.amount]),
     [
-      [3, "2026-10-15", 100_00],
-      [4, "2026-11-15", 100_00],
+      // the card closes on the 3rd: each one is dated on the day its bill opens
+      [3, "2026-10-03", 100_00],
+      [4, "2026-11-03", 100_00],
     ]
   );
 });
@@ -46,7 +47,7 @@ test("installments already charged are not projected again", () => {
   const l = ledger([charge("a", "2026-09-15", 50_00, 1, 3), charge("b", "2026-10-15", 50_00, 2, 3)]);
   assert.deepEqual(
     futureInstallments(l, "card").map((p) => [p.number, p.date]),
-    [[3, "2026-11-15"]]
+    [[3, "2026-11-03"]]
   );
 });
 
@@ -55,8 +56,8 @@ test("two purchases at the same store in different months stay apart", () => {
   assert.deepEqual(
     futureInstallments(l, "card").map((p) => [p.date, p.amount]),
     [
-      ["2026-10-15", 30_00],
-      ["2026-11-20", 80_00],
+      ["2026-10-03", 30_00],
+      ["2026-11-03", 80_00],
     ]
   );
 });
@@ -96,12 +97,31 @@ test("manual cards post each installment when its date comes", () => {
   assert.deepEqual(
     posted.map((t) => [t.date, t.amount, t.installment?.number, t.categoryId, t.notes]),
     [
-      ["2026-09-15", 40_00, 2, "cat", undefined],
-      ["2026-10-15", 40_00, 3, "cat", undefined],
+      ["2026-09-03", 40_00, 2, "cat", undefined],
+      ["2026-10-03", 40_00, 3, "cat", undefined],
     ]
   );
   // nothing left to post, so running it again adds nothing
   assert.equal(postDueInstallments(l, "2026-12-31"), 0);
+});
+
+test("the next installment goes to the next bill even when the closing day moves", () => {
+  // like Rico: the bank closed on Sep 2 and Oct 1, so a purchase on Sep 6 is on the bill closing Oct 1
+  // and its 2nd installment on the one after, not one month later by date (Oct 6, the same bill)
+  const l = ledger([charge("a", "2026-09-06", 136_10, 1, 2)], {
+    closingDay: 22,
+    billDates: [
+      { close: "2026-09-02", due: "2026-09-10" },
+      { close: "2026-10-01", due: "2026-10-10" },
+      { close: "2026-11-03", due: "2026-11-10" },
+    ],
+  });
+  assert.deepEqual(
+    futureInstallments(l, "card").map((p) => p.date),
+    ["2026-10-01"]
+  );
+  assert.equal(cardBill(l, "card", "2026-10-28", 0).planned, 136_10);
+  assert.equal(cardBill(l, "card", "2026-10-28", -1).planned, 0);
 });
 
 test("synced cards never post installments: the bank charges them", () => {

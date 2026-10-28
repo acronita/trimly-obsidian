@@ -18,8 +18,8 @@ passphrase that never leaves your device.
   grouped into accounts, credit cards and investments; credit cards show their current bill and
   limit, and their transactions are browsed bill by bill (closing and due day)
   without losing history. Installment purchases (*compras parceladas*) show which installment each
-  charge is (3/10), and the installments the bank has not charged are counted in their bills (one a
-  month after the latest charge, even when the bank only ever reports the first), which can be
+  charge is (3/10), and the installments the bank has not charged are counted in their bills (one per
+  bill after the latest charge, even when the bank only ever reports the first), which can be
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.

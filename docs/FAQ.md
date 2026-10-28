@@ -89,7 +89,7 @@ account to fix that.
 Synced cards take the installment from Pluggy, or from a mark at the end of the description
 ("LOJA 03/10", "PARC 3/10", "Parcela 3 de 10") when the bank sends none. A purchase whose
 charges carry neither is a plain charge. The remaining installments are projected at the latest
-charge's amount, one a month after it, and replaced by the real charges as the bank sends them.
+charge's amount, one per bill after its bill (dated on the day each bill opens), and replaced by the real charges as the bank sends them.
 Some banks only ever report the first installment: the projected ones still count in their bills,
 closed ones included, so the bill totals stay right.
 

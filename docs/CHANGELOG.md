@@ -6,7 +6,7 @@
   it is (new optional `installment: { number, total }` on transactions; ledger version unchanged),
   from Pluggy's `creditCardMetadata` or, when the bank sends none, a mark at the end of the
   description ("03/10", "PARC 3/10", "Parcela 3 de 10"). The installments still to come are
-  projected, one a month after the latest charge, into the open bill (when not charged yet) and
+  projected, one per bill after the latest charge's bill (dated on the day that bill opens), into the open bill (when not charged yet) and
   the next ones, closed bills included, since some banks only ever report the first installment:
   the bill view now browses up to 12 bills ahead, with a *Parcelas previstas* list and chip, and
   the card tile shows *Parcelas futuras*. Transactions show
