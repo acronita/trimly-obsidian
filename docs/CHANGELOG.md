@@ -3,8 +3,8 @@
 ## 0.13.0 — 2026-10-27
 
 - 2026-10-27 — Synced cards follow the bank's own bill dates. Bank sync fetches each card's bills
-  (Pluggy `GET /bills`) and keeps their closing and due dates on the account (`billDates`, new
-  optional field); a bill uses the bank's dates for its month, and the closing and due days only
+  (Pluggy `GET /bills`), plus the open bill's dates from the card's `creditData`, and keeps their
+  closing and due dates on the account (`billDates`, new optional field); a bill uses the bank's dates for its month, and the closing and due days only
   stand in for months the bank gives no date for, or for banks that do not report bills. The
   setting is *Dia de fechamento* again and means the bank's closing day: that day's purchases go to
   the next bill and a payment made on it pays the bill that just closed (as in 0.12.1). Why: some

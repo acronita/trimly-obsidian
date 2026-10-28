@@ -208,8 +208,9 @@ test("a card keeps the bank's bill dates, each bill once, taking the latest clos
   const l = fresh();
   const bill = (id: string, close: string, due: string) => ({ id, accountId: "p-card", billClosingDate: `${close}T00:00:00.000Z`, dueDate: `${due}T00:00:00.000Z` });
   applyBankData(l, { ...data([]), bills: [bill("b1", "2026-09-26", "2026-10-01"), bill("b2", "2026-10-26", "2026-11-01")] }, WINDOW, TODAY);
-  // later the bank moves November's bill and reports December's; September's is no longer listed
-  applyBankData(l, { ...data([]), bills: [bill("b2", "2026-10-24", "2026-11-01"), bill("b3", "2026-11-22", "2026-12-01")] }, WINDOW, TODAY);
+  // later the bank moves November's bill, and the card gives the open bill's dates; September's is no longer listed
+  const open = { ...card, creditData: { balanceCloseDate: "2026-11-22T00:00:00.000Z", balanceDueDate: "2026-12-01T00:00:00.000Z" } };
+  applyBankData(l, { ...data([], [checking, open]), bills: [bill("b2", "2026-10-24", "2026-11-01")] }, WINDOW, TODAY);
   assert.deepEqual(synced(l, "p-card").billDates, [
     { close: "2026-09-26", due: "2026-10-01" },
     { close: "2026-10-24", due: "2026-11-01" },

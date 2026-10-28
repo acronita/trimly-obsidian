@@ -283,13 +283,15 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     byPluggyId.set(p.id, acc);
   }
 
-  // the bank's bill dates; a bill seen again (same due date) takes its latest closing date
-  for (const b of data.bills ?? []) {
-    const acc = byPluggyId.get(b.accountId);
-    if (acc?.type !== "credit" || !b.billClosingDate) continue;
-    const bill = { close: b.billClosingDate.slice(0, 10), due: b.dueDate.slice(0, 10) };
+  // the bank's bill dates: past bills from the bills list, the open one from the card;
+  // a bill seen again (same due date) takes its latest closing date
+  const billDates = (acc: Account | undefined, close?: string | null, due?: string | null) => {
+    if (acc?.type !== "credit" || !close || !due) return;
+    const bill = { close: close.slice(0, 10), due: due.slice(0, 10) };
     acc.billDates = [...(acc.billDates ?? []).filter((d) => d.due !== bill.due), bill].sort((x, y) => (x.close < y.close ? -1 : 1));
-  }
+  };
+  for (const b of data.bills ?? []) billDates(byPluggyId.get(b.accountId), b.billClosingDate, b.dueDate);
+  for (const p of data.accounts) billDates(byPluggyId.get(p.id), p.creditData?.balanceCloseDate, p.creditData?.balanceDueDate);
 
   const categories = new Map(data.categories.map((c) => [c.id, c]));
   const legs: Leg[] = [];
