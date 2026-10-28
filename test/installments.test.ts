@@ -188,7 +188,7 @@ test("synced charges go on the bill the bank says, whatever their date (Rico)", 
     // the bank gave the September closing, not the October one
     billDates: [{ close: "2026-09-24", due: "2026-10-01" }],
   });
-  const charge = (id: string, date: string, amount: number, forecast: string, installment?: [number, number]): PluggyTransaction => ({
+  const charge = (id: string, date: string, amount: number, forecast: string, installment?: [number, number], purchase?: string): PluggyTransaction => ({
     id,
     accountId: "p-rico",
     date: `${date}T03:00:00.000Z`,
@@ -198,7 +198,7 @@ test("synced charges go on the bill the bank says, whatever their date (Rico)", 
     status: "POSTED",
     creditCardMetadata: {
       billForecastDate: forecast,
-      ...(installment ? { installmentNumber: installment[0], totalInstallments: installment[1] } : {}),
+      ...(installment ? { installmentNumber: installment[0], totalInstallments: installment[1], purchaseDate: purchase ?? `${date}T03:00:00.000Z` } : {}),
     },
   });
   applyBankData(
@@ -212,7 +212,7 @@ test("synced charges go on the bill the bank says, whatever their date (Rico)", 
         // the October bill closed on the 26th, a date the bank did not give
         charge("multa-out", "2026-10-26", 16.67, "2026-10"),
         // a later installment carries the purchase date and the 1st installment's month
-        charge("paypal", "2026-08-22", 189.51, "2026-06", [3, 3]),
+        charge("paypal", "2026-08-22", 189.51, "2026-06", [3, 3], "2026-06-09T21:27:00.000Z"),
       ],
       categories: [],
     },
@@ -226,4 +226,29 @@ test("synced charges go on the bill the bank says, whatever their date (Rico)", 
   assert.deepEqual([bill(-1).due, bill(-1).total, bill(-1).planned], ["2026-11-01", 16_67 + 272_21, 272_21]);
   // PayPal 3/3, bought in June, is on the bill closing in August
   assert.equal(bill(-3).total, 189_51);
+});
+
+test("banks that give each installment its own bill month (Nubank) are taken as they are", () => {
+  // Nubank sends every installment ahead, PENDING, dated in its own cycle with its own bill month
+  const l = defaultLedger();
+  l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"] };
+  l.accounts.push({ id: "nu", name: "Nubank", type: "credit", openingBalance: 0, pluggyId: "p-nu", closingDay: 2, dueDay: 9 });
+  const toro = (n: number, date: string, forecast: string): PluggyTransaction => ({
+    id: `toro-${n}`,
+    accountId: "p-nu",
+    date: `${date}T03:00:00.000Z`,
+    description: `Pg *Toro Investimentos ${n}/12`,
+    amount: 29.8,
+    type: "DEBIT",
+    status: "PENDING",
+    creditCardMetadata: { billForecastDate: forecast, installmentNumber: n, totalInstallments: 12, purchaseDate: "2026-07-21T14:52:37.001Z" },
+  });
+  applyBankData(
+    l,
+    { accounts: [{ id: "p-nu", type: "CREDIT", name: "Nubank", balance: 0 }], transactions: [toro(4, "2026-10-21", "2026-11"), toro(12, "2027-06-21", "2027-07")], categories: [] },
+    "2026-08-01",
+    "2026-10-28"
+  );
+  const month = (n: number) => l.transactions.find((t) => t.installment?.number === n)?.billMonth;
+  assert.deepEqual([month(4), month(12)], ["2026-11", "2027-07"]);
 });

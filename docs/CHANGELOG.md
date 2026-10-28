@@ -11,8 +11,8 @@
   the bill view now browses up to 12 bills ahead, with a *Parcelas previstas* list and chip, and
   the card tile shows *Parcelas futuras*. Synced card charges keep the bill the bank put them on
   (new optional `billMonth` on transactions: the month the bill closes, from Pluggy's
-  `billForecastDate`, moved one month per installment after the 1st, since installments carry the
-  purchase's), and bills count charges by it instead of by date, so Rico's fees posted on the
+  `billForecastDate`; when a later installment carries the purchase's month, as at Rico, it is moved
+  one month per installment after the 1st, while Nubank gives each installment its own), and bills count charges by it instead of by date, so Rico's fees posted on the
   closing day stay on the bill that closes and installments dated on the purchase day land on
   their own bill. A bill is now named after the month it is due, as the banks do (*Fatura de novembro* is
   due in November). Transactions show

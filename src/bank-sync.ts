@@ -54,8 +54,9 @@ export interface PluggyTransaction {
   creditCardMetadata?: {
     installmentNumber?: number | null;
     totalInstallments?: number | null;
-    /** "YYYY-MM": month the charge's bill closes in; for installments, the 1st installment's */
+    /** "YYYY-MM": month the charge's bill closes in; some banks (Rico) give an installment the 1st installment's */
     billForecastDate?: string | null;
+    purchaseDate?: string | null;
   } | null;
 }
 
@@ -337,9 +338,12 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
         ? cents(t.amountInAccountCurrency)
         : convert(ledger, cents(t.amount), t.currencyCode!, acc.currency!);
     const installment = onCard && !moneyIn ? installmentOf(t) : undefined;
-    // the bill the bank put the charge on: installments carry the purchase date, so their date can't tell
-    const forecast = t.creditCardMetadata?.billForecastDate?.slice(0, 7);
-    const billMonth = onCard && forecast && /^\d{4}-\d{2}$/.test(forecast) ? shiftMonth(forecast, (installment?.number ?? 1) - 1) : undefined;
+    // the bill the bank put the charge on, since some banks date installments on the purchase day; banks that
+    // give a later installment the purchase's month (Rico) mean the 1st installment's bill, a month per installment back
+    const meta = t.creditCardMetadata;
+    const forecast = meta?.billForecastDate?.slice(0, 7);
+    const back = installment && installment.number > 1 && meta?.purchaseDate?.slice(0, 7) === forecast ? installment.number - 1 : 0;
+    const billMonth = onCard && forecast && /^\d{4}-\d{2}$/.test(forecast) ? shiftMonth(forecast, back) : undefined;
     legs.push({
       pid: t.id,
       accountId: acc.id,
