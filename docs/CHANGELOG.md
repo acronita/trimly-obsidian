@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.14.2 — 2026-10-28
+
+- 2026-10-28 — The month browsed goes back to this month when switching tabs or modes, or opening
+  Trimly again while it is already open. Why: browsing September in Transactions left the
+  Dashboard on September too, where positions synced later counted as zero, so investments looked
+  missing from the net worth. Files touched: `src/view.ts`, `src/main.ts`, `README.md`.
+
 ## 0.14.1 — 2026-10-28
 
 - 2026-10-28 — A recurring rule on a synced account no longer links a charge just because it shares

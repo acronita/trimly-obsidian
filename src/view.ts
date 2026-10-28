@@ -364,15 +364,24 @@ export class TrimlyView extends ItemView {
     this.goTab("obligations");
   }
 
+  // a month browsed in one tab must not linger: every tab, mode or reopen starts on this month
   private goTab(t: Tab) {
     this.tabs[this.mode] = t;
+    this.month = monthOf(todayISO());
     this.contentEl.scrollTop = 0;
     this.render();
   }
 
   private setMode(m: Mode) {
     this.mode = m;
+    this.month = monthOf(todayISO());
     this.contentEl.scrollTop = 0;
+    this.render();
+  }
+
+  /** Opened again from the ribbon or the command while already open. */
+  showCurrentMonth() {
+    this.month = monthOf(todayISO());
     this.render();
   }
 

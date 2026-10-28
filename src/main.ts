@@ -173,6 +173,7 @@ export default class TrimlyPlugin extends Plugin {
     const existing = this.app.workspace.getLeavesOfType(VIEW_TYPE_TRIMLY)[0];
     const leaf = existing ?? this.app.workspace.getLeaf("tab");
     if (!existing) await leaf.setViewState({ type: VIEW_TYPE_TRIMLY, active: true });
+    else if (existing.view instanceof TrimlyView) existing.view.showCurrentMonth();
     await this.app.workspace.revealLeaf(leaf);
   }
 

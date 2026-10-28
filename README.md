@@ -11,7 +11,7 @@ passphrase that never leaves your device.
 - **Overview** — net worth, the month's income, expenses and savings rate (projected with recurring
   income still due this month, e.g. a salary paid on the last days, with the actual figure under it), a 6-month cash-flow chart,
   spending by category (donut), account balances, recent activity and upcoming bills. Navigate month
-  by month.
+  by month; switching tabs or reopening Trimly goes back to this month.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
   and notes. Search and filter by account, category, type and month.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
