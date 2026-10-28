@@ -85,6 +85,12 @@ a transfer from another account into the card; a bill paid from a bank Trimly do
 as income on the card and lowers the open bill instead. Turn it into a transfer from the paying
 account to fix that.
 
+**My installment purchase doesn't show its future installments.**
+Synced cards take the installment from Pluggy, or from a mark at the end of the description
+("LOJA 03/10", "PARC 3/10", "Parcela 3 de 10") when the bank sends none. A purchase whose
+charges carry neither is a plain charge. The remaining installments are projected at the latest
+charge's amount, one a month after it, and replaced by the real charges as the bank sends them.
+
 **Why didn't I get an obligation reminder on my phone?**
 Reminders come from Trimly itself, so they only fire while Obsidian is open and Trimly is
 unlocked (obligations live inside the encrypted ledger): on unlock and every hour after. A plugin

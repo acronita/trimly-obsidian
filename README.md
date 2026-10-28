@@ -17,7 +17,11 @@ passphrase that never leaves your device.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
   grouped into accounts, credit cards and investments; credit cards show their current bill and
   limit, and their transactions are browsed bill by bill (closing and due day)
-  without losing history.
+  without losing history. Installment purchases (*compras parceladas*) show which installment each
+  charge is (3/10), and the installments still to come are counted in the next bills, which can be
+  browsed ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
+  the number of installments when adding the purchase (the amount is its total): each installment is
+  posted when its date comes.
 - **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives. On bank-synced accounts nothing is posted: the

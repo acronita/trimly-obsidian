@@ -15,6 +15,7 @@ import {
   linkObligationPayments,
   localeForCurrency,
   obligationReminders,
+  postDueInstallments,
   postDueRecurring,
   toISODate,
   todayISO,
@@ -259,9 +260,11 @@ export default class TrimlyPlugin extends Plugin {
       const ledger = await this.store.load(passphrase);
       this.ledger = ledger;
       const posted = postDueRecurring(ledger, todayISO());
+      const installments = postDueInstallments(ledger, todayISO());
       const paid = linkObligationPayments(ledger, todayISO());
-      if (posted || paid) await this.store.save(ledger);
+      if (posted || installments || paid) await this.store.save(ledger);
       if (posted) new Notice(t.recurring.posted(posted));
+      if (installments) new Notice(t.tx.installmentsPosted(installments));
       if (paid) new Notice(t.obligations.autoLinked(paid));
       return null;
     } catch (e) {

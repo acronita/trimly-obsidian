@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, convert, daysBetween, defaultCategoryKey, newId } from "./ledger.ts";
+import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync fetches and reconciles. */
@@ -48,6 +48,8 @@ export interface PluggyTransaction {
   /** `amount` converted to the account's currency, when the transaction was made in another one */
   amountInAccountCurrency?: number | null;
   categoryId?: string | null;
+  /** credit cards: installment purchases carry which installment this charge is */
+  creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null } | null;
 }
 
 export interface PluggyBill {
@@ -118,6 +120,7 @@ interface Leg {
   pending: boolean;
   /** category descriptions, leaf first; empty when uncategorized */
   path: string[];
+  installment?: Transaction["installment"];
 }
 
 /** What the ledger should contain for one or two legs. */
@@ -132,6 +135,7 @@ interface Rec {
   pending: boolean;
   path: string[];
   original?: Transaction["original"];
+  installment?: Transaction["installment"];
 }
 
 function cents(value: number): number {
@@ -150,6 +154,14 @@ function categoryPath(categories: Map<string, PluggyCategory>, id?: string | nul
     path.push(c.description);
   }
   return path;
+}
+
+/** Which installment a card purchase is: Pluggy's metadata, else the mark in its description. */
+function installmentOf(t: PluggyTransaction): Transaction["installment"] {
+  const number = t.creditCardMetadata?.installmentNumber;
+  const total = t.creditCardMetadata?.totalInstallments;
+  if (number && total && total > 1 && number <= total) return { number, total };
+  return installmentFromDescription(t.description);
 }
 
 function isOwnTransfer(leg: Leg): boolean {
@@ -218,6 +230,7 @@ function pairTransfers(legs: Leg[]): Rec[] {
       pending: l.pending,
       path: l.path,
       original: l.original,
+      installment: l.installment,
     });
   }
   return recs;
@@ -244,6 +257,8 @@ function relink(tx: Transaction, rec: Rec): boolean {
   else delete tx.pending;
   if (rec.original) tx.original = rec.original;
   else delete tx.original;
+  if (rec.installment) tx.installment = rec.installment;
+  else delete tx.installment;
   if (tx.type !== rec.type || tx.accountId !== rec.accountId || tx.toAccountId !== rec.toAccountId) {
     tx.type = rec.type;
     tx.accountId = rec.accountId;
@@ -318,6 +333,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
       description: t.description,
       pending: t.status === "PENDING",
       path: categoryPath(categories, t.categoryId),
+      installment: onCard && !moneyIn ? installmentOf(t) : undefined,
     });
   }
   const recs = pairTransfers(legs);
@@ -366,6 +382,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     };
     if (rec.toAccountId) tx.toAccountId = rec.toAccountId;
     if (rec.original) tx.original = rec.original;
+    if (rec.installment) tx.installment = rec.installment;
     const categoryId = mapCategory(ledger, rec);
     if (categoryId) tx.categoryId = categoryId;
     if (rec.pending) tx.pending = true;

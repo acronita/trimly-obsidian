@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.14.0 — 2026-10-28
+
+- 2026-10-28 — Installment purchases (*compras parceladas*). A card charge keeps which installment
+  it is (new optional `installment: { number, total }` on transactions; ledger version unchanged),
+  from Pluggy's `creditCardMetadata` or, when the bank sends none, a mark at the end of the
+  description ("03/10", "PARC 3/10", "Parcela 3 de 10"). The installments still to come are
+  projected, one a month after the latest charge, into the open bill (when not charged yet) and
+  the next ones: the bill view now browses ahead while some installment is expected, with a
+  *Parcelas previstas* list and chip, and the card tile shows *Parcelas futuras*. Transactions show
+  a 3/10 badge and their modal says how much is left. On cards that are not synced, a new purchase
+  takes a number of installments (the amount is the total; the 1st installment takes the cents that
+  don't split) and each installment is posted on unlock when its date comes. Why: buying in
+  installments is common in Brazil, and without it future bills were understated (roadmap,
+  *Agora*). Files touched: `src/ledger.ts`, `src/bank-sync.ts`, `src/view.ts`, `src/modals.ts`,
+  `src/main.ts`, `src/i18n/*`, `styles.css`, `test/installments.test.ts`, `README.md`,
+  `docs/FAQ.md`, `docs/ARCHITECTURE.md`.
+- 2026-10-28 — The project instructions link the roadmap and the competitor research (Google
+  Docs). Files touched: `.claude/CLAUDE.md`.
+
 ## 0.13.0 — 2026-10-27
 
 - 2026-10-27 — Synced cards follow the bank's own bill dates. Bank sync fetches each card's bills

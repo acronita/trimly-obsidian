@@ -13,6 +13,7 @@ import {
   Category,
   CategoryKind,
   Ledger,
+  PlannedInstallment,
   MOVEMENT_ICONS,
   Movement,
   MovementType,
@@ -27,6 +28,8 @@ import {
   baseAmount,
   cardBill,
   cardBills,
+  futureInstallments,
+  installmentFromDescription,
   isCardPayment,
   allocationByClass,
   applyInstitutionToConnection,
@@ -642,6 +645,11 @@ export class TrimlyView extends ItemView {
     const main = row.createDiv("trimly-row-main");
     const title = main.createDiv({ cls: "trimly-row-title", text: tx.description });
     if (tx.recurringId) setIcon(title.createSpan({ cls: "trimly-inline-icon", attr: { "aria-label": t.tx.recurring } }), "repeat");
+    // banks that write the installment in the description already show it
+    const inst = tx.installment;
+    if (inst && !installmentFromDescription(tx.description)) {
+      title.createSpan({ cls: "trimly-installment", text: t.tx.installment(inst.number, inst.total), attr: { "aria-label": t.tx.installmentOf(inst.number, inst.total) } });
+    }
     const acc = (id?: string) => ledger.accounts.find((a) => a.id === id)?.name ?? "?";
     const parts =
       tx.type === "transfer"
@@ -813,10 +821,12 @@ export class TrimlyView extends ItemView {
     label.createDiv({ cls: "trimly-muted", text: t.accounts.billPeriod(this.shortDate(bill.start), this.shortDate(bill.end)) });
     const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.accounts.nextBill } });
     setIcon(next, "chevron-right");
-    if (this.billOffset >= 0) next.disabled = true;
+    // future bills only hold installments, so they are shown while some is expected
+    if (this.billOffset >= 0 && cardBill(ledger, card.id, today, this.billOffset + 1).planned === 0) next.disabled = true;
     else next.addEventListener("click", () => go(this.billOffset + 1));
-    if (this.billOffset < 0) nav.createEl("button", { cls: "trimly-pill", text: t.accounts.currentBill }).addEventListener("click", () => go(0));
-    const status = this.billOffset >= 0 ? "open" : bill.remaining === 0 ? "paid" : bill.due && bill.due < today ? "overdue" : "closed";
+    if (this.billOffset !== 0) nav.createEl("button", { cls: "trimly-pill", text: t.accounts.currentBill }).addEventListener("click", () => go(0));
+    const status =
+      this.billOffset > 0 ? "planned" : this.billOffset === 0 ? "open" : bill.remaining === 0 ? "paid" : bill.due && bill.due < today ? "overdue" : "closed";
     head.createDiv({ cls: `trimly-tile-tag trimly-bill-status is-${status}`, text: t.accounts.billStatus[status] });
 
     const summary = wrap.createDiv("trimly-summary-chips");
@@ -829,12 +839,20 @@ export class TrimlyView extends ItemView {
     chip(t.accounts.billPaid, this.money(bill.paid, card.currency), bill.paid ? "is-income" : "");
     chip(t.accounts.billRemaining, this.money(bill.remaining, card.currency), bill.remaining ? "is-expense" : "");
     chip(t.accounts.billDue, bill.due ? this.shortDate(bill.due) : "—");
+    if (bill.planned) chip(t.accounts.billPlanned, this.money(bill.planned, card.currency));
 
     const charges = sortTransactions(
       ledger.transactions.filter((tx) => tx.date >= bill.start && tx.date <= bill.end && !isCardPayment(tx, card.id) && this.matchesFilter(tx))
     );
     if (charges.length) this.renderDays(wrap, ledger, charges);
-    else this.empty(wrap.createDiv("trimly-card"), "credit-card", t.accounts.billEmpty);
+    else if (!bill.planned) this.empty(wrap.createDiv("trimly-card"), "credit-card", t.accounts.billEmpty);
+
+    if (bill.planned) {
+      const planned = futureInstallments(ledger, card.id, bill.start).filter((p) => p.date < bill.close);
+      wrap.createDiv({ cls: "trimly-section-title", text: t.accounts.billPlanned });
+      const box = wrap.createDiv("trimly-card trimly-day-card");
+      for (const p of planned) this.plannedRow(box, ledger, p, card);
+    }
 
     if (this.billOffset < 0) {
       const until = cardBill(ledger, card.id, today, this.billOffset + 1).end;
@@ -845,6 +863,18 @@ export class TrimlyView extends ItemView {
         for (const tx of payments) this.txRow(box, ledger, tx, true);
       }
     }
+  }
+
+  /** An installment not charged yet; opens the purchase's latest charge. */
+  private plannedRow(parent: HTMLElement, ledger: Ledger, p: PlannedInstallment, card: Account) {
+    const row = parent.createDiv("trimly-row is-clickable is-planned");
+    const cat = this.category(ledger, p.last.categoryId);
+    this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
+    const main = row.createDiv("trimly-row-main");
+    main.createDiv({ cls: "trimly-row-title", text: p.last.description });
+    main.createDiv({ cls: "trimly-row-sub", text: `${this.shortDate(p.date)} · ${t.tx.installmentOf(p.number, p.total)}` });
+    row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(p.amount, "expense", card.currency) });
+    row.addEventListener("click", () => this.plugin.openTransactionModal(p.last));
   }
 
   // ---- accounts ----
@@ -917,6 +947,8 @@ export class TrimlyView extends ItemView {
       foot.createSpan({ cls: "trimly-muted", text: t.accounts.available(this.money(Math.max(0, a.creditLimit - used), a.currency)) });
       foot.createSpan({ cls: "trimly-muted", text: t.accounts.limit(this.money(a.creditLimit, a.currency)) });
     }
+    const future = futureInstallments(ledger, a.id, open.close).reduce((sum, p) => sum + p.amount, 0);
+    if (future) tile.createDiv({ cls: "trimly-muted", text: t.accounts.futureInstallments(this.money(future, a.currency)) });
     this.closedBillCallout(tile, a, closed, today);
     tile.addEventListener("click", () => this.editAccount(a.id));
   }

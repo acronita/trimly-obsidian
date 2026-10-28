@@ -125,6 +125,8 @@ export interface Transaction {
   pending?: boolean;
   /** made in another currency than the account's (e.g. a card purchase in USD); `amount` is what the account was charged */
   original?: { currency: string; amount: number };
+  /** card purchases in installments: this charge is installment `number` of `total` */
+  installment?: { number: number; total: number };
 }
 
 export interface Budget {
@@ -642,6 +644,8 @@ export interface CardBill {
   paid: number;
   /** part of `total` not paid yet */
   remaining: number;
+  /** installments expected in this cycle but not charged yet (open and future bills only), included in `total` */
+  planned: number;
 }
 
 /**
@@ -674,6 +678,76 @@ function dueAfter(close: string, dueDay: number): string {
 /** A transfer into the card: paying its bill. */
 export function isCardPayment(tx: Transaction, accountId: string): boolean {
   return tx.type === "transfer" && tx.toAccountId === accountId;
+}
+
+/** An installment of a card purchase that is not charged yet. */
+export interface PlannedInstallment {
+  /** the purchase's latest charged installment */
+  last: Transaction;
+  number: number;
+  total: number;
+  date: string;
+  amount: number;
+}
+
+/** Strips an installment mark ("3/10", "PARC 03/10", "Parcela 3 de 10") from a description. */
+const INSTALLMENT_MARK = /\s*(?:-\s*)?(?:parc(?:ela)?\.?\s*)?(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})\s*$/i;
+
+/**
+ * The installment a card charge's description names, when the bank writes it
+ * there ("LOJA 03/10", "LOJA PARC 3/10") instead of sending it apart.
+ */
+export function installmentFromDescription(description: string): Transaction["installment"] {
+  const m = INSTALLMENT_MARK.exec(description);
+  if (!m) return undefined;
+  const [number, total] = [Number(m[1]), Number(m[2])];
+  return number >= 1 && total >= 2 && number <= total ? { number, total } : undefined;
+}
+
+/** The installments of each purchase on a card still to be charged, dated `from` or later, soonest first. */
+export function futureInstallments(ledger: Ledger, accountId: string, from = ""): PlannedInstallment[] {
+  // a purchase's installments share the description (without the mark), the count and the first month
+  const latest = new Map<string, Transaction>();
+  for (const tx of ledger.transactions) {
+    const inst = tx.installment;
+    if (!inst || tx.accountId !== accountId || tx.type !== "expense") continue;
+    const name = tx.description.replace(INSTALLMENT_MARK, "").trim().toLowerCase();
+    const key = `${name}|${inst.total}|${shiftMonth(monthOf(tx.date), 1 - inst.number)}`;
+    const seen = latest.get(key);
+    if (!seen || seen.installment!.number < inst.number) latest.set(key, tx);
+  }
+  const out: PlannedInstallment[] = [];
+  for (const last of latest.values()) {
+    const { number, total } = last.installment!;
+    const anchorDay = Number(last.date.slice(8, 10));
+    let date = last.date;
+    for (let n = number + 1; n <= total; n++) {
+      date = nextOccurrence(date, "monthly", anchorDay);
+      if (date >= from) out.push({ last, number: n, total, date, amount: last.amount });
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/**
+ * Charge the installments due on or before `today` of purchases on cards bank
+ * sync does not mirror; on synced cards the bank charges them. Mutates the
+ * ledger; returns how many transactions were added.
+ */
+export function postDueInstallments(ledger: Ledger, today: string): number {
+  let posted = 0;
+  for (const acc of ledger.accounts) {
+    if (acc.type !== "credit" || (ledger.pluggy && acc.pluggyId)) continue;
+    for (const p of futureInstallments(ledger, acc.id)) {
+      if (p.date > today) continue;
+      const tx: Transaction = { ...p.last, id: newId(), date: p.date, installment: { number: p.number, total: p.total } };
+      delete tx.recurringId;
+      delete tx.notes;
+      ledger.transactions.push(tx);
+      posted++;
+    }
+  }
+  return posted;
 }
 
 /**
@@ -709,6 +783,8 @@ export function cardBill(ledger: Ledger, accountId: string, today: string, offse
     else if (tx.date < prev) prevTotal -= v;
   }
   paid += Math.max(0, prevPaid - Math.max(0, prevTotal));
+  const planned = close > today ? futureInstallments(ledger, accountId, prev).filter((p) => p.date < close).reduce((s, p) => s + p.amount, 0) : 0;
+  total += planned;
   return {
     start: prev,
     end: toISODate(new Date(Date.parse(`${close}T12:00:00`) - 86_400_000)),
@@ -717,6 +793,7 @@ export function cardBill(ledger: Ledger, accountId: string, today: string, offse
     total,
     paid,
     remaining: Math.max(0, total - paid),
+    planned,
   };
 }
 
