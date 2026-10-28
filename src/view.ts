@@ -755,6 +755,19 @@ export class TrimlyView extends ItemView {
       return;
     }
     const f = this.filter;
+    // month by month, like a card's bills; it is the same month as the header's
+    if (!f.allMonths) {
+      const nav = wrap.createDiv("trimly-bill-head").createDiv("trimly-month-nav");
+      const prev = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.header.previousMonth } });
+      setIcon(prev, "chevron-left");
+      prev.addEventListener("click", () => this.setMonth(shiftMonth(this.month, -1)));
+      nav.createDiv({ cls: "trimly-bill-title", text: this.monthLabel(this.month) });
+      const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.header.nextMonth } });
+      setIcon(next, "chevron-right");
+      next.addEventListener("click", () => this.setMonth(shiftMonth(this.month, 1)));
+      const current = monthOf(todayISO());
+      if (this.month !== current) nav.createEl("button", { cls: "trimly-pill", text: t.common.thisMonth }).addEventListener("click", () => this.setMonth(current));
+    }
     const txs = sortTransactions(ledger.transactions.filter((t) => (f.allMonths || monthOf(t.date) === this.month) && this.matchesFilter(t)));
     let income = 0;
     let expense = 0;

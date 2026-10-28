@@ -34,6 +34,10 @@
   recebido*) now pairs with the bank's debit. Why: it stayed as income on the card, so the bill it
   paid showed as unpaid and the next one as smaller. Files touched: `src/bank-sync.ts`,
   `test/bank-sync.test.ts`, `docs/ARCHITECTURE.md`.
+- 2026-10-28 — The transactions tab of accounts other than cards has its own month navigation
+  above the list (previous, next, back to this month), like a card's bills; it moves the same
+  month as the header. Why: the header's was easy to miss, so it looked like only this month or all
+  months could be seen. Files touched: `src/view.ts`.
 - 2026-10-28 — The project instructions link the roadmap and the competitor research (Google
   Docs). Files touched: `.claude/CLAUDE.md`.
 
