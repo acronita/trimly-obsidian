@@ -1,7 +1,11 @@
 # Changelog
 
-## 0.14.2 — 2026-10-28
+## 0.15.0 — 2026-10-28
 
+- 2026-10-28 — The Recurring tab's summary adds *Custos variáveis / mês* (the monthly total of
+  *Contas variáveis*), and *Sobra / mês* (was *Sobra após fixos*) now subtracts it too. Why: the
+  leftover only counted fixed rules, so bills paid by hand made the month look better than it is.
+  Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `README.md`.
 - 2026-10-28 — The month browsed goes back to this month when switching tabs or modes, or opening
   Trimly again while it is already open. Why: browsing September in Transactions left the
   Dashboard on September too, where positions synced later counted as zero, so investments looked

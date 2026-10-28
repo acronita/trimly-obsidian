@@ -238,7 +238,8 @@ export const ptBR = {
   recurring: {
     fixedIncome: "Receitas fixas / mês",
     fixedCosts: "Custos fixos / mês",
-    leftAfterFixed: "Sobra após fixos",
+    variableCosts: "Custos variáveis / mês",
+    leftOver: "Sobra / mês",
     title: "Transações recorrentes",
     empty: "Adicione contas, assinaturas e salários. Eles são lançados automaticamente no vencimento.",
     add: "Nova recorrente",

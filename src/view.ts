@@ -1155,6 +1155,8 @@ export class TrimlyView extends ItemView {
       if (r.type === "expense") monthlyOut += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
       if (r.type === "income") monthlyIn += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
     }
+    const monthlyVariable = estimatedBills(ledger).reduce((sum, b) => sum + b.monthly, 0);
+    const left = monthlyIn - monthlyOut - monthlyVariable;
     const summary = body.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
       const c = summary.createDiv(`trimly-summary-chip ${cls}`);
@@ -1163,7 +1165,8 @@ export class TrimlyView extends ItemView {
     };
     chip(t.recurring.fixedIncome, `+${this.money(Math.round(monthlyIn))}`, "is-income");
     chip(t.recurring.fixedCosts, `−${this.money(Math.round(monthlyOut))}`, "is-expense");
-    chip(t.recurring.leftAfterFixed, this.money(Math.round(monthlyIn - monthlyOut)), monthlyIn >= monthlyOut ? "is-income" : "is-expense");
+    chip(t.recurring.variableCosts, `−${this.money(Math.round(monthlyVariable))}`, "is-expense");
+    chip(t.recurring.leftOver, this.money(Math.round(left)), left >= 0 ? "is-income" : "is-expense");
 
     const bar = body.createDiv("trimly-section-bar");
     bar.createDiv({ cls: "trimly-muted", text: t.recurring.hint });

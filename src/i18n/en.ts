@@ -233,7 +233,8 @@ export const en: Strings = {
   recurring: {
     fixedIncome: "Fixed income / month",
     fixedCosts: "Fixed costs / month",
-    leftAfterFixed: "Left after fixed",
+    variableCosts: "Variable costs / month",
+    leftOver: "Left over / month",
     title: "Recurring transactions",
     empty: "Add bills, subscriptions and salaries. They post automatically when due.",
     add: "New recurring",
