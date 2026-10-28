@@ -553,8 +553,9 @@ export const ptBR = {
       openingDesc: "Saldo antes da primeira transação registrada. Use valor negativo para dívida.",
       archived: "Arquivada",
       archivedDesc: "Some das listas e da visão geral. O histórico é mantido.",
-      closingDay: "Dia de fechamento",
-      closingDayDesc: "Último dia do ciclo da fatura; compras depois dele entram na próxima. Vazio: a fatura segue o mês.",
+      closingDay: "Último dia da fatura",
+      closingDayDesc:
+        "Último dia em que uma compra ainda entra na fatura que está fechando. Se o banco diz que a fatura fecha no dia X e as compras desse dia já vão para a próxima (como no Nubank), use X − 1. Vazio: a fatura segue o mês.",
       dueDay: "Dia de vencimento",
       dueDayDesc: "Dia em que a fatura fechada vence.",
       dayInvalid: "Use um dia entre 1 e 31.",
