@@ -1,5 +1,5 @@
 import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
-import { SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
+import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { fetchBenchmarks } from "./bcb";
@@ -15,6 +15,7 @@ import {
   linkObligationPayments,
   localeForCurrency,
   obligationReminders,
+  postDueInstallments,
   postDueRecurring,
   toISODate,
   todayISO,
@@ -259,9 +260,11 @@ export default class TrimlyPlugin extends Plugin {
       const ledger = await this.store.load(passphrase);
       this.ledger = ledger;
       const posted = postDueRecurring(ledger, todayISO());
+      const installments = postDueInstallments(ledger, todayISO());
       const paid = linkObligationPayments(ledger, todayISO());
-      if (posted || paid) await this.store.save(ledger);
+      if (posted || installments || paid) await this.store.save(ledger);
       if (posted) new Notice(t.recurring.posted(posted));
+      if (installments) new Notice(t.tx.installmentsPosted(installments));
       if (paid) new Notice(t.obligations.autoLinked(paid));
       return null;
     } catch (e) {
@@ -416,7 +419,7 @@ export default class TrimlyPlugin extends Plugin {
     const windowStart = toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - SYNC_WINDOW_DAYS));
     let data;
     try {
-      data = await fetchBankData(config, windowStart);
+      data = await fetchBankData(config, toISODate(new Date(now.getFullYear(), now.getMonth(), now.getDate() - SYNC_HISTORY_DAYS)));
     } catch (e) {
       new Notice(t.notices.syncFailed((e as Error).message));
       return;

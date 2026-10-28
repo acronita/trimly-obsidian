@@ -224,7 +224,11 @@ function renderTxLikeFields(container: HTMLElement, ledger: Ledger, draft: TxLik
     d
       .addOptions(accountOptions(ledger, draft.accountId))
       .setValue(draft.accountId)
-      .onChange((v) => (draft.accountId = v))
+      .onChange((v) => {
+        draft.accountId = v;
+        // fields that depend on the account (installments on cards) come and go
+        rerender();
+      })
   );
   if (draft.type === "transfer") {
     if (!draft.toAccountId) draft.toAccountId = ledger.accounts.find((a) => a.id !== draft.accountId && !a.archived)?.id;
@@ -277,6 +281,8 @@ function footer(
 
 export class TransactionModal extends Modal {
   private draft: Transaction;
+  /** new card purchases: how many installments the amount (the total) is split into */
+  private installments = 1;
 
   constructor(
     app: App,
@@ -303,6 +309,14 @@ export class TransactionModal extends Modal {
     if (this.draft.type !== "transfer") delete this.draft.toAccountId;
     else delete this.draft.categoryId;
     this.draft.description = this.draft.description.trim();
+    const n = this.splitsIntoInstallments() ? this.installments : 1;
+    if (n > 1) {
+      if (this.draft.amount < n) return t.common.amountPositive;
+      // the 1st installment takes the cents that do not split evenly
+      const each = Math.floor(this.draft.amount / n);
+      this.draft.amount -= each * (n - 1);
+      this.draft.installment = { number: 1, total: n };
+    }
     this.onSave(this.draft);
     return null;
   }
@@ -318,6 +332,7 @@ export class TransactionModal extends Modal {
     contentEl.addClass("trimly-modal");
     renderTxLikeFields(contentEl, this.ledger, this.draft, () => this.render());
     dateSetting(contentEl, t.modals.tx.date, this.draft.date, (v) => (this.draft.date = v));
+    this.renderInstallments(contentEl);
     new Setting(contentEl).setName(t.modals.tx.notes).addTextArea((text) =>
       text.setValue(this.draft.notes ?? "").onChange((v) => (this.draft.notes = v || undefined))
     );
@@ -345,6 +360,32 @@ export class TransactionModal extends Modal {
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
       () => this.close()
     );
+  }
+
+  /** A new expense on a card that bank sync does not mirror, which may be split into installments. */
+  private splitsIntoInstallments(): boolean {
+    const acc = this.ledger.accounts.find((a) => a.id === this.draft.accountId);
+    return !this.onDelete && this.draft.type === "expense" && acc?.type === "credit" && !(this.ledger.pluggy && acc.pluggyId);
+  }
+
+  /** The installment count of a new card purchase, or which installment an existing charge is. */
+  private renderInstallments(contentEl: HTMLElement) {
+    const inst = this.draft.installment;
+    if (this.onDelete && inst) {
+      const left = (inst.total - inst.number) * this.draft.amount;
+      const of = t.tx.installmentOf(inst.number, inst.total);
+      new Setting(contentEl)
+        .setName(t.modals.tx.installments)
+        .setDesc(t.modals.tx.installmentLine(of, left > 0 ? centsToInput(left) : null));
+      return;
+    }
+    if (!this.splitsIntoInstallments()) return;
+    const options: Record<string, string> = { "1": t.modals.tx.inCash };
+    for (let n = 2; n <= 24; n++) options[String(n)] = `${n}x`;
+    new Setting(contentEl)
+      .setName(t.modals.tx.installments)
+      .setDesc(t.modals.tx.installmentsDesc)
+      .addDropdown((d) => d.addOptions(options).setValue(String(this.installments)).onChange((v) => (this.installments = Number(v))));
   }
 
   /** Which obligation payment this transaction is, with a way to link or unlink it. */

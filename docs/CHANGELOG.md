@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.14.0 — 2026-10-28
+
+- 2026-10-28 — Installment purchases (*compras parceladas*). A card charge keeps which installment
+  it is (new optional `installment: { number, total }` on transactions; ledger version unchanged),
+  from Pluggy's `creditCardMetadata` or, when the bank sends none, a mark at the end of the
+  description ("03/10", "PARC 3/10", "Parcela 3 de 10"). The installments still to come are
+  projected, one per bill after the latest charge's bill (dated on the day that bill opens), into the open bill (when not charged yet) and
+  the next ones, closed bills included, since some banks only ever report the first installment:
+  the bill view now browses up to 12 bills ahead, with a *Parcelas previstas* list and chip, and
+  the card tile shows *Parcelas futuras*. Synced card charges keep the bill the bank put them on
+  (new optional `billMonth` on transactions: the month the bill closes, from Pluggy's
+  `billForecastDate`; when a later installment carries the purchase's month, as at Rico, it is moved
+  one month per installment after the 1st, while Nubank gives each installment its own), and bills count charges by it instead of by date, so Rico's fees posted on the
+  closing day stay on the bill that closes and installments dated on the purchase day land on
+  their own bill. A bill is now named after the month it is due, as the banks do (*Fatura de novembro* is
+  due in November). Transactions show
+  a 3/10 badge and their modal says how much is left. On cards that are not synced, a new purchase
+  takes a number of installments (the amount is the total; the 1st installment takes the cents that
+  don't split) and each installment is posted on unlock when its date comes. Why: buying in
+  installments is common in Brazil, and without it future bills were understated (roadmap,
+  *Agora*). Files touched: `src/ledger.ts`, `src/bank-sync.ts`, `src/view.ts`, `src/modals.ts`,
+  `src/main.ts`, `src/i18n/*`, `styles.css`, `test/installments.test.ts`, `README.md`,
+  `docs/FAQ.md`, `docs/ARCHITECTURE.md`.
+- 2026-10-28 — Bank sync fetches the last 12 months instead of 90 days, so older history reaches
+  the ledger; only the last 90 days are reconciled (entries the bank no longer lists are removed),
+  and a transaction Pluggy re-created with a new id is re-linked at any date. Why: Pluggy had
+  transactions back to November of the year before that never got imported. Files touched:
+  `src/bank-sync.ts`, `src/main.ts`, `test/bank-sync.test.ts`, `README.md`, `docs/FAQ.md`,
+  `docs/ARCHITECTURE.md`.
+- 2026-10-28 — A card bill payment whose only record on the card is under Pluggy's *Transfers*
+  category (C6's *Inclusao de Pagamento Ciclo Corrente*, in months Pluggy builds no *Pagamento
+  recebido*) now pairs with the bank's debit. Why: it stayed as income on the card, so the bill it
+  paid showed as unpaid and the next one as smaller. Files touched: `src/bank-sync.ts`,
+  `test/bank-sync.test.ts`, `docs/ARCHITECTURE.md`.
+- 2026-10-28 — The transactions tab of accounts other than cards has its own month navigation
+  above the list (previous, next, back to this month), like a card's bills; it moves the same
+  month as the header. Why: the header's was easy to miss, so it looked like only this month or all
+  months could be seen. Files touched: `src/view.ts`.
+- 2026-10-28 — The project instructions link the roadmap and the competitor research (Google
+  Docs). Files touched: `.claude/CLAUDE.md`.
+
 ## 0.13.0 — 2026-10-27
 
 - 2026-10-27 — Synced cards follow the bank's own bill dates. Bank sync fetches each card's bills

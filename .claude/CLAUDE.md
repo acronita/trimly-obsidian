@@ -105,6 +105,21 @@ The plugin version follows Semantic Versioning 2.0.0. **Only changes to the ship
 
 ---
 
+## Roadmap and Research
+
+The roadmap and the competitor research live in Google Docs (read them with the Google Drive
+connector), not in the repo:
+
+- **[Trimly: roadmap](https://docs.google.com/document/d/1CcsW824jRuMqgLOGCoEQN9m151lOCZLVA-QcXma7Kjk/edit)**
+  (Drive ID `1CcsW824jRuMqgLOGCoEQN9m151lOCZLVA-QcXma7Kjk`) — items in *Agora* / *Próximo* /
+  *Depois*, plus scope and *Fora do escopo*. "Next feature" means the first item, in order,
+  not yet shipped (check `docs/CHANGELOG.md`). Confirm the pick with the user before starting.
+- **[Trimly: pesquisa de concorrência](https://docs.google.com/document/d/1_cssHzRmYGKw9q73w0yN1GscIyU_NKIEqO5TO_Mnu6E/edit)**
+  (Drive ID `1_cssHzRmYGKw9q73w0yN1GscIyU_NKIEqO5TO_Mnu6E`) — how other apps do each feature;
+  read the matching section before designing a roadmap item.
+
+---
+
 ## Memory and Context Files
 
 - **[MEMORY.md](MEMORY.md)** — Claude's persistent memory index. Auto-updated across sessions.

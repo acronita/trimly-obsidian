@@ -125,6 +125,10 @@ export interface Transaction {
   pending?: boolean;
   /** made in another currency than the account's (e.g. a card purchase in USD); `amount` is what the account was charged */
   original?: { currency: string; amount: number };
+  /** card purchases in installments: this charge is installment `number` of `total` */
+  installment?: { number: number; total: number };
+  /** synced card charges: month ("YYYY-MM") the bill holding this charge closes in, as the bank reports it */
+  billMonth?: string;
 }
 
 export interface Budget {
@@ -642,6 +646,8 @@ export interface CardBill {
   paid: number;
   /** part of `total` not paid yet */
   remaining: number;
+  /** installments expected in this cycle that the bank did not charge (yet), included in `total` */
+  planned: number;
 }
 
 /**
@@ -676,6 +682,110 @@ export function isCardPayment(tx: Transaction, accountId: string): boolean {
   return tx.type === "transfer" && tx.toAccountId === accountId;
 }
 
+/** The first closing date of a card after `date`: the day the next bill opens. */
+function closingAfter(acc: Account | undefined, date: string): string {
+  const [y, m] = date.split("-").map(Number);
+  let month = m - 1;
+  let close = closeIn(acc, y, month);
+  for (let i = 0; i < 3 && close <= date; i++) close = closeIn(acc, y, ++month);
+  return close;
+}
+
+/**
+ * Month ("YYYY-MM") the bill holding a card charge closes in: the bank's own
+ * when sync brought it, otherwise the first closing after the charge's date.
+ */
+export function chargeBillMonth(ledger: Ledger, tx: Transaction): string {
+  return tx.billMonth ?? monthOf(closingAfter(ledger.accounts.find((a) => a.id === tx.accountId), tx.date));
+}
+
+/** An installment of a card purchase that is not charged yet. */
+export interface PlannedInstallment {
+  /** the purchase's latest charged installment */
+  last: Transaction;
+  number: number;
+  total: number;
+  /** month the bill it is expected on closes in */
+  month: string;
+  /** the day that bill opens */
+  date: string;
+  amount: number;
+}
+
+/** Strips an installment mark ("3/10", "PARC 03/10", "Parcela 3 de 10") from a description. */
+const INSTALLMENT_MARK = /\s*(?:-\s*)?(?:parc(?:ela)?\.?\s*)?(\d{1,2})\s*(?:\/|de)\s*(\d{1,2})\s*$/i;
+
+/**
+ * The installment a card charge's description names, when the bank writes it
+ * there ("LOJA 03/10", "LOJA PARC 3/10") instead of sending it apart.
+ */
+export function installmentFromDescription(description: string): Transaction["installment"] {
+  const m = INSTALLMENT_MARK.exec(description);
+  if (!m) return undefined;
+  const [number, total] = [Number(m[1]), Number(m[2])];
+  return number >= 1 && total >= 2 && number <= total ? { number, total } : undefined;
+}
+
+/**
+ * The installments of each purchase on a card still to be charged, one per bill
+ * after the latest charged one's, soonest first.
+ */
+export function futureInstallments(ledger: Ledger, accountId: string): PlannedInstallment[] {
+  const acc = ledger.accounts.find((a) => a.id === accountId);
+  const month = new Map<Transaction, string>();
+  const charges = ledger.transactions.filter((tx) => tx.installment && tx.accountId === accountId && tx.type === "expense");
+  for (const tx of charges) month.set(tx, chargeBillMonth(ledger, tx));
+  // a purchase's installments share the description (without the mark) and the count; oldest bill first, each
+  // charge continues the purchase whose latest installment comes closest before it, else starts a new one
+  charges.sort((a, b) => (month.get(a)! < month.get(b)! ? -1 : month.get(a)! > month.get(b)! ? 1 : a.installment!.number - b.installment!.number));
+  const series = new Map<string, Transaction[]>();
+  for (const tx of charges) {
+    const inst = tx.installment!;
+    const key = `${tx.description.replace(INSTALLMENT_MARK, "").trim().toLowerCase()}|${inst.total}`;
+    const open = series.get(key) ?? [];
+    series.set(key, open);
+    let best = -1;
+    open.forEach((last, i) => {
+      const n = last.installment!.number;
+      if (n < inst.number && (best < 0 || n > open[best].installment!.number)) best = i;
+    });
+    if (best >= 0) open[best] = tx;
+    else open.push(tx);
+  }
+  const out: PlannedInstallment[] = [];
+  for (const last of [...series.values()].flat()) {
+    const { number, total } = last.installment!;
+    // each installment goes to the bill after the previous one's
+    for (let n = number + 1; n <= total; n++) {
+      const m = shiftMonth(month.get(last)!, n - number);
+      const [y, mm] = shiftMonth(m, -1).split("-").map(Number);
+      out.push({ last, number: n, total, month: m, date: closeIn(acc, y, mm - 1), amount: last.amount });
+    }
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/**
+ * Charge the installments due on or before `today` of purchases on cards bank
+ * sync does not mirror; on synced cards the bank charges them. Mutates the
+ * ledger; returns how many transactions were added.
+ */
+export function postDueInstallments(ledger: Ledger, today: string): number {
+  let posted = 0;
+  for (const acc of ledger.accounts) {
+    if (acc.type !== "credit" || (ledger.pluggy && acc.pluggyId)) continue;
+    for (const p of futureInstallments(ledger, acc.id)) {
+      if (p.date > today) continue;
+      const tx: Transaction = { ...p.last, id: newId(), date: p.date, installment: { number: p.number, total: p.total } };
+      delete tx.recurringId;
+      delete tx.notes;
+      ledger.transactions.push(tx);
+      posted++;
+    }
+  }
+  return posted;
+}
+
 /**
  * A credit card bill on `today`: offset 0 is the open one, -1 the last closed,
  * -2 the one before, and so on. A card's balance adds up its whole history;
@@ -699,16 +809,27 @@ export function cardBill(ledger: Ledger, accountId: string, today: string, offse
   let prevTotal = 0;
   let paid = 0;
   let prevPaid = 0;
+  // payments count by date; charges by the bill the bank put them on (installments carry the purchase date)
+  const [month, prevMonth] = [monthOf(close), monthOf(prev)];
   for (const tx of ledger.transactions) {
     const v = effectOn(tx, accountId);
-    if (v === 0 || tx.date < before || tx.date >= next) continue;
+    if (v === 0) continue;
     if (isCardPayment(tx, accountId)) {
+      if (tx.date < before || tx.date >= next) continue;
       if (tx.date >= close) paid += v;
       else if (tx.date >= prev) prevPaid += v;
-    } else if (tx.date >= prev && tx.date < close) total -= v;
-    else if (tx.date < prev) prevTotal -= v;
+      continue;
+    }
+    const bill = chargeBillMonth(ledger, tx);
+    if (bill === month) total -= v;
+    else if (bill === prevMonth) prevTotal -= v;
   }
   paid += Math.max(0, prevPaid - Math.max(0, prevTotal));
+  // some banks only report a purchase's first installment, so the rest count in their bills even once closed
+  const planned = futureInstallments(ledger, accountId)
+    .filter((p) => p.month === month)
+    .reduce((s, p) => s + p.amount, 0);
+  total += planned;
   return {
     start: prev,
     end: toISODate(new Date(Date.parse(`${close}T12:00:00`) - 86_400_000)),
@@ -717,6 +838,7 @@ export function cardBill(ledger: Ledger, accountId: string, today: string, offse
     total,
     paid,
     remaining: Math.max(0, total - paid),
+    planned,
   };
 }
 

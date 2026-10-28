@@ -67,8 +67,8 @@ market move happen between the same two syncs. CDI and IPCA come from the Centra
 only counts months that are over and published.
 
 **I deleted an imported transaction and it came back.**
-Synced accounts mirror the bank for the last 90 days, so the next sync restores anything the bank
-still lists. Recategorize or edit the description instead; those changes are kept.
+Synced accounts mirror the bank for the last 90 days (12 months are imported), so the next sync
+restores anything the bank still lists. Recategorize or edit the description instead; those changes are kept.
 
 **Transfers between my own banks show up as income and expense.**
 Trimly only pairs a move between two banks into a transfer when Pluggy categorizes it as a
@@ -80,10 +80,21 @@ Set the card's closing day (the day the bank closes the bill; that day's purchas
 the next one) and due day in its account modal: without it the bill follows the calendar month.
 Synced cards follow the bank's own closing and due date for each bill it reports (some banks move
 the closing day every month), and use the two days only for the months the bank gives no date
-for; they take both days from the bank when blank, and their limit on every sync. A payment only counts when it is
+for; they take both days from the bank when blank, and their limit on every sync. When Pluggy
+says which bill a charge is on (Rico does), that wins over its date: fees posted on the closing
+day stay on the bill that closes, and later installments, dated on the purchase day, go on
+their own bill. A payment only counts when it is
 a transfer from another account into the card; a bill paid from a bank Trimly doesn't sync shows
 as income on the card and lowers the open bill instead. Turn it into a transfer from the paying
 account to fix that.
+
+**My installment purchase doesn't show its future installments.**
+Synced cards take the installment from Pluggy, or from a mark at the end of the description
+("LOJA 03/10", "PARC 3/10", "Parcela 3 de 10") when the bank sends none. A purchase whose
+charges carry neither is a plain charge. The remaining installments are projected at the latest
+charge's amount, one per bill after its bill (dated on the day each bill opens), and replaced by the real charges as the bank sends them.
+Some banks only ever report the first installment: the projected ones still count in their bills,
+closed ones included, so the bill totals stay right.
 
 **Why didn't I get an obligation reminder on my phone?**
 Reminders come from Trimly itself, so they only fire while Obsidian is open and Trimly is

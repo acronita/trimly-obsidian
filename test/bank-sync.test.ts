@@ -104,6 +104,22 @@ test("a bill payment the card reports twice counts once, not as income", () => {
   assert.equal(accountBalance(l, synced(l, "p-card").id, TODAY), -80_00);
 });
 
+test("a bill payment the card only reports under Transfers still pairs with the bank's debit (C6)", () => {
+  // months where Pluggy built no "Pagamento recebido": the card has only C6's own copy, as a generic transfer
+  const l = fresh();
+  applyBankData(
+    l,
+    data([
+      tx("PGTO FAT CARTAO C6", "p-chk", "2026-07-01", -118.56, "DEBIT"),
+      tx("Inclusao de Pagamento Ciclo Corrente", "p-card", "2026-07-01", -118.56, "CREDIT", { categoryId: "05000000" }),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  assert.equal(l.transactions.filter((t) => t.type === "transfer").length, 1);
+  assert.equal(l.transactions.filter((t) => t.type === "income").length, 0);
+});
+
 test("a card refund is not mistaken for a bill payment when categories say otherwise", () => {
   const l = fresh();
   applyBankData(
@@ -296,4 +312,20 @@ test("a synced rule waits for its charge while sync has not caught up", () => {
   postDueRecurring(l, TODAY);
   // sync last ran 11 days after due without the charge: skipped; October is after the last sync, so it waits
   assert.equal(rule.nextDate, "2026-10-22");
+});
+
+test("history older than the window is imported, re-linked when its id changes, and never removed", () => {
+  const l = fresh();
+  // the fetch reaches a year back; WINDOW only limits what may be removed
+  applyBankData(l, data([tx("old", "p-card", "2025-11-28", 50, "DEBIT")]), WINDOW, TODAY);
+  const old = l.transactions.find((t) => t.description === "old");
+  assert.ok(old);
+  old.notes = "kept";
+  // Pluggy re-created it with a new id: the same entry is re-linked, not duplicated
+  applyBankData(l, data([tx("old-2", "p-card", "2025-11-28", 50, "DEBIT")]), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 1);
+  assert.equal(l.transactions[0].notes, "kept");
+  // a later sync that no longer returns it leaves it alone, since it is before the window
+  applyBankData(l, data([]), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 1);
 });

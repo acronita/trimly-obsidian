@@ -9,11 +9,13 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, convert, daysBetween, defaultCategoryKey, newId } from "./ledger.ts";
+import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId, shiftMonth } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
-/** How far back each sync fetches and reconciles. */
+/** How far back each sync reconciles: synced transactions in it that Pluggy no longer returns are removed. */
 export const SYNC_WINDOW_DAYS = 90;
+/** How far back each sync fetches, so older history is imported too (Open Finance keeps 12 months). */
+export const SYNC_HISTORY_DAYS = 365;
 /** Max days between the two legs of a transfer between own accounts. */
 const TRANSFER_MATCH_DAYS = 5;
 /** Max date drift when re-linking a transaction that came back with a new id. */
@@ -48,6 +50,14 @@ export interface PluggyTransaction {
   /** `amount` converted to the account's currency, when the transaction was made in another one */
   amountInAccountCurrency?: number | null;
   categoryId?: string | null;
+  /** credit cards: installment purchases carry which installment this charge is */
+  creditCardMetadata?: {
+    installmentNumber?: number | null;
+    totalInstallments?: number | null;
+    /** "YYYY-MM": month the charge's bill closes in; some banks (Rico) give an installment the 1st installment's */
+    billForecastDate?: string | null;
+    purchaseDate?: string | null;
+  } | null;
 }
 
 export interface PluggyBill {
@@ -118,6 +128,8 @@ interface Leg {
   pending: boolean;
   /** category descriptions, leaf first; empty when uncategorized */
   path: string[];
+  installment?: Transaction["installment"];
+  billMonth?: string;
 }
 
 /** What the ledger should contain for one or two legs. */
@@ -132,6 +144,8 @@ interface Rec {
   pending: boolean;
   path: string[];
   original?: Transaction["original"];
+  installment?: Transaction["installment"];
+  billMonth?: string;
 }
 
 function cents(value: number): number {
@@ -152,6 +166,14 @@ function categoryPath(categories: Map<string, PluggyCategory>, id?: string | nul
   return path;
 }
 
+/** Which installment a card purchase is: Pluggy's metadata, else the mark in its description. */
+function installmentOf(t: PluggyTransaction): Transaction["installment"] {
+  const number = t.creditCardMetadata?.installmentNumber;
+  const total = t.creditCardMetadata?.totalInstallments;
+  if (number && total && total > 1 && number <= total) return { number, total };
+  return installmentFromDescription(t.description);
+}
+
 function isOwnTransfer(leg: Leg): boolean {
   return leg.path.some((d) => OWN_TRANSFER.includes(d));
 }
@@ -159,8 +181,9 @@ function isOwnTransfer(leg: Leg): boolean {
 /**
  * Pair a bank debit with the matching credit on another own account into one
  * transfer. Without this, paying the card bill counts every purchase twice.
- * A card payment pairs when neither side is categorized, or one side says it is
- * a transfer; a bank-to-bank move only pairs when Pluggy says it is a
+ * A card payment pairs when neither side is categorized, one side says it is
+ * a transfer, or the card's side is under Transfers at all (C6 reports only its
+ * own copy, "Inclusao de Pagamento Ciclo Corrente", there); a bank-to-bank move only pairs when Pluggy says it is a
  * same-person transfer, since equal amounts between banks are often unrelated.
  * Some banks (C6, Nubank) report a paid bill on the card a second time, under
  * another name and any category; that copy is dropped, or it would count as income.
@@ -177,7 +200,9 @@ function pairTransfers(legs: Leg[]): Rec[] {
       if (used.has(inn) || inn.accountId === out.accountId || inn.cents !== -out.cents) continue;
       if (daysBetween(inn.date, out.date) > TRANSFER_MATCH_DAYS) continue;
       const ownTransfer = isOwnTransfer(out) || isOwnTransfer(inn);
-      const allowed = inn.onCard ? ownTransfer || (out.path.length === 0 && inn.path.length === 0) : ownTransfer;
+      const allowed = inn.onCard
+        ? ownTransfer || inn.path.includes("Transfers") || (out.path.length === 0 && inn.path.length === 0)
+        : ownTransfer;
       if (!allowed) continue;
       if (!best || daysBetween(inn.date, out.date) < daysBetween(best.date, out.date)) best = inn;
     }
@@ -218,6 +243,8 @@ function pairTransfers(legs: Leg[]): Rec[] {
       pending: l.pending,
       path: l.path,
       original: l.original,
+      installment: l.installment,
+      billMonth: l.billMonth,
     });
   }
   return recs;
@@ -244,6 +271,10 @@ function relink(tx: Transaction, rec: Rec): boolean {
   else delete tx.pending;
   if (rec.original) tx.original = rec.original;
   else delete tx.original;
+  if (rec.installment) tx.installment = rec.installment;
+  else delete tx.installment;
+  if (rec.billMonth) tx.billMonth = rec.billMonth;
+  else delete tx.billMonth;
   if (tx.type !== rec.type || tx.accountId !== rec.accountId || tx.toAccountId !== rec.toAccountId) {
     tx.type = rec.type;
     tx.accountId = rec.accountId;
@@ -256,8 +287,9 @@ function relink(tx: Transaction, rec: Rec): boolean {
 }
 
 /**
- * Merge `data` (fetched from `windowStart` on) into the ledger: create Trimly
- * accounts for new Pluggy accounts, reconcile transactions in the window, and
+ * Merge `data` into the ledger: create Trimly accounts for new Pluggy accounts,
+ * add or re-link every fetched transaction, remove the synced ones dated
+ * `windowStart` or later that Pluggy no longer returns, and
  * set each synced account's opening balance so its balance today matches the bank.
  * Mutates the ledger.
  */
@@ -308,16 +340,25 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
       : t.amountInAccountCurrency != null
         ? cents(t.amountInAccountCurrency)
         : convert(ledger, cents(t.amount), t.currencyCode!, acc.currency!);
+    const installment = onCard && !moneyIn ? installmentOf(t) : undefined;
+    // the bill the bank put the charge on, since some banks date installments on the purchase day; banks that
+    // give a later installment the purchase's month (Rico) mean the 1st installment's bill, a month per installment back
+    const meta = t.creditCardMetadata;
+    const forecast = meta?.billForecastDate?.slice(0, 7);
+    const back = installment && installment.number > 1 && meta?.purchaseDate?.slice(0, 7) === forecast ? installment.number - 1 : 0;
+    const billMonth = onCard && forecast && /^\d{4}-\d{2}$/.test(forecast) ? shiftMonth(forecast, back) : undefined;
     legs.push({
       pid: t.id,
       accountId: acc.id,
       onCard,
       date: t.date.slice(0, 10),
+      billMonth,
       cents: moneyIn ? charged : -charged,
       original: foreign ? { currency: t.currencyCode!, amount: cents(t.amount) } : undefined,
       description: t.description,
       pending: t.status === "PENDING",
       path: categoryPath(categories, t.categoryId),
+      installment,
     });
   }
   const recs = pairTransfers(legs);
@@ -338,8 +379,9 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (relink(tx, rec)) result.updated++;
   }
 
+  // any date may be re-linked, since the fetch reaches further back than the window
   const stale = ledger.transactions.filter(
-    (t) => t.pluggyIds?.length && !matched.has(t) && t.date >= windowStart && (synced.has(t.accountId) || synced.has(t.toAccountId ?? ""))
+    (t) => t.pluggyIds?.length && !matched.has(t) && (synced.has(t.accountId) || synced.has(t.toAccountId ?? ""))
   );
   for (const rec of unmatched) {
     let best: Transaction | null = null;
@@ -366,6 +408,8 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     };
     if (rec.toAccountId) tx.toAccountId = rec.toAccountId;
     if (rec.original) tx.original = rec.original;
+    if (rec.installment) tx.installment = rec.installment;
+    if (rec.billMonth) tx.billMonth = rec.billMonth;
     const categoryId = mapCategory(ledger, rec);
     if (categoryId) tx.categoryId = categoryId;
     if (rec.pending) tx.pending = true;
@@ -373,7 +417,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     result.added++;
   }
 
-  const gone = new Set(stale.filter((t) => !matched.has(t)));
+  const gone = new Set(stale.filter((t) => !matched.has(t) && t.date >= windowStart));
   if (gone.size) {
     ledger.transactions = ledger.transactions.filter((t) => !gone.has(t));
     result.removed = gone.size;
