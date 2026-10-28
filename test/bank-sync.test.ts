@@ -86,6 +86,24 @@ test("paying the card bill becomes one transfer, so purchases are not counted as
   assert.equal(monthSummary(l, "2026-09").expense, 300_00);
 });
 
+test("a bill payment the card reports twice counts once, not as income", () => {
+  // C6 and Nubank also list the paid amount on the card under another name, uncategorized or not
+  const l = fresh();
+  const bill = [
+    tx("market", "p-card", "2026-09-20", 300, "DEBIT"),
+    tx("bill-out", "p-chk", "2026-10-02", -300, "DEBIT", { categoryId: "05100000" }),
+    tx("bill-in", "p-card", "2026-10-02", -300, "CREDIT", { categoryId: "05100000" }),
+  ];
+  const copy = tx("Inclusao de Pagamento Ciclo Corrente", "p-card", "2026-10-02", -300, "CREDIT", { categoryId: "05000000" });
+  // a ledger synced before the fix already holds the copy as income: the next sync removes it
+  applyBankData(l, data([...bill, copy].filter((t) => t.id !== "bill-out")), WINDOW, TODAY);
+  applyBankData(l, data([...bill, copy]), WINDOW, TODAY);
+  assert.equal(l.transactions.filter((t) => t.type === "transfer").length, 1);
+  assert.equal(l.transactions.filter((t) => t.type === "income").length, 0);
+  assert.equal(monthSummary(l, "2026-10").income, 0);
+  assert.equal(accountBalance(l, synced(l, "p-card").id, TODAY), -80_00);
+});
+
 test("a card refund is not mistaken for a bill payment when categories say otherwise", () => {
   const l = fresh();
   applyBankData(

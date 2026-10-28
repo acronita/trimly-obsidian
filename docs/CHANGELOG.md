@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.12.2 — 2026-10-27
+
+- 2026-10-27 — A card bill payment that the bank reports twice on the card is counted once. Some
+  banks (C6, Nubank) list the paid amount on the card a second time, uncategorized (C6:
+  *Inclusao de Pagamento Ciclo Corrente*), next to the payment that pairs with the checking
+  debit; that copy was imported as income. Bank sync now drops a credit on a card with the same
+  amount as a paired bill payment on that card within 5 days, whatever its category (Pluggy
+  categorizes C6's copy but not Nubank's), and the copies already imported are removed on the
+  next sync. Why: the
+  payment counted as income in the month and lowered the open bill like a refund. Files touched:
+  `src/bank-sync.ts`, `test/bank-sync.test.ts`, `docs/ARCHITECTURE.md`.
+
 ## 0.12.1 — 2026-10-27
 
 - 2026-10-27 — A card bill now closes on its closing day: the cycle runs from the previous closing

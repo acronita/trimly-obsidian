@@ -151,10 +151,13 @@ function isOwnTransfer(leg: Leg): boolean {
  * A card payment pairs when neither side is categorized, or one side says it is
  * a transfer; a bank-to-bank move only pairs when Pluggy says it is a
  * same-person transfer, since equal amounts between banks are often unrelated.
+ * Some banks (C6, Nubank) report a paid bill on the card a second time, under
+ * another name and any category; that copy is dropped, or it would count as income.
  */
 function pairTransfers(legs: Leg[]): Rec[] {
   const ins = legs.filter((l) => l.cents > 0);
   const used = new Set<Leg>();
+  const payments: Leg[] = [];
   const recs: Rec[] = [];
   for (const out of legs) {
     if (out.cents >= 0 || out.onCard) continue;
@@ -169,6 +172,7 @@ function pairTransfers(legs: Leg[]): Rec[] {
     }
     if (!best) continue;
     used.add(out).add(best);
+    if (best.onCard) payments.push(best);
     recs.push({
       pids: [out.pid, best.pid],
       type: "transfer",
@@ -181,8 +185,18 @@ function pairTransfers(legs: Leg[]): Rec[] {
       path: [],
     });
   }
+  const copied = new Set<Leg>();
   for (const l of legs) {
     if (used.has(l)) continue;
+    if (l.onCard && l.cents > 0) {
+      const paid = payments.find(
+        (p) => !copied.has(p) && p.accountId === l.accountId && p.cents === l.cents && daysBetween(p.date, l.date) <= TRANSFER_MATCH_DAYS
+      );
+      if (paid) {
+        copied.add(paid);
+        continue;
+      }
+    }
     recs.push({
       pids: [l.pid],
       type: l.cents > 0 ? "income" : "expense",
