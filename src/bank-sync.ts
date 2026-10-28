@@ -181,8 +181,9 @@ function isOwnTransfer(leg: Leg): boolean {
 /**
  * Pair a bank debit with the matching credit on another own account into one
  * transfer. Without this, paying the card bill counts every purchase twice.
- * A card payment pairs when neither side is categorized, or one side says it is
- * a transfer; a bank-to-bank move only pairs when Pluggy says it is a
+ * A card payment pairs when neither side is categorized, one side says it is
+ * a transfer, or the card's side is under Transfers at all (C6 reports only its
+ * own copy, "Inclusao de Pagamento Ciclo Corrente", there); a bank-to-bank move only pairs when Pluggy says it is a
  * same-person transfer, since equal amounts between banks are often unrelated.
  * Some banks (C6, Nubank) report a paid bill on the card a second time, under
  * another name and any category; that copy is dropped, or it would count as income.
@@ -199,7 +200,9 @@ function pairTransfers(legs: Leg[]): Rec[] {
       if (used.has(inn) || inn.accountId === out.accountId || inn.cents !== -out.cents) continue;
       if (daysBetween(inn.date, out.date) > TRANSFER_MATCH_DAYS) continue;
       const ownTransfer = isOwnTransfer(out) || isOwnTransfer(inn);
-      const allowed = inn.onCard ? ownTransfer || (out.path.length === 0 && inn.path.length === 0) : ownTransfer;
+      const allowed = inn.onCard
+        ? ownTransfer || inn.path.includes("Transfers") || (out.path.length === 0 && inn.path.length === 0)
+        : ownTransfer;
       if (!allowed) continue;
       if (!best || daysBetween(inn.date, out.date) < daysBetween(best.date, out.date)) best = inn;
     }

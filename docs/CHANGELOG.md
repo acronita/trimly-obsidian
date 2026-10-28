@@ -29,6 +29,11 @@
   transactions back to November of the year before that never got imported. Files touched:
   `src/bank-sync.ts`, `src/main.ts`, `test/bank-sync.test.ts`, `README.md`, `docs/FAQ.md`,
   `docs/ARCHITECTURE.md`.
+- 2026-10-28 — A card bill payment whose only record on the card is under Pluggy's *Transfers*
+  category (C6's *Inclusao de Pagamento Ciclo Corrente*, in months Pluggy builds no *Pagamento
+  recebido*) now pairs with the bank's debit. Why: it stayed as income on the card, so the bill it
+  paid showed as unpaid and the next one as smaller. Files touched: `src/bank-sync.ts`,
+  `test/bank-sync.test.ts`, `docs/ARCHITECTURE.md`.
 - 2026-10-28 — The project instructions link the roadmap and the competitor research (Google
   Docs). Files touched: `.claude/CLAUDE.md`.
 

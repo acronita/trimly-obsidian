@@ -104,6 +104,22 @@ test("a bill payment the card reports twice counts once, not as income", () => {
   assert.equal(accountBalance(l, synced(l, "p-card").id, TODAY), -80_00);
 });
 
+test("a bill payment the card only reports under Transfers still pairs with the bank's debit (C6)", () => {
+  // months where Pluggy built no "Pagamento recebido": the card has only C6's own copy, as a generic transfer
+  const l = fresh();
+  applyBankData(
+    l,
+    data([
+      tx("PGTO FAT CARTAO C6", "p-chk", "2026-07-01", -118.56, "DEBIT"),
+      tx("Inclusao de Pagamento Ciclo Corrente", "p-card", "2026-07-01", -118.56, "CREDIT", { categoryId: "05000000" }),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  assert.equal(l.transactions.filter((t) => t.type === "transfer").length, 1);
+  assert.equal(l.transactions.filter((t) => t.type === "income").length, 0);
+});
+
 test("a card refund is not mistaken for a bill payment when categories say otherwise", () => {
   const l = fresh();
   applyBankData(
