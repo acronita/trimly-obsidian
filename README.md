@@ -11,7 +11,7 @@ passphrase that never leaves your device.
 - **Overview** — net worth, the month's income, expenses and savings rate (projected with recurring
   income still due this month, e.g. a salary paid on the last days, with the actual figure under it), a 6-month cash-flow chart,
   spending by category (donut), account balances, recent activity and upcoming bills. Navigate month
-  by month.
+  by month; switching tabs or reopening Trimly goes back to this month.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
   and notes. Search and filter by account, category, type and month.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
@@ -29,7 +29,8 @@ passphrase that never leaves your device.
   charge imported from the bank is linked to the rule instead, so it is never counted twice.
   *Tornar recorrente* in a transaction's editor turns it into a rule, linked as its first occurrence.
   Below the subscriptions, *Contas variáveis* lists the bills paid by hand (from *Obrigações*, card
-  bills excluded) at their usual amount, with the monthly total, read only.
+  bills excluded) at their usual amount, with the monthly total, read only. The summary on top
+  shows fixed income, fixed costs, variable costs and what is left each month after all of them.
 - **Subscriptions** — mark a recurring expense as a subscription to list it apart with its yearly
   cost, last charge and price changes, to judge whether it is still worth paying for.
 - **Obrigações (obligations)** — a checklist of what you must do by hand by a due date: bills to

@@ -141,7 +141,6 @@ export const en: Strings = {
       `Across ${accounts} ${s(accounts, "account", "accounts")}${invested ? ` and ${invested} invested` : ""}, end of ${month}`,
     saved: (rate: number) => `Saved · ${rate}%`,
     projected: (rate: number) => `Projected savings · ${rate}%`,
-    actual: (v: string) => `So far: ${v}`,
     incomeSpent: (pct: number) => `${pct}% of income spent`,
     noIncome: "No income recorded this month",
     accounts: "Accounts",
@@ -233,7 +232,8 @@ export const en: Strings = {
   recurring: {
     fixedIncome: "Fixed income / month",
     fixedCosts: "Fixed costs / month",
-    leftAfterFixed: "Left after fixed",
+    variableCosts: "Variable costs / month",
+    leftOver: "Left over / month",
     title: "Recurring transactions",
     empty: "Add bills, subscriptions and salaries. They post automatically when due.",
     add: "New recurring",

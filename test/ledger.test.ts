@@ -13,6 +13,7 @@ import {
   pendingRecurringIncome,
   postDueRecurring,
   removeCategory,
+  removeRecurring,
   spendingByCategory,
 } from "../src/ledger.ts";
 import type { Ledger } from "../src/ledger.ts";
@@ -168,4 +169,18 @@ test("turning a transaction into a recurring rule links it and does not post it 
   const before = l.transactions.length;
   assert.equal(postDueRecurring(l, "2026-10-24"), 0);
   assert.equal(l.transactions.length, before);
+});
+
+test("deleting a rule keeps its transactions but unlinks them", () => {
+  // a wrongly linked transaction is fixed by deleting the rule; a dangling link would keep the
+  // repeat icon and hide it from the rule made again
+  const l = ledger();
+  const rule = { id: "lunch", description: "Lunch", type: "expense" as const, amount: 25_00, accountId: "bank", frequency: "monthly" as const, startDate: "2026-10-03", nextDate: "2026-10-03" };
+  l.recurring.push(rule);
+  linkToRule(l, rule, "2");
+  const before = l.transactions.length;
+  removeRecurring(l, "lunch");
+  assert.equal(l.recurring.length, 0);
+  assert.equal(l.transactions.length, before);
+  assert.ok(l.transactions.every((x) => !x.recurringId));
 });

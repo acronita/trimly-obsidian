@@ -302,6 +302,38 @@ test("an unrelated purchase is not taken for the subscription", () => {
   assert.equal(rule.nextDate, "2026-11-12");
 });
 
+test("a charge sharing the name but far off the price is not the subscription", () => {
+  // a one-off purchase at the same store must not reprice the rule
+  const { l, rule } = withNetflix("2026-10-12");
+  applyBankData(l, data([tx("NETFLIX.COM", "p-card", "2026-10-11", 200, "DEBIT")]), WINDOW, TODAY);
+  postDueRecurring(l, TODAY);
+  assert.ok(l.transactions.every((x) => !x.recurringId));
+  assert.equal(rule.amount, 39_90);
+});
+
+test("generic bank wording is not a name: another transfer is not taken for the rule", () => {
+  // the rule was made from a 4,210 transfer; a 1,000 transfer from someone else days before the
+  // next one shares only "Transferência Recebida" and must not be linked nor reprice the rule
+  const l = fresh();
+  l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"], lastSync: `${TODAY}T12:00:00.000Z` };
+  applyBankData(l, data([tx("Transferência Recebida|ROBSON", "p-chk", "2026-10-24", 1000, "CREDIT")]), WINDOW, TODAY);
+  const rule: Recurring = {
+    id: "salary",
+    description: "Transferência Recebida",
+    type: "income",
+    amount: 4210_00,
+    accountId: synced(l, "p-chk").id,
+    frequency: "monthly",
+    startDate: "2026-09-30",
+    nextDate: "2026-10-30",
+  };
+  l.recurring.push(rule);
+  postDueRecurring(l, TODAY);
+  assert.ok(l.transactions.every((x) => !x.recurringId));
+  assert.equal(rule.amount, 4210_00);
+  assert.equal(rule.nextDate, "2026-10-30");
+});
+
 test("a synced rule waits for its charge while sync has not caught up", () => {
   const { l, rule } = withNetflix("2026-10-22");
   postDueRecurring(l, TODAY);

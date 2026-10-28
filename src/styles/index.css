@@ -332,14 +332,6 @@ button.trimly-add.is-icon {
   text-overflow: ellipsis;
 }
 
-/* what already happened, under a projected value */
-.trimly-hero-stat-sub {
-  color: var(--text-muted);
-  font-size: var(--font-ui-smaller);
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
 .trimly-flow {
   grid-column: 1 / -1;
   height: 8px;

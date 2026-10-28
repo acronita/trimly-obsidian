@@ -69,6 +69,7 @@ import {
   unsettleObligation,
   windowStart,
   removeCategory,
+  removeRecurring,
   removeManualAsset,
   removeManualMovement,
   saveAsset,
@@ -363,15 +364,24 @@ export class TrimlyView extends ItemView {
     this.goTab("obligations");
   }
 
+  // a month browsed in one tab must not linger: every tab, mode or reopen starts on this month
   private goTab(t: Tab) {
     this.tabs[this.mode] = t;
+    this.month = monthOf(todayISO());
     this.contentEl.scrollTop = 0;
     this.render();
   }
 
   private setMode(m: Mode) {
     this.mode = m;
+    this.month = monthOf(todayISO());
     this.contentEl.scrollTop = 0;
+    this.render();
+  }
+
+  /** Opened again from the ribbon or the command while already open. */
+  showCurrentMonth() {
+    this.month = monthOf(todayISO());
     this.render();
   }
 
@@ -504,8 +514,7 @@ export class TrimlyView extends ItemView {
     const net = sum.net + pending;
     const rate = income > 0 ? Math.round((net / income) * 100) : null;
     const label = rate === null ? t.common.net : pending > 0 ? t.overview.projected(rate) : t.overview.saved(rate);
-    const stat = this.heroStat(stats, label, net, "piggy-bank", net >= 0 ? "is-accent" : "is-expense");
-    if (pending > 0) stat.createDiv({ cls: "trimly-hero-stat-sub", text: t.overview.actual(this.money(sum.net)) });
+    this.heroStat(stats, label, net, "piggy-bank", net >= 0 ? "is-accent" : "is-expense");
     if (sum.income > 0 || sum.expense > 0) {
       const flow = hero.createDiv("trimly-flow");
       const spentPct = sum.income > 0 ? Math.min(100, (sum.expense / sum.income) * 100) : 100;
@@ -1145,6 +1154,8 @@ export class TrimlyView extends ItemView {
       if (r.type === "expense") monthlyOut += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
       if (r.type === "income") monthlyIn += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
     }
+    const monthlyVariable = estimatedBills(ledger).reduce((sum, b) => sum + b.monthly, 0);
+    const left = monthlyIn - monthlyOut - monthlyVariable;
     const summary = body.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
       const c = summary.createDiv(`trimly-summary-chip ${cls}`);
@@ -1153,7 +1164,8 @@ export class TrimlyView extends ItemView {
     };
     chip(t.recurring.fixedIncome, `+${this.money(Math.round(monthlyIn))}`, "is-income");
     chip(t.recurring.fixedCosts, `−${this.money(Math.round(monthlyOut))}`, "is-expense");
-    chip(t.recurring.leftAfterFixed, this.money(Math.round(monthlyIn - monthlyOut)), monthlyIn >= monthlyOut ? "is-income" : "is-expense");
+    chip(t.recurring.variableCosts, `−${this.money(Math.round(monthlyVariable))}`, "is-expense");
+    chip(t.recurring.leftOver, this.money(Math.round(left)), left >= 0 ? "is-income" : "is-expense");
 
     const bar = body.createDiv("trimly-section-bar");
     bar.createDiv({ cls: "trimly-muted", text: t.recurring.hint });
@@ -2462,9 +2474,7 @@ function openRecurringModal(plugin: TrimlyPlugin, existing: Recurring | null, fr
             t.recurring.deleteConfirm(rec.description),
             t.common.delete,
             () =>
-              void plugin.mutate((l) => {
-                l.recurring = l.recurring.filter((r) => r.id !== rec.id);
-              })
+              void plugin.mutate((l) => removeRecurring(l, rec.id))
           ).open()
       : null
   ).open();

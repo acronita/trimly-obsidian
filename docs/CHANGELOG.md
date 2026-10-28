@@ -1,5 +1,30 @@
 # Changelog
 
+## 0.15.0 — 2026-10-28
+
+- 2026-10-28 — The Recurring tab's summary adds *Custos variáveis / mês* (the monthly total of
+  *Contas variáveis*), and *Sobra / mês* (was *Sobra após fixos*) now subtracts it too. Why: the
+  leftover only counted fixed rules, so bills paid by hand made the month look better than it is.
+  Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `README.md`.
+- 2026-10-28 — The Overview's projected savings no longer shows *Realizado até agora* under it.
+  Why: the line was unclear next to the projection and ran past the card's edge; what already
+  happened is in the income and expense stats beside it. Files touched: `src/view.ts`,
+  `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`.
+- 2026-10-28 — The month browsed goes back to this month when switching tabs or modes, or opening
+  Trimly again while it is already open. Why: browsing September in Transactions left the
+  Dashboard on September too, where positions synced later counted as zero, so investments looked
+  missing from the net worth. Files touched: `src/view.ts`, `src/main.ts`, `README.md`.
+
+## 0.14.1 — 2026-10-28
+
+- 2026-10-28 — A recurring rule on a synced account no longer links a charge just because it shares
+  generic bank wording ("Transferência Recebida", "Pix", "Compra", "Débito"…), and a charge that
+  shares the name must still be within 50% of the rule's amount. Why: making a R$ 4.210 *Transferência
+  Recebida* recurring linked a R$ 1.000 transfer from someone else days before the next occurrence,
+  and the rule took its amount. Deleting a rule now also unlinks its transactions (they stay), so
+  a wrong link is fixed by deleting the rule and making it again. Files touched: `src/ledger.ts`,
+  `src/view.ts`, `test/bank-sync.test.ts`, `test/ledger.test.ts`, `docs/ARCHITECTURE.md`.
+
 ## 0.14.0 — 2026-10-28
 
 - 2026-10-28 — Installment purchases (*compras parceladas*). A card charge keeps which installment
