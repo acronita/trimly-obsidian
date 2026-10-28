@@ -78,14 +78,21 @@ export interface Account {
   archived?: boolean;
   /** Pluggy account this one mirrors; its balance and transactions come from bank sync */
   pluggyId?: string;
-  /** credit cards: day of month the bill closes (last day of a cycle); month end when unset */
+  /** credit cards: day of month the bill closes, its charges going to the next bill; calendar month when unset */
   closingDay?: number;
+  /** synced credit cards: the bank's own closing and due dates (ISO) of each bill, which win over the days */
+  billDates?: BillDates[];
   /** credit cards: day of month the closed bill is due */
   dueDay?: number;
   /** credit cards: credit limit, in cents */
   creditLimit?: number;
   /** ISO 4217 code of the account's money; missing = the currency set in the settings */
   currency?: string;
+}
+
+export interface BillDates {
+  close: string;
+  due: string;
 }
 
 export interface Category {
@@ -621,9 +628,11 @@ export function accountBalance(ledger: Ledger, accountId: string, upTo?: string)
 
 /** One credit card bill: the charges of a cycle and what is still unpaid. */
 export interface CardBill {
-  /** first day of the cycle */
+  /** first day of the cycle: the previous bill's closing date */
   start: string;
-  /** closing date, last day of the cycle (inclusive) */
+  /** last day of the cycle, the day before closing */
+  end: string;
+  /** closing date: from it on, charges go to the next bill */
   close: string;
   /** undefined when the card has no due day */
   due?: string;
@@ -635,11 +644,24 @@ export interface CardBill {
   remaining: number;
 }
 
-/** The card's closing date in a month (0-based), clamped to short months. */
+/**
+ * The card's closing date in a month (0-based), clamped to short months. With
+ * no closing day the bill is the calendar month, closing on the next month's 1st.
+ */
 function closingIn(year: number, month: number, closingDay?: number): string {
+  if (closingDay === undefined) return toISODate(new Date(year, month + 1, 1));
   const d = new Date(year, month, 1);
   const last = daysInMonth(d.getFullYear(), d.getMonth());
-  return toISODate(new Date(d.getFullYear(), d.getMonth(), Math.min(closingDay ?? last, last)));
+  return toISODate(new Date(d.getFullYear(), d.getMonth(), Math.min(closingDay, last)));
+}
+
+/**
+ * The card's closing date in a month (0-based): the bank's own date when sync
+ * brought that bill, otherwise the one its closing day gives.
+ */
+function closeIn(acc: Account | undefined, year: number, month: number): string {
+  const fallback = closingIn(year, month, acc?.closingDay);
+  return acc?.billDates?.find((b) => monthOf(b.close) === monthOf(fallback))?.close ?? fallback;
 }
 
 /** First date on `dueDay` after `close`. */
@@ -657,18 +679,20 @@ export function isCardPayment(tx: Transaction, accountId: string): boolean {
 /**
  * A credit card bill on `today`: offset 0 is the open one, -1 the last closed,
  * -2 the one before, and so on. A card's balance adds up its whole history;
- * bills split it by cycle instead. Payments (transfers into the card) made
- * after a bill closes, until the next closing, pay that bill; what exceeds it
+ * bills split it by cycle instead. A bill closes at the start of its closing
+ * day, so that day's charges go to the next one, as at Brazilian banks.
+ * Payments (transfers into the card) made from a bill's closing day until the
+ * next closing pay that bill; what exceeds it
  * goes to the following one. Refunds and other credits lower the bill of their
  * own cycle.
  */
 export function cardBill(ledger: Ledger, accountId: string, today: string, offset = 0): CardBill {
   const acc = ledger.accounts.find((a) => a.id === accountId);
   const [y, m] = today.split("-").map(Number);
-  // the cycle includes its closing day, so a bill closing today is still open
+  // the cycle ends the day before closing, so a bill closing today is closed
   let k = 0;
-  while (closingIn(y, m - 1 + k, acc?.closingDay) < today) k++;
-  const closeAt = (j: number) => closingIn(y, m - 1 + k + offset + j, acc?.closingDay);
+  while (closeIn(acc, y, m - 1 + k) <= today) k++;
+  const closeAt = (j: number) => closeIn(acc, y, m - 1 + k + offset + j);
   const [before, prev, close, next] = [closeAt(-2), closeAt(-1), closeAt(0), closeAt(1)];
 
   let total = 0;
@@ -677,19 +701,19 @@ export function cardBill(ledger: Ledger, accountId: string, today: string, offse
   let prevPaid = 0;
   for (const tx of ledger.transactions) {
     const v = effectOn(tx, accountId);
-    if (v === 0 || tx.date <= before || tx.date > next) continue;
+    if (v === 0 || tx.date < before || tx.date >= next) continue;
     if (isCardPayment(tx, accountId)) {
-      if (tx.date > close) paid += v;
-      else if (tx.date > prev) prevPaid += v;
-    } else if (tx.date > prev && tx.date <= close) total -= v;
-    else if (tx.date <= prev) prevTotal -= v;
+      if (tx.date >= close) paid += v;
+      else if (tx.date >= prev) prevPaid += v;
+    } else if (tx.date >= prev && tx.date < close) total -= v;
+    else if (tx.date < prev) prevTotal -= v;
   }
   paid += Math.max(0, prevPaid - Math.max(0, prevTotal));
-  const start = toISODate(new Date(Date.parse(`${prev}T12:00:00`) + 86_400_000));
   return {
-    start,
+    start: prev,
+    end: toISODate(new Date(Date.parse(`${close}T12:00:00`) - 86_400_000)),
     close,
-    due: acc?.dueDay ? dueAfter(close, acc.dueDay) : undefined,
+    due: acc?.billDates?.find((b) => b.close === close)?.due ?? (acc?.dueDay ? dueAfter(close, acc.dueDay) : undefined),
     total,
     paid,
     remaining: Math.max(0, total - paid),

@@ -76,10 +76,11 @@ same-person transfer (card bill payments are paired by amount and date). Without
 categorization, edit the two entries by hand: delete one and turn the other into a transfer.
 
 **My credit card bill amount looks wrong.**
-Set the card's *Último dia da fatura* (the last day a purchase still goes into the closing bill)
-and due day in its account modal: without it the bill follows the calendar month. If your bank
-says the bill closes on day X and that day's purchases already go to the next bill (Nubank does
-this), use X − 1; a bill paid on day X then counts as paid. Synced cards take both from the bank when blank, and their limit on every sync. A payment only counts when it is
+Set the card's closing day (the day the bank closes the bill; that day's purchases already go to
+the next one) and due day in its account modal: without it the bill follows the calendar month.
+Synced cards follow the bank's own closing and due date for each bill it reports (some banks move
+the closing day every month), and use the two days only for the months the bank gives no date
+for; they take both days from the bank when blank, and their limit on every sync. A payment only counts when it is
 a transfer from another account into the card; a bill paid from a bank Trimly doesn't sync shows
 as income on the card and lowers the open bill instead. Turn it into a transfer from the paying
 account to fix that.
