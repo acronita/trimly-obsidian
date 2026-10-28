@@ -16,7 +16,7 @@ passphrase that never leaves your device.
   and notes. Search and filter by account, category, type and month.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
   grouped into accounts, credit cards and investments; credit cards show their current bill and
-  limit, and their transactions are browsed bill by bill (closing and due day)
+  limit, and their transactions are browsed bill by bill (closing and due day; a bill is named after the month it is due)
   without losing history. Installment purchases (*compras parceladas*) show which installment each
   charge is (3/10), and the installments the bank has not charged are counted in their bills (one per
   bill after the latest charge, even when the bank only ever reports the first), which can be

@@ -680,6 +680,21 @@ export function isCardPayment(tx: Transaction, accountId: string): boolean {
   return tx.type === "transfer" && tx.toAccountId === accountId;
 }
 
+/**
+ * The `k`-th closing date of a card after `date`: the day the `k`-th bill after
+ * the one holding `date` opens. Counted closing by closing, since the closing
+ * day may move from month to month.
+ */
+export function closingAfter(ledger: Ledger, accountId: string, date: string, k: number): string {
+  const acc = ledger.accounts.find((a) => a.id === accountId);
+  const [y, m] = date.split("-").map(Number);
+  let month = m - 1;
+  let close = closeIn(acc, y, month);
+  for (let i = 0; i < 3 && close <= date; i++) close = closeIn(acc, y, ++month);
+  for (let j = 1; j < k; j++) close = closeIn(acc, y, ++month);
+  return close;
+}
+
 /** An installment of a card purchase that is not charged yet. */
 export interface PlannedInstallment {
   /** the purchase's latest charged installment */
@@ -709,28 +724,31 @@ export function installmentFromDescription(description: string): Transaction["in
  * after the latest charged one, dated `from` or later, soonest first.
  */
 export function futureInstallments(ledger: Ledger, accountId: string, from = ""): PlannedInstallment[] {
-  // a purchase's installments share the description (without the mark), the count and the first month
-  const latest = new Map<string, Transaction>();
-  for (const tx of ledger.transactions) {
-    const inst = tx.installment;
-    if (!inst || tx.accountId !== accountId || tx.type !== "expense") continue;
-    const name = tx.description.replace(INSTALLMENT_MARK, "").trim().toLowerCase();
-    const key = `${name}|${inst.total}|${shiftMonth(monthOf(tx.date), 1 - inst.number)}`;
-    const seen = latest.get(key);
-    if (!seen || seen.installment!.number < inst.number) latest.set(key, tx);
+  // a purchase's installments share the description (without the mark) and the count; oldest first, each
+  // charge continues the purchase whose latest installment comes closest before it, else starts a new one
+  const series = new Map<string, Transaction[]>();
+  const charges = ledger.transactions
+    .filter((tx) => tx.installment && tx.accountId === accountId && tx.type === "expense")
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : a.installment!.number - b.installment!.number));
+  for (const tx of charges) {
+    const inst = tx.installment!;
+    const key = `${tx.description.replace(INSTALLMENT_MARK, "").trim().toLowerCase()}|${inst.total}`;
+    const open = series.get(key) ?? [];
+    series.set(key, open);
+    let best = -1;
+    open.forEach((last, i) => {
+      const n = last.installment!.number;
+      if (n < inst.number && (best < 0 || n > open[best].installment!.number)) best = i;
+    });
+    if (best >= 0) open[best] = tx;
+    else open.push(tx);
   }
-  const acc = ledger.accounts.find((a) => a.id === accountId);
   const out: PlannedInstallment[] = [];
-  for (const last of latest.values()) {
+  for (const last of [...series.values()].flat()) {
     const { number, total } = last.installment!;
-    // each installment goes to the bill after the previous one's, dated on the day that bill opens
-    // (its previous closing), since the closing day may move from month to month
-    const [y, m] = last.date.split("-").map(Number);
-    let month = m - 1;
+    // each installment goes to the bill after the previous one's
     for (let n = number + 1; n <= total; n++) {
-      let date = closeIn(acc, y, month);
-      for (let i = 0; i < 3 && date <= last.date; i++) date = closeIn(acc, y, ++month);
-      month++;
+      const date = closingAfter(ledger, accountId, last.date, n - number);
       if (date >= from) out.push({ last, number: n, total, date, amount: last.amount });
     }
   }

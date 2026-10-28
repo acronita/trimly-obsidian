@@ -106,7 +106,7 @@ test("manual cards post each installment when its date comes", () => {
 });
 
 test("the next installment goes to the next bill even when the closing day moves", () => {
-  // like Rico: the bank closed on Sep 2 and Oct 1, so a purchase on Sep 6 is on the bill closing Oct 1
+  // the bank closed on Sep 2 and Oct 1, so a purchase on Sep 6 is on the bill closing Oct 1
   // and its 2nd installment on the one after, not one month later by date (Oct 6, the same bill)
   const l = ledger([charge("a", "2026-09-06", 136_10, 1, 2)], {
     closingDay: 22,
@@ -171,4 +171,45 @@ test("bank sync keeps which installment a card charge is, from Pluggy or from th
   assert.deepEqual(by("AMAZON"), { number: 2, total: 5 });
   assert.deepEqual(by("MAGALU 03/10"), { number: 3, total: 10 });
   assert.equal(by("MERCADO"), undefined);
+});
+
+test("installments the bank dates on the purchase day go to the bill after the previous one", () => {
+  // Rico lists Amazon 2/2 dated Sep 6, like 1/2, but on the bill due Nov 1 (closing Sep 25 and Oct 27)
+  const l = defaultLedger();
+  l.pluggy = { clientId: "id", clientSecret: "secret", itemIds: ["item"] };
+  l.accounts.push({
+    id: "rico",
+    name: "Rico",
+    type: "credit",
+    openingBalance: 0,
+    pluggyId: "p-rico",
+    closingDay: 22,
+    dueDay: 1,
+    billDates: [
+      { close: "2026-08-26", due: "2026-09-01" },
+      { close: "2026-09-25", due: "2026-10-01" },
+      { close: "2026-10-27", due: "2026-11-01" },
+    ],
+  });
+  const amazon = (id: string, number: number): PluggyTransaction => ({
+    id,
+    accountId: "p-rico",
+    date: "2026-09-06T00:00:00.000Z",
+    description: "AMAZON BR",
+    amount: 272.21,
+    type: "DEBIT",
+    status: "POSTED",
+    creditCardMetadata: { installmentNumber: number, totalInstallments: 2, purchaseDate: "2026-09-06T00:00:00.000Z" },
+  });
+  applyBankData(
+    l,
+    { accounts: [{ id: "p-rico", type: "CREDIT", name: "Rico", balance: 0 }], transactions: [amazon("a1", 1), amazon("a2", 2)], categories: [] },
+    "2026-08-01",
+    "2026-10-28"
+  );
+  const due = (offset: number) => cardBill(l, "rico", "2026-10-28", offset);
+  assert.deepEqual([due(-2).due, due(-2).total], ["2026-10-01", 272_21]);
+  assert.deepEqual([due(-1).due, due(-1).total], ["2026-11-01", 272_21]);
+  // both installments came from the bank, so nothing is projected
+  assert.deepEqual(futureInstallments(l, "rico"), []);
 });

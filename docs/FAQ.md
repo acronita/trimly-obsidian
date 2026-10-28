@@ -90,7 +90,8 @@ Synced cards take the installment from Pluggy, or from a mark at the end of the 
 ("LOJA 03/10", "PARC 3/10", "Parcela 3 de 10") when the bank sends none. A purchase whose
 charges carry neither is a plain charge. The remaining installments are projected at the latest
 charge's amount, one per bill after its bill (dated on the day each bill opens), and replaced by the real charges as the bank sends them.
-Some banks only ever report the first installment: the projected ones still count in their bills,
+Banks that date every installment on the purchase day (Rico) have each one after the 1st shown
+on the day its bill opens, so it lands on the right bill. Some banks only ever report the first installment: the projected ones still count in their bills,
 closed ones included, so the bill totals stay right.
 
 **Why didn't I get an obligation reminder on my phone?**

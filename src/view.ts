@@ -819,7 +819,7 @@ export class TrimlyView extends ItemView {
     setIcon(prev, "chevron-left");
     prev.addEventListener("click", () => go(this.billOffset - 1));
     const label = nav.createDiv();
-    label.createDiv({ cls: "trimly-bill-title", text: t.accounts.billOf(this.monthLabel(monthOf(bill.end))) });
+    label.createDiv({ cls: "trimly-bill-title", text: t.accounts.billOf(this.monthLabel(monthOf(bill.due ?? bill.end))) });
     label.createDiv({ cls: "trimly-muted", text: t.accounts.billPeriod(this.shortDate(bill.start), this.shortDate(bill.end)) });
     const next = nav.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.accounts.nextBill } });
     setIcon(next, "chevron-right");

@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId } from "./ledger.ts";
+import { accountBalance, closingAfter, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync reconciles: synced transactions in it that Pluggy no longer returns are removed. */
@@ -51,7 +51,7 @@ export interface PluggyTransaction {
   amountInAccountCurrency?: number | null;
   categoryId?: string | null;
   /** credit cards: installment purchases carry which installment this charge is */
-  creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null } | null;
+  creditCardMetadata?: { installmentNumber?: number | null; totalInstallments?: number | null; purchaseDate?: string | null } | null;
 }
 
 export interface PluggyBill {
@@ -326,17 +326,23 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
       : t.amountInAccountCurrency != null
         ? cents(t.amountInAccountCurrency)
         : convert(ledger, cents(t.amount), t.currencyCode!, acc.currency!);
+    const installment = onCard && !moneyIn ? installmentOf(t) : undefined;
+    let date = t.date.slice(0, 10);
+    // some banks (Rico) date every installment on the purchase day; each one belongs to the bill after the previous
+    if (installment && installment.number > 1 && t.creditCardMetadata?.purchaseDate?.slice(0, 10) === date) {
+      date = closingAfter(ledger, acc.id, date, installment.number - 1);
+    }
     legs.push({
       pid: t.id,
       accountId: acc.id,
       onCard,
-      date: t.date.slice(0, 10),
+      date,
       cents: moneyIn ? charged : -charged,
       original: foreign ? { currency: t.currencyCode!, amount: cents(t.amount) } : undefined,
       description: t.description,
       pending: t.status === "PENDING",
       path: categoryPath(categories, t.categoryId),
-      installment: onCard && !moneyIn ? installmentOf(t) : undefined,
+      installment,
     });
   }
   const recs = pairTransfers(legs);
