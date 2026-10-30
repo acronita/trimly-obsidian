@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId, shiftMonth } from "./ledger.ts";
+import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId, ruleCategory, shiftMonth } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync reconciles: synced transactions in it that Pluggy no longer returns are removed. */
@@ -410,7 +410,7 @@ export function applyBankData(ledger: Ledger, data: BankData, windowStart: strin
     if (rec.original) tx.original = rec.original;
     if (rec.installment) tx.installment = rec.installment;
     if (rec.billMonth) tx.billMonth = rec.billMonth;
-    const categoryId = mapCategory(ledger, rec);
+    const categoryId = ruleCategory(ledger, tx) ?? mapCategory(ledger, rec);
     if (categoryId) tx.categoryId = categoryId;
     if (rec.pending) tx.pending = true;
     ledger.transactions.push(tx);

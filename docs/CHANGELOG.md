@@ -1,5 +1,52 @@
 # Changelog
 
+## 0.16.0 — 2026-10-30
+
+- 2026-10-30 — Bills to pay (payment obligations) take *Valor fixo* (new optional `fixed`) and a
+  *Categoria* (new optional `categoryId`, filled from the first linked payment's category). Planning
+  counts fixed-amount bills with the fixed costs and variable ones as variable bills, and adds each
+  bill to its category's committed part, so a health plan paid as an obligation is no longer counted
+  against the health limit; the Recurring tab's chips split them the same way and its card becomes
+  *Contas a pagar*. Months already marked paid by hand now get their payment linked too, without
+  changing the bill's usual amount. Transactions also say which bill they pay in any month (new
+  optional `obligationId`; `null` once unlinked by hand), matched by the words of the bill's name,
+  learned payment or linked payments, an amount within 50% of the expected one (or, with no amount
+  known, the bill's own category) and no conflicting category, so payments from before the bill
+  was registered are its too; the transaction modal shows it, and Planning counts by it. "Efetuado"
+  joins the generic bank wording ("Pagamento efetuado|X" names nobody). A bill with linked payments
+  but no learned description learns the latest one's, so its next months link themselves. Why: Planning only knew recurring rules, so a bill paid by hand
+  landed in the category's extra, only the last month of a bill was linked to its payment, and
+  payments from before the bill existed were never recognized.
+  Files touched: `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/obligations.test.ts`, `test/ledger.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`.
+- 2026-10-30 — Changing a transaction's category moves every other transaction with the same
+  description (ignoring digits, accents and generic bank wording) and learns a rule (new optional
+  `categoryRules` on the ledger; version unchanged) that bank sync applies to new transactions before
+  the bank's own category. Why: recategorizing one charge left its past and future look-alikes
+  behind. Files touched: `src/ledger.ts`, `src/bank-sync.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/ledger.test.ts`, `test/bank-sync.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`.
+- 2026-10-30 — Categories can be reordered by dragging one onto another in the Categories tab; the
+  order is the ledger's, so lists and dropdowns follow it. Files touched: `src/view.ts`,
+  `src/styles/index.css`, `README.md`.
+- 2026-10-30 — *Orçamentos* becomes *Planejamento*, the month's plan, planned against actual:
+  *Receitas fixas* − *Custos fixos* (expense rules) − *Contas variáveis* = *Livre pra planejar*;
+  − *Dia a dia* (category limits) − *Investir* = *Não alocado*. Actuals split the month's
+  transactions the same way: linked to a rule are fixed, settling an obligation are bills, the rest
+  is day to day. Two donuts show the plan and what happened. A category's limit is now the extra on
+  top of its fixed costs (the tile adds them), so a health plan paid by a rule no longer has to be
+  repeated in the health limit; a category without a limit counts as zero and shows once it has
+  spending. A new *Investir* tile sets a monthly investment goal, tracked by the month's aportes,
+  which never count as spending. Limits and goal are kept per month (new optional `plans` on the
+  ledger, keyed "YYYY-MM"; version unchanged): a month without its own plan starts from the latest
+  earlier one, and editing a month saves its own copy, so past months stay as planned. Limits saved
+  before stay in `budgets` as the plan of every month before the first saved one.
+  Why: recurring rules and budgets were two plans that did not see each other, so it was unclear
+  what to budget for a category with a fixed bill and impossible to see how much of the income is
+  left to invest, save or spend. Files touched: `src/ledger.ts` (`monthPlan`, `fixedMonthlyIncome`,
+  `contributionsInMonth`), `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/ledger.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
 ## 0.15.0 — 2026-10-28
 
 - 2026-10-28 — The Recurring tab's summary adds *Custos variáveis / mês* (the monthly total of

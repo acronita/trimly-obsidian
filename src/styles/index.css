@@ -886,6 +886,58 @@ button.trimly-add.is-icon {
   text-align: right;
 }
 
+/* ---- category order ---- */
+
+.trimly-tile.is-dragging {
+  opacity: 0.4;
+}
+
+.trimly-tile.is-drop-target {
+  outline: 2px dashed var(--interactive-accent);
+  outline-offset: 2px;
+}
+
+/* ---- planning ---- */
+
+.trimly-plan-table {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trimly-plan-row {
+  display: grid;
+  grid-template-columns: 1fr 7.5em 7.5em;
+  gap: 10px;
+  align-items: baseline;
+  font-size: var(--font-ui-small);
+}
+
+.trimly-plan-row > :not(:first-child) {
+  text-align: right;
+}
+
+.trimly-plan-row.is-total {
+  font-weight: var(--font-bold);
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 6px;
+}
+
+.trimly-plan-pies {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-around;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.trimly-plan-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px 14px;
+}
+
 /* ---- transactions ---- */
 
 .trimly-filters {
