@@ -1077,18 +1077,50 @@ export class TrimlyView extends ItemView {
     const available = per((c) => plan.income[c] - plan.fixed[c] - plan.bills[c] - plan.spending[c]);
     const leftover = per((c) => available[c] - plan.invest[c]);
 
+    // first: are spending and investing following the plan; then what the month really leaves to invest
     const head = body.createDiv("trimly-page-head");
-    const h = head.createDiv();
-    h.createDiv({ cls: "trimly-eyebrow", text: t.budgets.title(this.monthLabel(this.month)) });
+    head.createDiv({ cls: "trimly-eyebrow", text: t.budgets.title(this.monthLabel(this.month)) });
+    const meters = head.createDiv("trimly-plan-meters");
+    const meter = (label: string, value: string, over: boolean, detail: string, done: number, of: number, color: string) => {
+      const m = meters.createDiv();
+      m.createDiv({ cls: "trimly-eyebrow", text: label });
+      m.createDiv({ cls: `trimly-page-value ${over ? "is-expense" : ""}`, text: value });
+      m.createDiv({ cls: "trimly-muted", text: detail });
+      this.progress(m, done, of, color);
+    };
+    const spentPlanned = Math.round(plan.fixed.planned + plan.bills.planned + plan.spending.planned);
+    const spentSoFar = Math.round(plan.fixed.actual + plan.bills.actual + plan.spending.actual);
+    const spentLeft = spentPlanned - spentSoFar;
+    meter(
+      t.budgets.spentLabel,
+      spentLeft >= 0 ? t.budgets.left(this.money(spentLeft)) : t.budgets.over(this.money(-spentLeft)),
+      spentLeft < 0,
+      t.budgets.spentOf(this.money(spentSoFar), this.money(spentPlanned)),
+      spentSoFar,
+      spentPlanned,
+      "var(--interactive-accent)"
+    );
+    const goal = Math.round(plan.invest.planned);
+    const invested = Math.round(plan.invest.actual);
+    meter(
+      t.budgets.investLabel,
+      goal <= 0 ? t.budgets.noGoal : invested >= goal ? t.budgets.investDone : t.budgets.investLeft(this.money(goal - invested)),
+      false,
+      t.budgets.investedOfGoal(this.money(invested), this.money(goal)),
+      Math.min(invested, goal),
+      goal,
+      PLAN_COLORS.invest
+    );
     const canInvest = Math.round(available.projected);
-    h.createDiv({
-      cls: `trimly-page-value ${canInvest < 0 ? "is-expense" : ""}`,
-      text: canInvest >= 0 ? t.budgets.canInvest(this.money(canInvest)) : t.budgets.shortfall(this.money(-canInvest)),
-    });
-    const goal = plan.invest.planned;
-    const goalText =
-      goal <= 0 ? t.budgets.noGoalHint : canInvest >= goal ? t.budgets.goalFits(this.money(goal), this.money(canInvest - goal)) : t.budgets.goalShort(this.money(goal), this.money(goal - Math.max(0, canInvest)));
-    h.createDiv({ cls: `trimly-muted ${goal > 0 && canInvest < goal ? "is-expense" : ""}`, text: goalText });
+    const forecast =
+      canInvest < 0
+        ? t.budgets.forecastDeficit(this.money(-canInvest))
+        : goal <= 0
+          ? t.budgets.forecastNoGoal(this.money(canInvest))
+          : canInvest >= goal
+            ? t.budgets.forecastFits(this.money(canInvest), this.money(canInvest - goal))
+            : t.budgets.forecastShort(this.money(canInvest), this.money(goal - canInvest));
+    head.createDiv({ cls: `trimly-muted trimly-plan-forecast ${canInvest < goal ? "is-expense" : ""}`, text: forecast });
 
     const row = body.createDiv("trimly-grid");
     const table = this.card(row, t.budgets.planTitle).createDiv("trimly-plan-table");
@@ -1150,6 +1182,8 @@ export class TrimlyView extends ItemView {
       item.createSpan({ text: x.name });
     }
 
+    this.categoryChart(body, ledger, plan.fixedByCategory, spending);
+
     const bar = body.createDiv("trimly-section-bar");
     bar.createDiv({ cls: "trimly-muted", text: t.budgets.hint });
 
@@ -1159,7 +1193,7 @@ export class TrimlyView extends ItemView {
     const budget = budgetFor(ledger, month);
     const limitOf = (id: string) => budget.budgets.find((b) => b.categoryId === id)?.limit ?? 0;
     const shown = expenseCats.filter((c) => (plan.fixedByCategory.get(c.id) ?? 0) > 0 || limitOf(c.id) > 0 || (spending.get(c.id) ?? 0) > 0);
-    const grid = body.createDiv("trimly-tiles");
+    const grid = body.createDiv("trimly-tiles trimly-tiles-3");
     this.investmentTile(grid, plan.invest, month);
     for (const c of shown) {
       const fixed = Math.round(plan.fixedByCategory.get(c.id) ?? 0);
@@ -1192,6 +1226,41 @@ export class TrimlyView extends ItemView {
         r.createDiv("trimly-row-main").createDiv({ cls: "trimly-row-title", text: c.name });
         this.limitInput(r, 0, t.budgets.setLimit, (l, cents) => setLimit(l, month, c.id, cents));
       }
+    }
+  }
+
+  /** Each category's spending against its plan (its bills plus its limit), the ones most over it first. */
+  private categoryChart(body: HTMLElement, ledger: Ledger, fixedByCategory: Map<string, number>, spending: Map<string, number>) {
+    const budget = budgetFor(ledger, this.month);
+    const rows = ledger.categories
+      .filter((c) => c.kind === "expense")
+      .map((c) => ({
+        c,
+        planned: Math.round((fixedByCategory.get(c.id) ?? 0) + (budget.budgets.find((b) => b.categoryId === c.id)?.limit ?? 0)),
+        spent: spending.get(c.id) ?? 0,
+      }))
+      .filter((r) => r.planned > 0 || r.spent > 0)
+      .sort((a, b) => b.spent - b.planned - (a.spent - a.planned));
+    if (!rows.length) return;
+    const card = this.card(body, t.budgets.byCategoryTitle);
+    const scale = Math.max(1, ...rows.map((r) => Math.max(r.planned, r.spent)));
+    for (const r of rows) {
+      const over = r.spent - r.planned;
+      const head = card.createDiv("trimly-plan-bar-label");
+      head.createSpan({ text: r.c.name });
+      head.createSpan({
+        cls: over > 0 ? "is-expense" : "trimly-muted",
+        text: over > 0 ? t.budgets.over(this.money(over)) : t.budgets.spentOf(this.money(r.spent), this.money(r.planned)),
+      });
+      const track = card.createDiv("trimly-plan-track is-thin");
+      const seg = (value: number, color: string, cls = "") => {
+        if (value <= 0) return;
+        track.createDiv(`trimly-plan-seg ${cls}`).setCssProps({ "--trimly-pct": `${(value / scale) * 100}%`, "--trimly-color": color });
+      };
+      // spent within the plan, the plan still unspent (faded), and spending beyond it in red
+      seg(Math.min(r.spent, r.planned), r.c.color);
+      seg(r.planned - r.spent, r.c.color, "is-faded");
+      seg(over, PLAN_COLORS.short);
     }
   }
 

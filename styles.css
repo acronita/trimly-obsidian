@@ -803,7 +803,7 @@ button.trimly-add.is-icon {
 }
 .trimly-plan-row {
   display: grid;
-  grid-template-columns: 1fr 7.5em 7.5em;
+  grid-template-columns: minmax(0, 1fr) repeat(3, 7.5em);
   gap: 10px;
   align-items: baseline;
   font-size: var(--font-ui-small);
@@ -837,6 +837,22 @@ button.trimly-add.is-icon {
 }
 .trimly-plan-seg + .trimly-plan-seg {
   border-left: 2px solid var(--trimly-card-bg);
+}
+.trimly-plan-track.is-thin {
+  height: 10px;
+  margin-bottom: 10px;
+}
+.trimly-plan-seg.is-faded {
+  opacity: 0.25;
+}
+.trimly-plan-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px 28px;
+  margin-top: 6px;
+}
+.trimly-plan-forecast {
+  margin-top: 12px;
 }
 .trimly-plan-short {
   margin: -10px 0 14px;
@@ -949,6 +965,9 @@ button.trimly-add.is-icon {
   grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 12px;
   margin-bottom: 22px;
+}
+.trimly-tiles-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .trimly-tiles-compact {
   grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
@@ -1254,6 +1273,12 @@ input.trimly-amount-input:focus {
   }
   .trimly-grid {
     grid-template-columns: 1fr;
+  }
+  .trimly-tiles-3 {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+  .trimly-plan-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 6.5em);
   }
   .trimly-spending {
     flex-direction: column;

@@ -25,13 +25,15 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
-- **Planning** (*Planejamento*, was Budgets) — answers how much the month leaves to invest. The top
-  says *Dá pra investir R$ X* (or how much is short to close the month) and whether the investment
-  goal fits. The month's plan lists income, fixed costs, variable bills and category spending, then
+- **Planning** (*Planejamento*, was Budgets) — whether spending and investing follow the month's plan.
+  The top shows spending against what was planned and aportes against the investment goal, each with
+  a bar, then how much the month's forecast leaves to invest (and whether the goal fits). The month's
+  plan lists income, fixed costs, variable bills and category spending, then
   what is available to invest, the investment and what is left, in three columns: planned (fixed
   income, bills and limits), so far, and forecast (what happened plus recurring occurrences and bills
   still due this month and what is left of each category's limit). Two bars show where the income
-  goes, planned and forecast, on one scale. Bills to pay count as fixed costs when marked *Valor
+  goes, planned and forecast, on one scale, and *Gastos por categoria × planejado* shows each
+  category's spending against its plan, the ones most over it first, the excess in red. Bills to pay count as fixed costs when marked *Valor
   fixo*, else as variable bills; card bills are not counted (their purchases already are, by
   category). Each category tile counts its bills on its own (recurring rules and obligations in that
   category, e.g. a health plan) plus an *Extra* limit you set for the rest; a category without one
