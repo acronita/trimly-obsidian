@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.17.0 — 2026-10-30
+
+- 2026-10-30 — Planning shows whether spending and investing follow the plan, then what the month
+  can really invest. The top has two meters, spending so far against what was planned (bills plus
+  limits) and aportes against the investment goal, and below them the forecast: *Pela previsão do mês
+  dá pra investir R$ X*, and whether the goal fits. The month's plan gets three columns, *Planejado*,
+  *Até agora* and *Previsto*: the forecast adds to what happened the recurring occurrences and bill
+  occurrences still due in the month and, until the month ends, what is left of each category's
+  limit (`monthPlan` takes `today`; new `pendingRecurring` for any rule type). Investing moved below
+  *Disponível pra investir*, so *Sobra* says whether the plan leaves money after the goal. *Dia a
+  dia* is now *Gastos por categoria*; the donuts became two bars of where the income goes (planned
+  and forecast, one scale), plus two more on the same scale that split category spending by
+  category with the rest greyed (new `spendingByCategory` on the plan); and the category tiles are
+  three per row. Why: the
+  plan showed what was set, not whether the month was following it or could reach the investment
+  goal. Files touched: `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/ledger.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
+
 ## 0.16.0 — 2026-10-30
 
 - 2026-10-30 — A category can be marked *Categoria padrão* (new optional `isDefault` on categories;

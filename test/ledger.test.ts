@@ -289,13 +289,13 @@ test("the month's plan keeps fixed costs out of the category limits, so a health
   l.investments.movements.push({ id: "a", assetId: "x", date: "2026-10-06", type: "buy", amount: 1000_00 });
 
   const p = monthPlan(l, "2026-10");
-  assert.deepEqual(p.income, { planned: 5000_00, actual: 5000_00 });
-  assert.deepEqual(p.fixed, { planned: 500_00, actual: 500_00 });
+  assert.deepEqual(pa(p.income), { planned: 5000_00, actual: 5000_00 });
+  assert.deepEqual(pa(p.fixed), { planned: 500_00, actual: 500_00 });
   assert.equal(p.fixedByCategory.get("health"), 500_00);
   assert.equal(p.bills.actual, 90_00); // settles an obligation: a bill, not day-to-day spending
   // the pharmacy and lunch are what the limits cover; the health plan is not
-  assert.deepEqual(p.daily, { planned: 700_00, actual: 80_00 + 50_00 });
-  assert.deepEqual(p.invest, { planned: 1500_00, actual: 1000_00 });
+  assert.deepEqual(pa(p.spending), { planned: 700_00, actual: 80_00 + 50_00 });
+  assert.deepEqual(pa(p.invest), { planned: 1500_00, actual: 1000_00 });
 });
 
 test("a fixed-amount bill with a category counts with fixed costs and in its category, not against the limit", () => {
@@ -307,10 +307,10 @@ test("a fixed-amount bill with a category counts with fixed costs and in its cat
   );
   l.transactions.push({ id: "hp-oct", date: "2026-10-15", type: "expense", amount: 500_00, accountId: "bank", categoryId: "health", description: "Health plan" });
   const p = monthPlan(l, "2026-10");
-  assert.deepEqual(p.fixed, { planned: 500_00, actual: 500_00 });
+  assert.deepEqual(pa(p.fixed), { planned: 500_00, actual: 500_00 });
   assert.equal(p.bills.planned, 150_00);
   assert.equal(p.fixedByCategory.get("health"), 500_00);
-  assert.equal(p.daily.actual, 50_00); // only the lunch
+  assert.equal(p.spending.actual, 50_00); // only the lunch
 });
 
 test("changing a transaction's category moves its look-alikes and the next ones, but not generic bank wording", () => {
@@ -344,5 +344,52 @@ test("a bill payment from before the bill was registered counts with its bill in
   l.transactions.push({ id: "hp-oct", date: "2026-10-15", type: "expense", amount: 500_00, accountId: "bank", description: "UNIMED", obligationId: "hp" });
   const p = monthPlan(l, "2026-10");
   assert.equal(p.fixed.actual, 500_00);
-  assert.equal(p.daily.actual, 50_00);
+  assert.equal(p.spending.actual, 50_00);
+});
+
+/** A plan line without its projection, for checks about what was planned and what happened. */
+function pa(l: { planned: number; actual: number }) {
+  return { planned: l.planned, actual: l.actual };
+}
+
+test("the forecast tells how much is really left to invest once what is still due this month is paid", () => {
+  const l = ledger();
+  l.categories.push({ id: "health", name: "Health", kind: "expense", color: "#000" });
+  l.recurring.push(
+    // payday still to come this month
+    { id: "s", description: "Salary", type: "income", amount: 5000_00, accountId: "bank", frequency: "monthly", startDate: "2026-01-28", nextDate: "2026-10-28" },
+    { id: "rent", description: "Rent", type: "expense", amount: 2000_00, accountId: "bank", frequency: "monthly", startDate: "2026-01-25", nextDate: "2026-10-25" }
+  );
+  // electricity not paid yet this month, at its usual amount
+  l.obligations.push({ id: "light", name: "Light", kind: "payment", frequency: "monthly", day: 26, since: "2026-01-01", amount: 150_00, remindDays: 3, settled: [] });
+  editBudget(l, "2026-10", (b) => {
+    b.budgets = [{ categoryId: "food", limit: 600_00 }];
+    b.investmentGoal = 3000_00;
+  });
+  const p = monthPlan(l, "2026-10", "2026-10-20");
+  // the October salary already in plus the payday to come
+  assert.equal(p.income.projected, 5000_00 + 5000_00);
+  assert.equal(p.fixed.projected, 2000_00);
+  assert.equal(p.bills.projected, 150_00);
+  // 50 spent on food, and what is left of its 600 limit is assumed spent too
+  assert.equal(p.spending.projected, 600_00);
+  assert.equal(p.invest.projected, 3000_00);
+
+  // once the month is over, nothing more is assumed for the limits
+  assert.equal(monthPlan(l, "2026-10", "2026-11-05").spending.projected, 50_00);
+});
+
+test("category spending splits by category, so the bars show which categories grow past their limit", () => {
+  const l = ledger();
+  l.categories.push({ id: "fun", name: "Fun", kind: "expense", color: "#000" });
+  l.transactions.push({ id: "bar", date: "2026-10-12", type: "expense", amount: 300_00, accountId: "card", categoryId: "fun", description: "Bar" });
+  editBudget(l, "2026-10", (b) => (b.budgets = [{ categoryId: "food", limit: 200_00 }]));
+  const p = monthPlan(l, "2026-10", "2026-10-20");
+  // food: 50 of its 200 spent, the rest still expected
+  assert.deepEqual(p.spendingByCategory.get("food"), { planned: 200_00, actual: 50_00, projected: 200_00 });
+  // fun has no limit (zero): what was spent is all of it
+  assert.deepEqual(p.spendingByCategory.get("fun"), { planned: 0, actual: 300_00, projected: 300_00 });
+  // the split adds up to the category spending line
+  const sum = [...p.spendingByCategory.values()].reduce((s, x) => s + x.projected, 0);
+  assert.equal(sum, p.spending.projected);
 });

@@ -1202,9 +1202,14 @@ export function monthlyHistory(ledger: Ledger, lastMonth: string, count: number)
  * transaction). Lets the overview show how the month ends before a late payday.
  */
 export function pendingRecurringIncome(ledger: Ledger, month: string): number {
+  return pendingRecurring(ledger, month, "income");
+}
+
+/** Like `pendingRecurringIncome`, for rules of any type: occurrences in `month` not posted or linked yet. */
+export function pendingRecurring(ledger: Ledger, month: string, type: TxType): number {
   let total = 0;
   for (const r of ledger.recurring) {
-    if (r.type !== "income") continue;
+    if (r.type !== type) continue;
     const anchorDay = Number(r.startDate.slice(8, 10));
     let date = r.nextDate;
     // guard against a corrupted rule looping forever
@@ -1280,7 +1285,10 @@ export function editBudget(ledger: Ledger, month: string, change: (b: MonthBudge
 /** One line of the month's plan, in the settings' currency. */
 export interface PlanLine {
   planned: number;
+  /** what happened in the month so far */
   actual: number;
+  /** where the month is headed: what happened plus what is still due (see `monthPlan`) */
+  projected: number;
 }
 
 export interface MonthPlan {
@@ -1290,20 +1298,25 @@ export interface MonthPlan {
   fixed: PlanLine;
   /** bills paid by hand whose amount varies (`estimatedBills`) against the month's transactions paying them */
   bills: PlanLine;
-  /** category limits against every other expense of the month */
-  daily: PlanLine;
-  /** investment goal against the month's aportes */
+  /** category limits against every other expense of the month, planned (limits) or not */
+  spending: PlanLine;
+  /** investment goal against the month's aportes; projected = the goal, or more when more was invested */
   invest: PlanLine;
   /** expense rules and bills per month by category id ("" = uncategorized): the part of a category already committed */
   fixedByCategory: Map<string, number>;
+  /** `spending` split by category id ("" = uncategorized): its limit, what was spent outside bills, and the forecast */
+  spendingByCategory: Map<string, PlanLine>;
 }
 
 /**
- * The month's plan: what fixed income pays for, and what really happened.
- * A category's limit is spending on top of its fixed costs, so a health plan
- * paid by a rule counts in `fixed`, not against the health limit.
+ * The month's plan: what fixed income pays for, what really happened, and
+ * where the month is headed. A category's limit is spending on top of its
+ * bills, so a health plan paid by a rule counts in `fixed`, not against the
+ * health limit. The projection adds to what happened what is still due in the
+ * month: recurring occurrences not posted yet, bill occurrences not paid yet,
+ * and, until the month is over, what is left of each category's limit.
  */
-export function monthPlan(ledger: Ledger, month: string): MonthPlan {
+export function monthPlan(ledger: Ledger, month: string, today = todayISO()): MonthPlan {
   const fixedByCategory = new Map<string, number>();
   let fixedPlanned = 0;
   for (const r of ledger.recurring) {
@@ -1329,14 +1342,17 @@ export function monthPlan(ledger: Ledger, month: string): MonthPlan {
   }
 
   const budget = budgetFor(ledger, month);
+  const line = (planned: number): PlanLine => ({ planned, actual: 0, projected: 0 });
   const plan: MonthPlan = {
-    income: { planned: fixedMonthlyIncome(ledger), actual: 0 },
-    fixed: { planned: fixedPlanned, actual: 0 },
-    bills: { planned: billsPlanned, actual: 0 },
-    daily: { planned: budget.budgets.reduce((s, b) => s + b.limit, 0), actual: 0 },
-    invest: { planned: budget.investmentGoal ?? 0, actual: contributionsInMonth(ledger, month) },
+    income: line(fixedMonthlyIncome(ledger)),
+    fixed: line(fixedPlanned),
+    bills: line(billsPlanned),
+    spending: line(budget.budgets.reduce((s, b) => s + b.limit, 0)),
+    invest: line(budget.investmentGoal ?? 0),
     fixedByCategory,
+    spendingByCategory: new Map(budget.budgets.map((b) => [b.categoryId, line(b.limit)])),
   };
+  const spentByCategory = new Map<string, number>();
   for (const tx of ledger.transactions) {
     if (monthOf(tx.date) !== month) continue;
     const v = baseAmount(ledger, tx);
@@ -1344,8 +1360,39 @@ export function monthPlan(ledger: Ledger, month: string): MonthPlan {
     else if (tx.type !== "expense") continue;
     else if (tx.recurringId || billTxs.get(tx.id)) plan.fixed.actual += v;
     else if (billTxs.has(tx.id)) plan.bills.actual += v;
-    else plan.daily.actual += v;
+    else {
+      plan.spending.actual += v;
+      const key = tx.categoryId ?? "";
+      spentByCategory.set(key, (spentByCategory.get(key) ?? 0) + v);
+    }
   }
+  plan.invest.actual = contributionsInMonth(ledger, month);
+
+  // still due in the month
+  let fixedDue = pendingRecurring(ledger, month, "expense");
+  let billsDue = 0;
+  for (const { obligation: o } of estimatedBills(ledger)) {
+    const due = openOccurrences(o, `${month}-31`).filter((d) => monthOf(d) === month).length * expectedAmount(ledger, o);
+    if (o.fixed) fixedDue += due;
+    else billsDue += due;
+  }
+  // until the month is over, what is left of a limit is still expected to be spent
+  const open = month >= monthOf(today);
+  for (const [key, spent] of spentByCategory) {
+    if (!plan.spendingByCategory.has(key)) plan.spendingByCategory.set(key, line(0));
+    plan.spendingByCategory.get(key)!.actual = spent;
+  }
+  let spendingLeft = 0;
+  for (const l of plan.spendingByCategory.values()) {
+    const left = open ? Math.max(0, l.planned - l.actual) : 0;
+    l.projected = l.actual + left;
+    spendingLeft += left;
+  }
+  plan.income.projected = plan.income.actual + pendingRecurring(ledger, month, "income");
+  plan.fixed.projected = plan.fixed.actual + fixedDue;
+  plan.bills.projected = plan.bills.actual + billsDue;
+  plan.spending.projected = plan.spending.actual + spendingLeft;
+  plan.invest.projected = Math.max(plan.invest.planned, plan.invest.actual);
   return plan;
 }
 
