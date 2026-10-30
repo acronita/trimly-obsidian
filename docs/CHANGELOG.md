@@ -2,6 +2,15 @@
 
 ## 0.16.0 — 2026-10-30
 
+- 2026-10-30 — A category can be marked *Categoria padrão* (new optional `isDefault` on categories;
+  at most one per kind, version unchanged). Uncategorized income/expense transactions and recurring
+  rules of that kind go to it on every save and when the ledger opens, so existing ones are fixed
+  too; the category pickers drop *Sem categoria* for that kind, deleting another category moves its
+  transactions there, and the tile shows *Padrão*. With no default, things stay uncategorized as
+  before. Why: *Outras despesas* / *Outras receitas* already play that role, so *Sem categoria* was
+  a second bucket for the same thing. Files touched: `src/ledger.ts`, `src/main.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/ledger.test.ts`,
+  `README.md`.
 - 2026-10-30 — Bills to pay (payment obligations) take *Valor fixo* (new optional `fixed`) and a
   *Categoria* (new optional `categoryId`, filled from the first linked payment's category). Planning
   counts fixed-amount bills with the fixed costs and variable ones as variable bills, and adds each

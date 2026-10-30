@@ -21,6 +21,7 @@ import {
   Transaction,
   TxType,
   centsToInput,
+  defaultCategory,
   newId,
   paidOn,
   parseAmount,
@@ -163,7 +164,8 @@ function accountOptions(ledger: Ledger, current?: string): Record<string, string
 }
 
 function categoryOptions(ledger: Ledger, kind: CategoryKind): Record<string, string> {
-  const out: Record<string, string> = { "": t.common.uncategorized };
+  // with a default category, "uncategorized" would just turn into it on save
+  const out: Record<string, string> = defaultCategory(ledger, kind) ? {} : { "": t.common.uncategorized };
   for (const c of ledger.categories) if (c.kind === kind) out[c.id] = c.name;
   return out;
 }
@@ -934,6 +936,10 @@ export class CategoryModal extends Modal {
         grid.setCssProps({ "--trimly-color": v });
       })
     );
+    new Setting(contentEl)
+      .setName(t.modals.category.isDefault)
+      .setDesc(t.modals.category.isDefaultDesc)
+      .addToggle((tg) => tg.setValue(!!this.draft.isDefault).onChange((v) => (this.draft.isDefault = v || undefined)));
     new Setting(contentEl).setName(t.modals.category.icon).setClass("trimly-icon-setting");
     const grid = contentEl.createDiv("trimly-icon-grid");
     grid.setCssProps({ "--trimly-color": this.draft.color });

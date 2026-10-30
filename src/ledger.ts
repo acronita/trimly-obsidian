@@ -102,6 +102,8 @@ export interface Category {
   color: string;
   /** Lucide icon name; missing = "tag" */
   icon?: string;
+  /** receives this kind's uncategorized transactions; at most one per kind */
+  isDefault?: boolean;
 }
 
 export interface Transaction {
@@ -1952,6 +1954,36 @@ export function applyCategory(ledger: Ledger, tx: Transaction, categoryId: strin
 export function dropBudgets(ledger: Ledger, categoryId: string) {
   ledger.budgets = ledger.budgets.filter((b) => b.categoryId !== categoryId);
   for (const p of Object.values(ledger.plans ?? {})) p.budgets = p.budgets.filter((b) => b.categoryId !== categoryId);
+}
+
+/** The category marked as default for `kind`, if any. */
+export function defaultCategory(ledger: Ledger, kind: CategoryKind): Category | undefined {
+  return ledger.categories.find((c) => c.kind === kind && c.isDefault);
+}
+
+/** Mark `categoryId` as its kind's default, unmarking the previous one. */
+export function setDefaultCategory(ledger: Ledger, categoryId: string) {
+  const cat = ledger.categories.find((c) => c.id === categoryId);
+  if (!cat) return;
+  for (const c of ledger.categories) if (c.kind === cat.kind) delete c.isDefault;
+  cat.isDefault = true;
+}
+
+/**
+ * Put uncategorized income/expense transactions and recurring rules in their kind's default
+ * category, when there is one. Returns how many were changed.
+ */
+export function fillDefaultCategories(ledger: Ledger): number {
+  const ids = { income: defaultCategory(ledger, "income")?.id, expense: defaultCategory(ledger, "expense")?.id };
+  let changed = 0;
+  for (const x of [...ledger.transactions, ...ledger.recurring]) {
+    if (x.type === "transfer" || x.categoryId) continue;
+    const id = ids[x.type];
+    if (!id) continue;
+    x.categoryId = id;
+    changed++;
+  }
+  return changed;
 }
 
 /** Drop references to a deleted category so transactions show as uncategorized. */

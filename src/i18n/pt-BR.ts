@@ -333,7 +333,11 @@ export const ptBR = {
 
   categories: {
     add: "Adicionar categoria",
-    deleteConfirm: (name: string) => `Excluir a categoria "${name}"? As transações dela ficam sem categoria.`,
+    deleteConfirm: (name: string, fallback?: string) =>
+      fallback
+        ? `Excluir a categoria "${name}"? As transações dela vão para "${fallback}".`
+        : `Excluir a categoria "${name}"? As transações dela ficam sem categoria.`,
+    defaultBadge: "Padrão",
   },
 
   inv: {
@@ -609,6 +613,8 @@ export const ptBR = {
       kindIncome: "Receita",
       color: "Cor",
       icon: "Ícone",
+      isDefault: "Categoria padrão",
+      isDefaultDesc: "Transações deste tipo sem categoria vão para esta, inclusive as que já existem. Só uma categoria de cada tipo pode ser a padrão.",
     },
     asset: {
       newTitle: "Novo ativo",

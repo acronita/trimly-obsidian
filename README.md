@@ -59,7 +59,9 @@ passphrase that never leaves your device.
   holiday shows as scheduled for the next business day. Overdue ones stay listed until dealt with. Reminders show as an
   Obsidian notice, and optionally a system notification on desktop, while Trimly is unlocked.
 - **Categories** — default expense/income categories, fully editable, with colors and icons. Drag a
-  category onto another to reorder them (desktop).
+  category onto another to reorder them (desktop). Mark one expense and one income category as
+  *Categoria padrão* (e.g. *Outras despesas*) and uncategorized transactions of that kind, past ones
+  included, go to it instead of *Sem categoria*.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
   class, an evolution chart, time-weighted returns (month by month, 12 months, since start)

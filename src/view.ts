@@ -36,7 +36,9 @@ import {
   applyInstitutionToConnection,
   applyCategory,
   budgetFor,
+  defaultCategory,
   dropBudgets,
+  setDefaultCategory,
   editBudget,
   centsToInput,
   fixedMonthlyIncome,
@@ -2423,7 +2425,8 @@ export class TrimlyView extends ItemView {
         const main = tile.createDiv("trimly-row-main");
         main.createDiv({ cls: "trimly-row-title", text: c.name });
         const used = ledger.transactions.filter((tx) => tx.categoryId === c.id).length;
-        main.createDiv({ cls: "trimly-row-sub", text: t.accounts.txCount(used) });
+        const sub = c.isDefault ? `${t.accounts.txCount(used)} · ${t.categories.defaultBadge}` : t.accounts.txCount(used);
+        main.createDiv({ cls: "trimly-row-sub", text: sub });
         tile.addEventListener("click", () => this.editCategory(c.id, kind));
         this.reorderable(tile, c.id);
       }
@@ -2478,12 +2481,13 @@ export class TrimlyView extends ItemView {
             }
             l.categories[i] = cat;
           } else l.categories.push(cat);
+          if (cat.isDefault) setDefaultCategory(l, cat.id);
         }),
       existing
         ? (cat) =>
             new ConfirmModal(
               this.app,
-              t.categories.deleteConfirm(cat.name),
+              t.categories.deleteConfirm(cat.name, cat.isDefault ? undefined : defaultCategory(ledger, cat.kind)?.name),
               t.common.delete,
               () => void this.plugin.mutate((l) => removeCategory(l, cat.id))
             ).open()

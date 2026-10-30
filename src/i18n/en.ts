@@ -327,7 +327,11 @@ export const en: Strings = {
 
   categories: {
     add: "Add category",
-    deleteConfirm: (name: string) => `Delete category "${name}"? Its transactions become uncategorized.`,
+    deleteConfirm: (name: string, fallback?: string) =>
+      fallback
+        ? `Delete category "${name}"? Its transactions move to "${fallback}".`
+        : `Delete category "${name}"? Its transactions become uncategorized.`,
+    defaultBadge: "Default",
   },
 
   inv: {
@@ -602,6 +606,8 @@ export const en: Strings = {
       kindIncome: "Income",
       color: "Color",
       icon: "Icon",
+      isDefault: "Default category",
+      isDefaultDesc: "Uncategorized transactions of this kind go here, existing ones included. Only one category of each kind can be the default.",
     },
     asset: {
       newTitle: "New position",

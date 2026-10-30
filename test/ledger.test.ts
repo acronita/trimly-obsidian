@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import {
   accountBalance,
   applyCategory,
+  fillDefaultCategories,
+  setDefaultCategory,
   budgetFor,
   editBudget,
   ruleCategory,
@@ -131,6 +133,32 @@ test("deleting a category uncategorizes its transactions instead of losing them"
   assert.equal(l.transactions.length, 4);
   assert.equal(l.transactions[1].categoryId, undefined);
   assert.equal(l.budgets.length, 0);
+});
+
+test("a default category takes in uncategorized items of its kind only, so nothing reads 'Sem categoria'", () => {
+  const l = ledger();
+  l.categories.push({ id: "other", name: "Other", kind: "expense", color: "#000" });
+  l.transactions.push(
+    { id: "u1", date: "2026-03-05", type: "expense", amount: 10_00, accountId: "bank", description: "?" },
+    { id: "u2", date: "2026-03-06", type: "income", amount: 10_00, accountId: "bank", description: "?" }
+  );
+  // no default yet: stays uncategorized
+  assert.equal(fillDefaultCategories(l), 0);
+  setDefaultCategory(l, "other");
+  assert.ok(fillDefaultCategories(l) >= 1);
+  assert.equal(l.transactions.find((tx) => tx.id === "u1")?.categoryId, "other");
+  // income has no default, and transfers never get a category
+  assert.equal(l.transactions.find((tx) => tx.id === "u2")?.categoryId, undefined);
+  for (const tx of l.transactions) if (tx.type === "transfer") assert.equal(tx.categoryId, undefined);
+});
+
+test("only one default category per kind", () => {
+  const l = ledger();
+  l.categories.push({ id: "other", name: "Other", kind: "expense", color: "#000" });
+  setDefaultCategory(l, "food");
+  setDefaultCategory(l, "pay");
+  setDefaultCategory(l, "other");
+  assert.deepEqual(l.categories.filter((c) => c.isDefault).map((c) => c.id).sort(), ["other", "pay"]);
 });
 
 test("parseLedger fills missing collections and refuses newer versions", () => {

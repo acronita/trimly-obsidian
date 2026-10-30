@@ -12,6 +12,7 @@ import {
   defaultLedger,
   foreignCurrencies,
   formatMoney,
+  fillDefaultCategories,
   linkObligationPayments,
   localeForCurrency,
   obligationReminders,
@@ -263,7 +264,8 @@ export default class TrimlyPlugin extends Plugin {
       const posted = postDueRecurring(ledger, todayISO());
       const installments = postDueInstallments(ledger, todayISO());
       const paid = linkObligationPayments(ledger, todayISO());
-      if (posted || installments || paid) await this.store.save(ledger);
+      const filled = fillDefaultCategories(ledger);
+      if (posted || installments || paid || filled) await this.store.save(ledger);
       if (posted) new Notice(t.recurring.posted(posted));
       if (installments) new Notice(t.tx.installmentsPosted(installments));
       if (paid) new Notice(t.obligations.autoLinked(paid));
@@ -298,6 +300,7 @@ export default class TrimlyPlugin extends Plugin {
   async mutate(fn: (ledger: Ledger) => void) {
     if (!this.ledger) return;
     fn(this.ledger);
+    fillDefaultCategories(this.ledger);
     this.refreshViews();
     try {
       await this.store.save(this.ledger);
