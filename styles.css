@@ -816,12 +816,31 @@ button.trimly-add.is-icon {
   border-top: 1px solid var(--background-modifier-border);
   padding-top: 6px;
 }
-.trimly-plan-pies {
+.trimly-plan-bar-label {
   display: flex;
-  flex-wrap: wrap;
-  justify-content: space-around;
-  gap: 16px;
-  margin-bottom: 12px;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: var(--font-ui-small);
+  margin-bottom: 4px;
+}
+.trimly-plan-track {
+  display: flex;
+  height: 16px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--background-modifier-border);
+  margin-bottom: 14px;
+}
+.trimly-plan-seg {
+  width: var(--trimly-pct);
+  background: var(--trimly-color);
+}
+.trimly-plan-seg + .trimly-plan-seg {
+  border-left: 2px solid var(--trimly-card-bg);
+}
+.trimly-plan-short {
+  margin: -10px 0 14px;
+  font-size: var(--font-ui-smaller);
 }
 .trimly-plan-legend {
   display: flex;

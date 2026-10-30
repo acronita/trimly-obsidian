@@ -141,7 +141,7 @@ const MATURITY_HORIZON_DAYS = 365;
 
 const NEUTRAL = "#8a8a8a";
 /** Slices of the month's plan; hex, since SVG stroke attributes take no CSS variables. */
-const PLAN_COLORS = { fixed: "#cc4125", bills: "#e69138", daily: "#8e7cc3", invest: "#6aa84f" };
+const PLAN_COLORS = { fixed: "#3d85c6", bills: "#e69138", spending: "#8e7cc3", invest: "#6aa84f", short: "#cc4125" };
 const OVERDUE = "#cc4125";
 
 const OBLIGATION_ICONS: Record<ObligationKind, string> = { payment: "receipt", document: "file-text" };
@@ -1070,61 +1070,81 @@ export class TrimlyView extends ItemView {
   private renderBudgets(body: HTMLElement, ledger: Ledger) {
     const plan = monthPlan(ledger, this.month);
     const spending = spendingByCategory(ledger, this.month);
-    const toPlan = { planned: plan.income.planned - plan.fixed.planned - plan.bills.planned, actual: plan.income.actual - plan.fixed.actual - plan.bills.actual };
-    const free = { planned: toPlan.planned - plan.daily.planned - plan.invest.planned, actual: toPlan.actual - plan.daily.actual - plan.invest.actual };
+    type Col = "planned" | "actual" | "projected";
+    const cols: Col[] = ["planned", "actual", "projected"];
+    const per = (f: (c: Col) => number) => ({ planned: f("planned"), actual: f("actual"), projected: f("projected") });
+    // what is left for investing once bills and category spending are paid, then after the investment
+    const available = per((c) => plan.income[c] - plan.fixed[c] - plan.bills[c] - plan.spending[c]);
+    const leftover = per((c) => available[c] - plan.invest[c]);
 
     const head = body.createDiv("trimly-page-head");
     const h = head.createDiv();
     h.createDiv({ cls: "trimly-eyebrow", text: t.budgets.title(this.monthLabel(this.month)) });
+    const canInvest = Math.round(available.projected);
     h.createDiv({
-      cls: `trimly-page-value ${free.planned < 0 ? "is-expense" : ""}`,
-      text: free.planned >= 0 ? t.budgets.free(this.money(Math.round(free.planned))) : t.budgets.overIncome(this.money(Math.round(-free.planned))),
+      cls: `trimly-page-value ${canInvest < 0 ? "is-expense" : ""}`,
+      text: canInvest >= 0 ? t.budgets.canInvest(this.money(canInvest)) : t.budgets.shortfall(this.money(-canInvest)),
     });
-    h.createDiv({ cls: "trimly-muted", text: t.budgets.leftSoFar(this.money(Math.round(free.actual))) });
+    const goal = plan.invest.planned;
+    const goalText =
+      goal <= 0 ? t.budgets.noGoalHint : canInvest >= goal ? t.budgets.goalFits(this.money(goal), this.money(canInvest - goal)) : t.budgets.goalShort(this.money(goal), this.money(goal - Math.max(0, canInvest)));
+    h.createDiv({ cls: `trimly-muted ${goal > 0 && canInvest < goal ? "is-expense" : ""}`, text: goalText });
 
     const row = body.createDiv("trimly-grid");
     const table = this.card(row, t.budgets.planTitle).createDiv("trimly-plan-table");
-    const line = (label: string, l: { planned: number; actual: number }, kind: "in" | "out" | "total") => {
+    const head3 = table.createDiv("trimly-plan-row is-head");
+    head3.createSpan();
+    for (const label of [t.budgets.planned, t.budgets.soFar, t.budgets.forecast]) head3.createSpan({ cls: "trimly-eyebrow", text: label });
+    const line = (label: string, l: Record<Col, number>, kind: "in" | "out" | "total") => {
       const r = table.createDiv(`trimly-plan-row ${kind === "total" ? "is-total" : ""}`);
       r.createSpan({ cls: "trimly-plan-label", text: label });
-      for (const v of [l.planned, l.actual]) {
-        const cents = Math.round(v);
+      for (const c of cols) {
+        const cents = Math.round(l[c]);
         const text = kind === "out" ? `−${this.money(cents)}` : this.money(cents);
         r.createSpan({ cls: `trimly-amount ${kind === "in" ? "is-income" : kind === "total" && cents < 0 ? "is-expense" : ""}`, text });
       }
     };
-    const cols = table.createDiv("trimly-plan-row is-head");
-    cols.createSpan();
-    cols.createSpan({ cls: "trimly-eyebrow", text: t.budgets.planned });
-    cols.createSpan({ cls: "trimly-eyebrow", text: t.budgets.actual });
-    line(t.budgets.fixedIncome, plan.income, "in");
+    line(t.budgets.income, plan.income, "in");
     line(t.budgets.fixedCosts, plan.fixed, "out");
     line(t.budgets.bills, plan.bills, "out");
-    line(t.budgets.toPlan, toPlan, "total");
-    line(t.budgets.daily, plan.daily, "out");
+    line(t.budgets.spending, plan.spending, "out");
+    line(t.budgets.available, available, "total");
     line(t.budgets.invest, plan.invest, "out");
-    line(t.budgets.unallocated, free, "total");
+    line(t.budgets.leftover, leftover, "total");
 
-    const pies = this.card(row, t.budgets.splitTitle);
+    // where the income goes, planned and forecast, on one scale so the two bars compare
+    const card = this.card(row, t.budgets.splitTitle);
     const parts = [
       { name: t.budgets.fixedCosts, color: PLAN_COLORS.fixed, line: plan.fixed },
       { name: t.budgets.bills, color: PLAN_COLORS.bills, line: plan.bills },
-      { name: t.budgets.daily, color: PLAN_COLORS.daily, line: plan.daily },
+      { name: t.budgets.spending, color: PLAN_COLORS.spending, line: plan.spending },
       { name: t.budgets.invest, color: PLAN_COLORS.invest, line: plan.invest },
-      { name: t.budgets.unallocated, color: NEUTRAL, line: { planned: Math.max(0, free.planned), actual: Math.max(0, free.actual) } },
     ];
-    const donuts = pies.createDiv("trimly-plan-pies");
-    for (const [label, key, total] of [
-      [t.budgets.planned, "planned", plan.income.planned],
-      [t.budgets.actual, "actual", plan.income.actual],
-    ] as const) {
-      donut(donuts, parts.map((x) => ({ value: x.line[key], color: x.color })), (c) => {
-        c.createDiv({ cls: "trimly-eyebrow", text: label });
-        c.createDiv({ cls: "trimly-donut-value", text: this.money(Math.round(total)) });
-      });
+    const bars = (["planned", "projected"] as const).map((c) => {
+      const out = parts.reduce((s, x) => s + x.line[c], 0);
+      return { c, income: plan.income[c], out, rest: plan.income[c] - out };
+    });
+    const scale = Math.max(1, ...bars.map((x) => Math.max(x.income, x.out)));
+    for (const bar of bars) {
+      const label = card.createDiv("trimly-plan-bar-label");
+      label.createSpan({ text: bar.c === "planned" ? t.budgets.planned : t.budgets.forecast });
+      label.createSpan({ cls: "trimly-muted", text: t.budgets.incomeOf(this.money(Math.round(bar.income))) });
+      const track = card.createDiv("trimly-plan-track");
+      const seg = (value: number, color: string, name: string) => {
+        if (value <= 0) return;
+        const el = track.createDiv({ cls: "trimly-plan-seg", attr: { "aria-label": `${name}: ${this.money(Math.round(value))}` } });
+        el.setCssProps({ "--trimly-pct": `${(value / scale) * 100}%`, "--trimly-color": color });
+      };
+      for (const x of parts) seg(x.line[bar.c], x.color, x.name);
+      // a positive rest is what is left; a negative one is spending beyond the income
+      if (bar.rest >= 0) seg(bar.rest, NEUTRAL, t.budgets.leftover);
+      else {
+        const short = card.createDiv({ cls: "trimly-plan-short is-expense", text: t.budgets.overBy(this.money(Math.round(-bar.rest))) });
+        short.setCssProps({ "--trimly-color": PLAN_COLORS.short });
+      }
     }
-    const legend = pies.createDiv("trimly-plan-legend");
-    for (const x of parts) {
+    const legend = card.createDiv("trimly-plan-legend");
+    for (const x of [...parts, { name: t.budgets.leftover, color: NEUTRAL }]) {
       const item = legend.createSpan("trimly-legend-row");
       item.createSpan("trimly-dot").setCssProps({ "--trimly-color": x.color });
       item.createSpan({ text: x.name });
