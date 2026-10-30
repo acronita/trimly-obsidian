@@ -13,7 +13,9 @@ passphrase that never leaves your device.
   spending by category (donut), account balances, recent activity and upcoming bills. Navigate month
   by month; switching tabs or reopening Trimly goes back to this month.
 - **Transactions** — expenses, income and transfers between accounts, with category, account, date
-  and notes. Search and filter by account, category, type and month.
+  and notes. Search and filter by account, category, type and month. Changing a transaction's
+  category moves every other one with the same description (digits and generic bank wording like
+  "Pix" or "Compra" ignored) and remembers it, so the next synced ones arrive in that category.
 - **Accounts** — checking, savings, credit card, cash, investment; opening balances; archive old ones;
   grouped into accounts, credit cards and investments; credit cards show their current bill and
   limit, and their transactions are browsed bill by bill (closing and due day; a bill is named after the month it is due)
@@ -23,7 +25,15 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
-- **Budgets** — monthly limit per expense category with progress bars and over-budget warnings.
+- **Planning** (*Planejamento*, was Budgets) — the month's plan, planned against actual: fixed income
+  (income recurring rules), minus fixed costs (expense recurring rules, subscriptions included) and
+  variable bills, gives what is free to plan; minus the day-to-day category limits and the investment
+  goal, what is left unallocated. Bills to pay count as fixed costs when marked *Valor fixo*, else as
+  variable bills. Two donuts split the plan and what really happened. Each category tile counts its
+  bills on its own (recurring rules and obligations in that category, e.g. a health plan) plus an
+  *Extra* limit you set for the rest. Limits and the investment goal are kept per month: a new month
+  starts from the last one, and changing it leaves earlier months as they were; a category without one counts as zero. The *Investir* tile holds a monthly investment
+  goal, tracked by the month's aportes in Investments; investing never counts as spending.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives. On bank-synced accounts nothing is posted: the
   charge imported from the bank is linked to the rule instead, so it is never counted twice.
@@ -39,13 +49,17 @@ passphrase that never leaves your device.
   ones a month and day for each, e.g. IRPF from March 23 to May 29); the current month and year are filled in. Mark each one paid or sent, optionally
   linking the transaction that paid it (from the bill or from the transaction), or as "none this
   time"; once a bill is linked to a transaction, its next payments that look like it (same words in
-  the description, near the due date) are linked by themselves. Credit cards with a due day show
+  the description, near the due date) are linked by themselves, and so are the months you had marked
+  paid by hand. Payments that look like the bill (same words, a similar amount) are recognized as
+  its payments in any month, even from before the bill was registered. A bill can be marked *Valor fixo* (a health plan) or left variable (electricity), and
+  given a category (taken from its first linked payment when empty); both shape Planning. Credit cards with a due day show
   their unpaid closed bill here too, settled by paying it, and their open bill as a projection. The
   tab splits *A fazer* (due in the next 30 days, with overdue and 7-day totals, and this month's left to pay and already paid) from
   *Cadastradas*; a bill without a usual amount is projected at its last payment. A bill paid on a weekend or
   holiday shows as scheduled for the next business day. Overdue ones stay listed until dealt with. Reminders show as an
   Obsidian notice, and optionally a system notification on desktop, while Trimly is unlocked.
-- **Categories** — default expense/income categories, fully editable, with colors and icons.
+- **Categories** — default expense/income categories, fully editable, with colors and icons. Drag a
+  category onto another to reorder them (desktop).
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
   class, an evolution chart, time-weighted returns (month by month, 12 months, since start)

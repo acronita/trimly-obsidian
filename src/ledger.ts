@@ -119,6 +119,12 @@ export interface Transaction {
   notes?: string;
   /** set when the transaction was posted by a recurring rule */
   recurringId?: string;
+  /**
+   * payment obligation (bill) this transaction pays, whatever month it was, even before the bill
+   * was registered; null = the user unlinked it, so it is not matched again. Which occurrence it
+   * paid, if any, is in the obligation's `settled`.
+   */
+  obligationId?: string | null;
   /** Pluggy transaction ids this one was imported from (two for a paired transfer) */
   pluggyIds?: string[];
   /** imported while the bank still listed it as pending */
@@ -129,6 +135,20 @@ export interface Transaction {
   installment?: { number: number; total: number };
   /** synced card charges: month ("YYYY-MM") the bill holding this charge closes in, as the bank reports it */
   billMonth?: string;
+}
+
+export interface CategoryRule {
+  /** `descriptionKey()` of the descriptions it covers */
+  key: string;
+  categoryId: string;
+}
+
+/** What the user planned for one month in Planning. */
+export interface MonthBudget {
+  /** day-to-day limit per category, on top of its bills */
+  budgets: Budget[];
+  /** cents to invest that month; aportes toward it are not expenses */
+  investmentGoal?: number;
 }
 
 export interface Budget {
@@ -189,6 +209,10 @@ export interface Obligation {
   settled: Settlement[];
   /** payments: description of the last transaction linked as its payment; later ones like it are linked automatically */
   payee?: string;
+  /** payments: same amount every time (a health plan), so Planning counts it with fixed costs; unset = varies (electricity) */
+  fixed?: boolean;
+  /** payments: category its cost belongs to in Planning; taken from the first linked payment when unset */
+  categoryId?: string;
 }
 
 export interface Settlement {
@@ -360,10 +384,15 @@ export interface Ledger {
   accounts: Account[];
   categories: Category[];
   transactions: Transaction[];
+  /** category limits from before plans were kept per month: the plan of any month before the first in `plans` */
   budgets: Budget[];
   recurring: Recurring[];
   obligations: Obligation[];
   investments: Investments;
+  /** each month's plan ("YYYY-MM"), saved once that month is edited; a month without one uses the latest before it */
+  plans?: Record<string, MonthBudget>;
+  /** categories learned from the user: transactions whose description has this key get this category */
+  categoryRules?: CategoryRule[];
   /** set when bank sync is configured */
   pluggy?: PluggyConfig;
   /** set when quotes are configured */
@@ -452,6 +481,8 @@ export function parseLedger(json: string): Ledger {
       movements: raw.investments?.movements ?? [],
       targets: raw.investments?.targets ?? [],
     },
+    plans: raw.plans,
+    categoryRules: raw.categoryRules,
     pluggy: raw.pluggy,
     brapi: raw.brapi,
     fx: raw.fx,
@@ -905,6 +936,11 @@ export function incomeByMonth(ledger: Ledger, from: string, to: string): Map<str
   return out;
 }
 
+/** Aportes (buy movements) made in `month`, in cents. */
+export function contributionsInMonth(ledger: Ledger, month: string): number {
+  return ledger.investments.movements.filter((m) => m.type === "buy" && monthOf(m.date) === month).reduce((s, m) => s + m.amount, 0);
+}
+
 /** Current value per asset class, largest first. */
 export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
   const out = new Map<AssetClass, number>();
@@ -1209,6 +1245,108 @@ const LINK_AMOUNT_TOLERANCE = 0.2;
 /** How far it may be even with a matching description: covers a price change, not another charge at the same place. */
 const LINK_NAMED_AMOUNT_TOLERANCE = 0.5;
 
+/** Income from active recurring rules per month, in the settings' currency. */
+export function fixedMonthlyIncome(ledger: Ledger): number {
+  let total = 0;
+  for (const r of ledger.recurring) {
+    if (r.type !== "income" || (r.endDate && r.nextDate > r.endDate)) continue;
+    total += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
+  }
+  return total;
+}
+
+/**
+ * The limits and investment goal planned for `month`: its own plan, else a
+ * copy of the latest month before it that has one (so a new month starts from
+ * the last), else the limits from before plans were kept per month.
+ */
+export function budgetFor(ledger: Ledger, month: string): MonthBudget {
+  const plans = ledger.plans ?? {};
+  const from = Object.keys(plans).filter((m) => m <= month).sort().pop();
+  const b = from ? plans[from] : { budgets: ledger.budgets };
+  return { budgets: b.budgets.map((x) => ({ ...x })), investmentGoal: b.investmentGoal };
+}
+
+/** Change `month`'s plan only: it gets its own copy first, so earlier months keep theirs as history. */
+export function editBudget(ledger: Ledger, month: string, change: (b: MonthBudget) => void) {
+  const b = budgetFor(ledger, month);
+  change(b);
+  if (!b.investmentGoal) delete b.investmentGoal;
+  ledger.plans = { ...ledger.plans, [month]: b };
+}
+
+/** One line of the month's plan, in the settings' currency. */
+export interface PlanLine {
+  planned: number;
+  actual: number;
+}
+
+export interface MonthPlan {
+  /** fixed income (income rules) against the income received in the month */
+  income: PlanLine;
+  /** expense rules (subscriptions included) and fixed-amount bills against the month's transactions posted by, linked to or paying them */
+  fixed: PlanLine;
+  /** bills paid by hand whose amount varies (`estimatedBills`) against the month's transactions paying them */
+  bills: PlanLine;
+  /** category limits against every other expense of the month */
+  daily: PlanLine;
+  /** investment goal against the month's aportes */
+  invest: PlanLine;
+  /** expense rules and bills per month by category id ("" = uncategorized): the part of a category already committed */
+  fixedByCategory: Map<string, number>;
+}
+
+/**
+ * The month's plan: what fixed income pays for, and what really happened.
+ * A category's limit is spending on top of its fixed costs, so a health plan
+ * paid by a rule counts in `fixed`, not against the health limit.
+ */
+export function monthPlan(ledger: Ledger, month: string): MonthPlan {
+  const fixedByCategory = new Map<string, number>();
+  let fixedPlanned = 0;
+  for (const r of ledger.recurring) {
+    if (r.type !== "expense" || (r.endDate && r.nextDate > r.endDate)) continue;
+    const v = toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
+    fixedPlanned += v;
+    const key = r.categoryId ?? "";
+    fixedByCategory.set(key, (fixedByCategory.get(key) ?? 0) + v);
+  }
+  let billsPlanned = 0;
+  for (const { obligation: o, monthly } of estimatedBills(ledger)) {
+    if (o.fixed) fixedPlanned += monthly;
+    else billsPlanned += monthly;
+    const key = o.categoryId ?? "";
+    fixedByCategory.set(key, (fixedByCategory.get(key) ?? 0) + monthly);
+  }
+  // transaction id -> whether the bill it pays has a fixed amount
+  const billTxs = new Map<string, boolean>();
+  for (const o of ledger.obligations) for (const st of o.settled) if (st.transactionId) billTxs.set(st.transactionId, !!o.fixed);
+  for (const tx of ledger.transactions) {
+    const o = billOf(ledger, tx);
+    if (o) billTxs.set(tx.id, !!o.fixed);
+  }
+
+  const budget = budgetFor(ledger, month);
+  const plan: MonthPlan = {
+    income: { planned: fixedMonthlyIncome(ledger), actual: 0 },
+    fixed: { planned: fixedPlanned, actual: 0 },
+    bills: { planned: billsPlanned, actual: 0 },
+    daily: { planned: budget.budgets.reduce((s, b) => s + b.limit, 0), actual: 0 },
+    invest: { planned: budget.investmentGoal ?? 0, actual: contributionsInMonth(ledger, month) },
+    fixedByCategory,
+  };
+  for (const tx of ledger.transactions) {
+    if (monthOf(tx.date) !== month) continue;
+    const v = baseAmount(ledger, tx);
+    if (tx.type === "income") plan.income.actual += v;
+    else if (tx.type !== "expense") continue;
+    else if (tx.recurringId || billTxs.get(tx.id)) plan.fixed.actual += v;
+    else if (billTxs.has(tx.id)) plan.bills.actual += v;
+    else plan.daily.actual += v;
+  }
+  return plan;
+}
+
 /** Average cost of a rule per month, in cents (weekly × 52/12, yearly ÷ 12). */
 export function monthlyAmount(r: Recurring): number {
   const factor = r.frequency === "weekly" ? 52 / 12 : r.frequency === "yearly" ? 1 / 12 : 1;
@@ -1253,7 +1391,7 @@ export function ruleTransactions(ledger: Ledger, ruleId: string): Transaction[] 
 /** Wording banks put on any entry of a kind ("Transferência Recebida", "Compra no débito"): it names nobody. */
 const GENERIC_WORDS = new Set([
   "transferencia", "recebida", "recebido", "enviada", "enviado", "pix", "ted", "doc",
-  "pagamento", "compra", "debito", "credito", "deposito", "boleto",
+  "pagamento", "compra", "debito", "credito", "deposito", "boleto", "efetuado", "efetuada",
 ]);
 
 function words(s: string): string[] {
@@ -1627,6 +1765,7 @@ export function paymentCandidates(ledger: Ledger, o: Obligation, due: string): T
  */
 export function linkPayment(o: Obligation, due: string, tx: Transaction) {
   settleObligation(o, { due, status: "done", date: tx.date, transactionId: tx.id });
+  tx.obligationId = o.id;
   learnPayment(o, tx);
 }
 
@@ -1634,6 +1773,7 @@ export function linkPayment(o: Obligation, due: string, tx: Transaction) {
 export function learnPayment(o: Obligation, tx: Transaction) {
   o.payee = tx.description;
   o.amount = tx.amount;
+  if (!o.categoryId && tx.categoryId) o.categoryId = tx.categoryId;
 }
 
 /** The obligation occurrence a transaction paid, if it is linked to one. */
@@ -1675,32 +1815,153 @@ export function payableOccurrences(ledger: Ledger, tx: Transaction): DueObligati
  * Link the payments of obligations that were linked to a transaction before
  * (so they know what their payment looks like) to the transactions that look
  * like it: same words as that payment, near the due date, up to `today`.
- * Occurrences already marked are left alone. Returns how many were linked.
+ * Open occurrences are marked paid; ones already marked paid by hand, without
+ * a transaction, get theirs too, so every month's payment is linked. Skipped
+ * occurrences are left alone. Returns how many were linked.
  */
 export function linkObligationPayments(ledger: Ledger, today: string): number {
   const taken = linkedPayments(ledger);
   const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + PAYMENT_SEARCH_DAYS * 86_400_000));
   let linked = 0;
   for (const o of ledger.obligations) {
-    if (o.kind !== "payment" || !o.payee) continue;
-    for (const due of openOccurrences(o, until)) {
+    if (o.kind !== "payment" || o.archived) continue;
+    // linked before descriptions were learned: learn the latest linked payment's
+    if (!o.payee) {
+      const last = [...o.settled].sort((a, b) => (a.due < b.due ? 1 : -1)).map((x) => ledger.transactions.find((tx) => tx.id === x.transactionId)).find((tx) => tx);
+      if (!last) continue;
+      o.payee = last.description;
+    }
+    for (const due of dueDates(o)) {
+      if (due > until) break;
+      const s = settlementFor(o, due);
+      if (s && (s.status !== "done" || s.transactionId)) continue;
       const pool = ledger.transactions.filter((tx) => tx.type !== "income" && tx.date <= today && !taken.has(tx.id));
       const tx = bestMatch(pool, { ...expectedPayment(o, due), text: o.payee, requireName: true });
       if (!tx) continue;
-      linkPayment(o, due, tx);
+      if (s) {
+        // an older payment: link it without making it the one the next payments are expected to look like
+        s.transactionId = tx.id;
+        s.date = tx.date;
+        tx.obligationId = o.id;
+        if (!o.categoryId && tx.categoryId) o.categoryId = tx.categoryId;
+      } else linkPayment(o, due, tx);
       taken.add(tx.id);
       linked++;
     }
   }
+  tagBillPayments(ledger);
   return linked;
+}
+
+/**
+ * Mark which bill each transaction pays, whatever month it was in: a payment
+ * linked to an occurrence is that bill's, and an unmarked outgoing transaction
+ * is the bill's it shares a word with (its name, its learned payment or the
+ * payments linked to it) without a different category, at an amount within
+ * LINK_NAMED_AMOUNT_TOLERANCE of the expected one, or, when no amount is
+ * known, in the bill's own category. This covers payments from before the bill
+ * was registered, which have no occurrence to settle. Returns how many were marked.
+ */
+export function tagBillPayments(ledger: Ledger): number {
+  let tagged = 0;
+  const byId = new Map(ledger.transactions.map((tx) => [tx.id, tx]));
+  const bills: { o: Obligation; words: string[]; usual: number }[] = [];
+  for (const o of ledger.obligations) {
+    const texts = [o.name, o.payee ?? ""];
+    for (const s of o.settled) {
+      const tx = s.transactionId ? byId.get(s.transactionId) : undefined;
+      if (!tx) continue;
+      texts.push(tx.description);
+      if (tx.obligationId === undefined) {
+        tx.obligationId = o.id;
+        tagged++;
+      }
+    }
+    if (o.kind === "payment") bills.push({ o, words: texts.flatMap(words), usual: expectedAmount(ledger, o) });
+  }
+  for (const tx of ledger.transactions) {
+    if (tx.obligationId !== undefined || tx.type === "income" || tx.recurringId) continue;
+    const own = words(tx.description);
+    let best: { o: Obligation; drift: number } | undefined;
+    for (const { o, words: billWords, usual } of bills) {
+      if (o.categoryId && tx.categoryId && o.categoryId !== tx.categoryId) continue;
+      if (!billWords.some((w) => own.includes(w))) continue;
+      if (!usual && (!o.categoryId || tx.categoryId !== o.categoryId)) continue;
+      const drift = usual ? Math.abs(tx.amount - usual) / usual : 0;
+      if (drift > LINK_NAMED_AMOUNT_TOLERANCE) continue;
+      if (!best || drift < best.drift) best = { o, drift };
+    }
+    if (best) {
+      tx.obligationId = best.o.id;
+      tagged++;
+    }
+  }
+  return tagged;
+}
+
+/** The bill a transaction pays, if any (see `Transaction.obligationId`). */
+export function billOf(ledger: Ledger, tx: Transaction): Obligation | undefined {
+  return tx.obligationId ? ledger.obligations.find((o) => o.id === tx.obligationId) : undefined;
+}
+
+/**
+ * What identifies a description for learned categories: its words without
+ * accents, digits or generic bank wording ("Pix", "Compra"), so "UBER *TRIP
+ * 1234" and "Uber Trip 5678" share one. Undefined when nothing specific is left.
+ */
+export function descriptionKey(description: string): string | undefined {
+  const key = words(description).filter((w) => !/\d/.test(w)).join(" ");
+  return key || undefined;
+}
+
+/** The learned category for a new transaction, if its description has a rule of its kind. */
+export function ruleCategory(ledger: Ledger, tx: Pick<Transaction, "type" | "description">): string | undefined {
+  const key = descriptionKey(tx.description);
+  if (!key || tx.type === "transfer") return undefined;
+  const rule = ledger.categoryRules?.find((r) => r.key === key);
+  const cat = rule && ledger.categories.find((c) => c.id === rule.categoryId);
+  return cat && cat.kind === tx.type ? cat.id : undefined;
+}
+
+/**
+ * The user put `tx` in `categoryId`: give every other transaction with the
+ * same description key and kind that category too, past ones and, through a
+ * learned rule, the ones still to come. Clearing the category only forgets
+ * the rule. Returns how many other transactions changed.
+ */
+export function applyCategory(ledger: Ledger, tx: Transaction, categoryId: string | undefined): number {
+  const key = descriptionKey(tx.description);
+  if (!key || tx.type === "transfer") return 0;
+  const rules = (ledger.categoryRules ?? []).filter((r) => r.key !== key);
+  if (!categoryId) {
+    ledger.categoryRules = rules.length ? rules : undefined;
+    return 0;
+  }
+  ledger.categoryRules = [...rules, { key, categoryId }];
+  let changed = 0;
+  for (const other of ledger.transactions) {
+    if (other.id === tx.id || other.type !== tx.type || other.categoryId === categoryId) continue;
+    if (descriptionKey(other.description) !== key) continue;
+    other.categoryId = categoryId;
+    changed++;
+  }
+  return changed;
+}
+
+/** Forget a category's limits in every month's plan. */
+export function dropBudgets(ledger: Ledger, categoryId: string) {
+  ledger.budgets = ledger.budgets.filter((b) => b.categoryId !== categoryId);
+  for (const p of Object.values(ledger.plans ?? {})) p.budgets = p.budgets.filter((b) => b.categoryId !== categoryId);
 }
 
 /** Drop references to a deleted category so transactions show as uncategorized. */
 export function removeCategory(ledger: Ledger, categoryId: string) {
   ledger.categories = ledger.categories.filter((c) => c.id !== categoryId);
-  ledger.budgets = ledger.budgets.filter((b) => b.categoryId !== categoryId);
+  dropBudgets(ledger, categoryId);
   for (const tx of ledger.transactions) if (tx.categoryId === categoryId) delete tx.categoryId;
   for (const r of ledger.recurring) if (r.categoryId === categoryId) delete r.categoryId;
+  for (const o of ledger.obligations) if (o.categoryId === categoryId) delete o.categoryId;
+  if (ledger.categoryRules) ledger.categoryRules = ledger.categoryRules.filter((r) => r.categoryId !== categoryId);
 }
 
 export function accountInUse(ledger: Ledger, accountId: string): boolean {

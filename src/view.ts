@@ -34,7 +34,13 @@ import {
   isCardPayment,
   allocationByClass,
   applyInstitutionToConnection,
+  applyCategory,
+  budgetFor,
+  dropBudgets,
+  editBudget,
   centsToInput,
+  fixedMonthlyIncome,
+  monthPlan,
   incomeByMonth,
   movementFlow,
   monthOf,
@@ -90,6 +96,14 @@ import { IndexPoint, cdiReturn, ipcaReturn, monthlyReturns, periodReturn, portfo
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
 type Mode = "accounts" | "investments";
+/** Set (or, at 0, clear) a category's limit in `month`'s plan. */
+function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
+  editBudget(l, month, (b) => {
+    b.budgets = b.budgets.filter((x) => x.categoryId !== categoryId);
+    if (cents > 0) b.budgets.push({ categoryId, limit: cents });
+  });
+}
+
 type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
@@ -124,6 +138,8 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
 const MATURITY_HORIZON_DAYS = 365;
 
 const NEUTRAL = "#8a8a8a";
+/** Slices of the month's plan; hex, since SVG stroke attributes take no CSS variables. */
+const PLAN_COLORS = { fixed: "#cc4125", bills: "#e69138", daily: "#8e7cc3", invest: "#6aa84f" };
 const OVERDUE = "#cc4125";
 
 const OBLIGATION_ICONS: Record<ObligationKind, string> = { payment: "receipt", document: "file-text" };
@@ -1047,70 +1063,134 @@ export class TrimlyView extends ItemView {
     this.goTab("transactions");
   }
 
-  // ---- budgets ----
+  // ---- planning (budgets) ----
 
   private renderBudgets(body: HTMLElement, ledger: Ledger) {
+    const plan = monthPlan(ledger, this.month);
     const spending = spendingByCategory(ledger, this.month);
-    const expenseCats = ledger.categories.filter((c) => c.kind === "expense");
-    const budgeted = expenseCats.filter((c) => ledger.budgets.some((b) => b.categoryId === c.id));
-    const unbudgeted = expenseCats.filter((c) => !budgeted.includes(c));
+    const toPlan = { planned: plan.income.planned - plan.fixed.planned - plan.bills.planned, actual: plan.income.actual - plan.fixed.actual - plan.bills.actual };
+    const free = { planned: toPlan.planned - plan.daily.planned - plan.invest.planned, actual: toPlan.actual - plan.daily.actual - plan.invest.actual };
 
-    let totalLimit = 0;
-    let totalSpent = 0;
-    for (const c of budgeted) {
-      totalLimit += ledger.budgets.find((b) => b.categoryId === c.id)?.limit ?? 0;
-      totalSpent += spending.get(c.id) ?? 0;
-    }
     const head = body.createDiv("trimly-page-head");
     const h = head.createDiv();
     h.createDiv({ cls: "trimly-eyebrow", text: t.budgets.title(this.monthLabel(this.month)) });
-    if (totalLimit > 0) {
-      const left = totalLimit - totalSpent;
-      h.createDiv({
-        cls: `trimly-page-value ${left < 0 ? "is-expense" : ""}`,
+    h.createDiv({
+      cls: `trimly-page-value ${free.planned < 0 ? "is-expense" : ""}`,
+      text: free.planned >= 0 ? t.budgets.free(this.money(Math.round(free.planned))) : t.budgets.overIncome(this.money(Math.round(-free.planned))),
+    });
+    h.createDiv({ cls: "trimly-muted", text: t.budgets.leftSoFar(this.money(Math.round(free.actual))) });
+
+    const row = body.createDiv("trimly-grid");
+    const table = this.card(row, t.budgets.planTitle).createDiv("trimly-plan-table");
+    const line = (label: string, l: { planned: number; actual: number }, kind: "in" | "out" | "total") => {
+      const r = table.createDiv(`trimly-plan-row ${kind === "total" ? "is-total" : ""}`);
+      r.createSpan({ cls: "trimly-plan-label", text: label });
+      for (const v of [l.planned, l.actual]) {
+        const cents = Math.round(v);
+        const text = kind === "out" ? `−${this.money(cents)}` : this.money(cents);
+        r.createSpan({ cls: `trimly-amount ${kind === "in" ? "is-income" : kind === "total" && cents < 0 ? "is-expense" : ""}`, text });
+      }
+    };
+    const cols = table.createDiv("trimly-plan-row is-head");
+    cols.createSpan();
+    cols.createSpan({ cls: "trimly-eyebrow", text: t.budgets.planned });
+    cols.createSpan({ cls: "trimly-eyebrow", text: t.budgets.actual });
+    line(t.budgets.fixedIncome, plan.income, "in");
+    line(t.budgets.fixedCosts, plan.fixed, "out");
+    line(t.budgets.bills, plan.bills, "out");
+    line(t.budgets.toPlan, toPlan, "total");
+    line(t.budgets.daily, plan.daily, "out");
+    line(t.budgets.invest, plan.invest, "out");
+    line(t.budgets.unallocated, free, "total");
+
+    const pies = this.card(row, t.budgets.splitTitle);
+    const parts = [
+      { name: t.budgets.fixedCosts, color: PLAN_COLORS.fixed, line: plan.fixed },
+      { name: t.budgets.bills, color: PLAN_COLORS.bills, line: plan.bills },
+      { name: t.budgets.daily, color: PLAN_COLORS.daily, line: plan.daily },
+      { name: t.budgets.invest, color: PLAN_COLORS.invest, line: plan.invest },
+      { name: t.budgets.unallocated, color: NEUTRAL, line: { planned: Math.max(0, free.planned), actual: Math.max(0, free.actual) } },
+    ];
+    const donuts = pies.createDiv("trimly-plan-pies");
+    for (const [label, key, total] of [
+      [t.budgets.planned, "planned", plan.income.planned],
+      [t.budgets.actual, "actual", plan.income.actual],
+    ] as const) {
+      donut(donuts, parts.map((x) => ({ value: x.line[key], color: x.color })), (c) => {
+        c.createDiv({ cls: "trimly-eyebrow", text: label });
+        c.createDiv({ cls: "trimly-donut-value", text: this.money(Math.round(total)) });
+      });
+    }
+    const legend = pies.createDiv("trimly-plan-legend");
+    for (const x of parts) {
+      const item = legend.createSpan("trimly-legend-row");
+      item.createSpan("trimly-dot").setCssProps({ "--trimly-color": x.color });
+      item.createSpan({ text: x.name });
+    }
+
+    const bar = body.createDiv("trimly-section-bar");
+    bar.createDiv({ cls: "trimly-muted", text: t.budgets.hint });
+
+    // a category is planned when it has fixed costs or a limit; one with neither still shows once it has spending (limit 0)
+    const expenseCats = ledger.categories.filter((c) => c.kind === "expense");
+    const month = this.month;
+    const budget = budgetFor(ledger, month);
+    const limitOf = (id: string) => budget.budgets.find((b) => b.categoryId === id)?.limit ?? 0;
+    const shown = expenseCats.filter((c) => (plan.fixedByCategory.get(c.id) ?? 0) > 0 || limitOf(c.id) > 0 || (spending.get(c.id) ?? 0) > 0);
+    const grid = body.createDiv("trimly-tiles");
+    this.investmentTile(grid, plan.invest, month);
+    for (const c of shown) {
+      const fixed = Math.round(plan.fixedByCategory.get(c.id) ?? 0);
+      const limit = limitOf(c.id);
+      const planned = fixed + limit;
+      const spent = spending.get(c.id) ?? 0;
+      const tile = grid.createDiv("trimly-tile");
+      const top = tile.createDiv("trimly-tile-top");
+      this.iconTile(top, c.icon ?? "tag", c.color);
+      const pct = planned > 0 ? Math.round((spent / planned) * 100) : 0;
+      if (planned > 0) top.createDiv({ cls: `trimly-tile-tag ${spent > planned ? "is-expense" : ""}`, text: `${pct}%` });
+      tile.createDiv({ cls: "trimly-tile-name", text: c.name });
+      const left = planned - spent;
+      tile.createDiv({
+        cls: `trimly-tile-value ${left < 0 ? "is-expense" : ""}`,
         text: left >= 0 ? t.budgets.left(this.money(left)) : t.budgets.over(this.money(-left)),
       });
-      h.createDiv({ cls: "trimly-muted", text: t.budgets.spentOf(this.money(totalSpent), this.money(totalLimit)) });
-      this.progress(head, totalSpent, totalLimit, "var(--interactive-accent)");
-    } else {
-      h.createDiv({ cls: "trimly-page-value", text: t.budgets.none });
-      h.createDiv({ cls: "trimly-muted", text: t.budgets.noneHint });
+      this.progress(tile, spent, planned, c.color);
+      const foot = tile.createDiv("trimly-tile-foot");
+      foot.createSpan({ cls: "trimly-muted", text: fixed > 0 ? t.budgets.ofFixed(this.money(spent), this.money(fixed)) : t.budgets.of(this.money(spent)) });
+      this.limitInput(foot, limit, fixed > 0 ? t.budgets.extra : t.budgets.setLimit, (l, cents) => setLimit(l, month, c.id, cents));
     }
 
-    if (budgeted.length) {
-      const grid = body.createDiv("trimly-tiles");
-      for (const c of budgeted) {
-        const limit = ledger.budgets.find((b) => b.categoryId === c.id)?.limit ?? 0;
-        const spent = spending.get(c.id) ?? 0;
-        const tile = grid.createDiv("trimly-tile");
-        const top = tile.createDiv("trimly-tile-top");
-        this.iconTile(top, c.icon ?? "tag", c.color);
-        const pct = limit > 0 ? Math.round((spent / limit) * 100) : 0;
-        top.createDiv({ cls: `trimly-tile-tag ${spent > limit ? "is-expense" : ""}`, text: `${pct}%` });
-        tile.createDiv({ cls: "trimly-tile-name", text: c.name });
-        const left = limit - spent;
-        tile.createDiv({
-          cls: `trimly-tile-value ${left < 0 ? "is-expense" : ""}`,
-          text: left >= 0 ? t.budgets.left(this.money(left)) : t.budgets.over(this.money(-left)),
-        });
-        this.progress(tile, spent, limit, c.color);
-        const foot = tile.createDiv("trimly-tile-foot");
-        foot.createSpan({ cls: "trimly-muted", text: t.budgets.of(this.money(spent)) });
-        this.limitInput(foot, c.id, limit);
-      }
-    }
-
-    if (unbudgeted.length) {
+    const unplanned = expenseCats.filter((c) => !shown.includes(c));
+    if (unplanned.length) {
       const card = this.card(body, t.budgets.without);
-      for (const c of unbudgeted) {
-        const row = card.createDiv("trimly-row");
-        this.iconTile(row, c.icon ?? "tag", c.color);
-        const main = row.createDiv("trimly-row-main");
-        main.createDiv({ cls: "trimly-row-title", text: c.name });
-        main.createDiv({ cls: "trimly-row-sub", text: t.budgets.spentThisMonth(this.money(spending.get(c.id) ?? 0)) });
-        this.limitInput(row, c.id, 0);
+      for (const c of unplanned) {
+        const r = card.createDiv("trimly-row");
+        this.iconTile(r, c.icon ?? "tag", c.color);
+        r.createDiv("trimly-row-main").createDiv({ cls: "trimly-row-title", text: c.name });
+        this.limitInput(r, 0, t.budgets.setLimit, (l, cents) => setLimit(l, month, c.id, cents));
       }
     }
+  }
+
+  /** Monthly investment goal: planned like a limit, but aportes toward it are not spending. */
+  private investmentTile(grid: HTMLElement, invest: { planned: number; actual: number }, month: string) {
+    const { planned: goal, actual: invested } = invest;
+    const tile = grid.createDiv("trimly-tile");
+    const top = tile.createDiv("trimly-tile-top");
+    this.iconTile(top, "trending-up", PLAN_COLORS.invest);
+    if (goal > 0) top.createDiv({ cls: "trimly-tile-tag", text: `${Math.round((invested / goal) * 100)}%` });
+    tile.createDiv({ cls: "trimly-tile-name", text: t.budgets.invest });
+    tile.createDiv({
+      cls: "trimly-tile-value",
+      text: goal <= 0 ? t.budgets.noGoal : invested >= goal ? t.budgets.investDone : t.budgets.investLeft(this.money(goal - invested)),
+    });
+    this.progress(tile, Math.min(invested, goal), goal, PLAN_COLORS.invest);
+    const foot = tile.createDiv("trimly-tile-foot");
+    foot.createSpan({ cls: "trimly-muted", text: t.budgets.investedOf(this.money(invested)) });
+    this.limitInput(foot, goal, t.budgets.setGoal, (l, cents) => {
+      editBudget(l, month, (b) => (b.investmentGoal = cents > 0 ? cents : undefined));
+    });
   }
 
   private progress(parent: HTMLElement, value: number, max: number, color: string) {
@@ -1122,10 +1202,10 @@ export class TrimlyView extends ItemView {
     else if (pct >= 85) fill.addClass("is-warn");
   }
 
-  private limitInput(parent: HTMLElement, categoryId: string, limit: number) {
-    const input = parent.createEl("input", { cls: "trimly-limit-input", type: "text", placeholder: t.budgets.setLimit });
+  private limitInput(parent: HTMLElement, value: number, placeholder: string, save: (l: Ledger, cents: number) => void) {
+    const input = parent.createEl("input", { cls: "trimly-limit-input", type: "text", placeholder });
     input.inputMode = "decimal";
-    if (limit) input.value = centsToInput(limit);
+    if (value) input.value = centsToInput(value);
     input.addEventListener("click", (e) => e.stopPropagation());
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter") input.blur();
@@ -1137,10 +1217,7 @@ export class TrimlyView extends ItemView {
         new Notice(t.common.notValidAmount);
         return;
       }
-      void this.plugin.mutate((l) => {
-        l.budgets = l.budgets.filter((b) => b.categoryId !== categoryId);
-        if (cents > 0) l.budgets.push({ categoryId, limit: cents });
-      });
+      void this.plugin.mutate((l) => save(l, cents));
     });
   }
 
@@ -1148,13 +1225,16 @@ export class TrimlyView extends ItemView {
 
   private renderRecurring(body: HTMLElement, ledger: Ledger) {
     let monthlyOut = 0;
-    let monthlyIn = 0;
     for (const r of ledger.recurring) {
       if (r.endDate && r.nextDate > r.endDate) continue;
       if (r.type === "expense") monthlyOut += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
-      if (r.type === "income") monthlyIn += toBase(ledger, monthlyAmount(r), accountCurrency(ledger, r.accountId));
     }
-    const monthlyVariable = estimatedBills(ledger).reduce((sum, b) => sum + b.monthly, 0);
+    const monthlyIn = fixedMonthlyIncome(ledger);
+    let monthlyVariable = 0;
+    for (const b of estimatedBills(ledger)) {
+      if (b.obligation.fixed) monthlyOut += b.monthly;
+      else monthlyVariable += b.monthly;
+    }
     const left = monthlyIn - monthlyOut - monthlyVariable;
     const summary = body.createDiv("trimly-summary-chips");
     const chip = (label: string, value: string, cls: string) => {
@@ -1201,7 +1281,7 @@ export class TrimlyView extends ItemView {
       this.iconTile(row, OBLIGATION_ICONS[o.kind], NEUTRAL);
       const main = row.createDiv("trimly-row-main");
       main.createDiv({ cls: "trimly-row-title", text: o.name });
-      const parts = [t.labels.frequency[o.frequency]];
+      const parts = [t.labels.frequency[o.frequency], o.fixed ? t.recurring.fixedBill : t.recurring.variableBill];
       if (o.frequency === "yearly") parts.push(t.recurring.perMonth(this.money(Math.round(m))));
       main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });
       row.createDiv({ cls: "trimly-amount is-expense", text: `−${this.money(expectedAmount(ledger, o))}` });
@@ -1489,15 +1569,20 @@ export class TrimlyView extends ItemView {
   }
 
   private editObligation(id: string | null) {
-    const existing = this.plugin.ledger?.obligations.find((o) => o.id === id) ?? null;
+    const ledger = this.plugin.ledger;
+    if (!ledger) return;
+    const existing = ledger.obligations.find((o) => o.id === id) ?? null;
     new ObligationModal(
       this.app,
+      ledger,
       existing,
       (ob) =>
         void this.plugin.mutate((l) => {
           const i = l.obligations.findIndex((o) => o.id === ob.id);
           if (i >= 0) l.obligations[i] = ob;
           else l.obligations.push(ob);
+          const paid = linkObligationPayments(l, todayISO());
+          if (paid) new Notice(t.obligations.autoLinked(paid));
         }),
       existing
         ? (ob) =>
@@ -2340,9 +2425,38 @@ export class TrimlyView extends ItemView {
         const used = ledger.transactions.filter((tx) => tx.categoryId === c.id).length;
         main.createDiv({ cls: "trimly-row-sub", text: t.accounts.txCount(used) });
         tile.addEventListener("click", () => this.editCategory(c.id, kind));
+        this.reorderable(tile, c.id);
       }
       this.addTile(grid, t.categories.add, () => this.editCategory(null, kind));
     }
+  }
+
+  /** Drag a category tile onto another of its kind to put it there; the order is the ledger's. */
+  private reorderable(tile: HTMLElement, id: string) {
+    tile.draggable = true;
+    tile.addEventListener("dragstart", (e) => {
+      e.dataTransfer?.setData("text/plain", id);
+      tile.addClass("is-dragging");
+    });
+    tile.addEventListener("dragend", () => tile.removeClass("is-dragging"));
+    tile.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      tile.addClass("is-drop-target");
+    });
+    tile.addEventListener("dragleave", () => tile.removeClass("is-drop-target"));
+    tile.addEventListener("drop", (e) => {
+      e.preventDefault();
+      tile.removeClass("is-drop-target");
+      const dragged = e.dataTransfer?.getData("text/plain");
+      if (!dragged || dragged === id) return;
+      void this.plugin.mutate((l) => {
+        const from = l.categories.findIndex((c) => c.id === dragged);
+        const to = l.categories.findIndex((c) => c.id === id);
+        if (from < 0 || to < 0 || l.categories[from].kind !== l.categories[to].kind) return;
+        const [moved] = l.categories.splice(from, 1);
+        l.categories.splice(to, 0, moved);
+      });
+    });
   }
 
   private editCategory(id: string | null, kind: CategoryKind) {
@@ -2360,7 +2474,7 @@ export class TrimlyView extends ItemView {
             // a category that changes kind no longer fits transactions of the old kind
             if (l.categories[i].kind !== cat.kind) {
               for (const tx of l.transactions) if (tx.categoryId === cat.id) delete tx.categoryId;
-              l.budgets = l.budgets.filter((b) => b.categoryId !== cat.id);
+              dropBudgets(l, cat.id);
             }
             l.categories[i] = cat;
           } else l.categories.push(cat);
@@ -2394,6 +2508,10 @@ export function openTransactionModal(plugin: TrimlyPlugin, tx: Transaction | nul
         const i = l.transactions.findIndex((t) => t.id === saved.id);
         if (i >= 0) l.transactions[i] = saved;
         else l.transactions.push(saved);
+        if (tx && tx.categoryId !== saved.categoryId) {
+          const changed = applyCategory(l, saved, saved.categoryId);
+          if (changed) new Notice(t.tx.categoryApplied(changed));
+        }
         const paid = linkObligationPayments(l, todayISO());
         if (paid) new Notice(t.obligations.autoLinked(paid));
       }),
@@ -2422,6 +2540,8 @@ export function openTransactionModal(plugin: TrimlyPlugin, tx: Transaction | nul
               }
               const o = target && l.obligations.find((x) => x.id === target.obligation.id);
               const linked = l.transactions.find((x) => x.id === saved.id);
+              // unlinked by hand: not this bill's, and not matched to one again
+              if (linked && !o) linked.obligationId = null;
               if (o && linked) linkPayment(o, target.due, linked);
             }),
         }

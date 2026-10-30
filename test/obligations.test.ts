@@ -262,3 +262,103 @@ test("the recurring tab's estimate of bills paid by hand counts each once, per m
   l.transactions.push({ id: "r1", date: "2026-10-10", type: "expense", amount: 2000_00, accountId: l.accounts[0].id, description: "Aluguel", recurringId: "rule" });
   assert.deepEqual(estimatedBills(l).map((b) => [b.obligation.id, b.monthly]), [["light", 180_00], ["ipva", 100_00]]);
 });
+
+test("months already marked paid by hand get their payment linked too, so every month of a bill is traceable", () => {
+  const plan = obligation({
+    id: "plan",
+    name: "Plano de saúde",
+    fixed: true,
+    settled: [
+      { due: "2026-08-10", status: "done", date: "2026-08-10" },
+      { due: "2026-09-10", status: "done", date: "2026-09-10" },
+      { due: "2026-10-10", status: "done", date: "2026-10-09", transactionId: "oct" },
+    ],
+    payee: "UNIMED SEGUROS",
+    amount: 500_00,
+  });
+  const l = ledgerWith(plan);
+  const acc = l.accounts[0].id;
+  const health = l.categories.find((c) => c.kind === "expense")!.id;
+  l.transactions.push(
+    { id: "aug", date: "2026-08-09", type: "expense", amount: 480_00, accountId: acc, description: "UNIMED SEGUROS", categoryId: health },
+    { id: "sep", date: "2026-09-09", type: "expense", amount: 480_00, accountId: acc, description: "UNIMED SEGUROS" },
+    { id: "oct", date: "2026-10-09", type: "expense", amount: 500_00, accountId: acc, description: "UNIMED SEGUROS" }
+  );
+  assert.equal(linkObligationPayments(l, TODAY), 2);
+  assert.equal(settlementFor(plan, "2026-08-10")?.transactionId, "aug");
+  assert.equal(settlementFor(plan, "2026-09-10")?.transactionId, "sep");
+  assert.equal(settlementFor(plan, "2026-09-10")?.date, "2026-09-09");
+  // an older payment does not become the usual amount the next bill is projected at
+  assert.equal(plan.amount, 500_00);
+  // the bill picks up the category its payments are in, for Planning
+  assert.equal(plan.categoryId, health);
+});
+
+test("a skipped month is never given a payment", () => {
+  const light = obligation({ payee: "ENEL", settled: [{ due: "2026-09-10", status: "skipped", date: "2026-09-10" }] });
+  const l = ledgerWith(light);
+  l.transactions.push({ id: "x", date: "2026-09-09", type: "expense", amount: 100_00, accountId: l.accounts[0].id, description: "ENEL" });
+  linkObligationPayments(l, TODAY);
+  assert.equal(settlementFor(light, "2026-09-10")?.transactionId, undefined);
+});
+
+test("payments of a bill from before it was registered are still that bill's, by description and amount", () => {
+  // registered in October; August and September were paid before it existed, so they have no occurrence
+  const plan = obligation({ id: "unimed", name: "Unimed", since: "2026-10-01", day: 20, fixed: true, amount: 520_00 });
+  const l = ledgerWith(plan);
+  const acc = l.accounts[0].id;
+  l.transactions.push(
+    { id: "aug", date: "2026-08-19", type: "expense", amount: 500_00, accountId: acc, description: "Pagamento efetuado|UNIMED SEGUROS" },
+    { id: "sep", date: "2026-09-21", type: "expense", amount: 510_00, accountId: acc, description: "Pagamento efetuado|UNIMED SEGUROS" },
+    { id: "oct", date: "2026-10-19", type: "expense", amount: 520_00, accountId: acc, description: "Pagamento efetuado|UNIMED SEGUROS" },
+    // same bank wording, another bill: "Pagamento efetuado" names nobody
+    { id: "enel", date: "2026-09-10", type: "expense", amount: 500_00, accountId: acc, description: "Pagamento efetuado|ENEL" },
+    // same name but nothing like the usual amount: a one-off, not the plan
+    { id: "consult", date: "2026-09-05", type: "expense", amount: 90_00, accountId: acc, description: "UNIMED CONSULTA" }
+  );
+  linkPayment(plan, "2026-10-20", l.transactions.find((x) => x.id === "oct")!);
+  linkObligationPayments(l, TODAY);
+  const billOfTx = (id: string) => l.transactions.find((x) => x.id === id)?.obligationId;
+  assert.equal(billOfTx("oct"), "unimed");
+  assert.equal(billOfTx("aug"), "unimed");
+  assert.equal(billOfTx("sep"), "unimed");
+  assert.equal(billOfTx("enel"), undefined);
+  assert.equal(billOfTx("consult"), undefined);
+  // only October has an occurrence to settle; the older ones are the bill's without one
+  assert.equal(settlementFor(plan, "2026-09-20"), undefined);
+
+  // unlinked by hand: stays unlinked
+  l.transactions.find((x) => x.id === "aug")!.obligationId = null;
+  linkObligationPayments(l, TODAY);
+  assert.equal(billOfTx("aug"), null);
+});
+
+test("a bill that never learned its payment's description still finds its older payments by its own name", () => {
+  // as in the app: the usual amount is empty and only October's occurrence is linked
+  const l = ledgerWith();
+  const health = l.categories.find((c) => c.kind === "expense")!.id;
+  const other = l.categories.find((c) => c.kind === "expense" && c.id !== health)!.id;
+  const unimed = obligation({ id: "unimed", name: "Unimed", since: "2026-10-01", day: 20, categoryId: health, settled: [{ due: "2026-10-20", status: "done", date: "2026-10-19", transactionId: "oct" }] });
+  l.obligations = [unimed];
+  const acc = l.accounts[0].id;
+  l.transactions.push(
+    { id: "aug", date: "2026-08-19", type: "expense", amount: 505_00, accountId: acc, categoryId: health, description: "Pagamento efetuado|UNIMED SEGUROS" },
+    { id: "oct", date: "2026-10-19", type: "expense", amount: 520_00, accountId: acc, categoryId: health, description: "Pagamento efetuado|UNIMED SEGUROS" },
+    // filed under another category: someone else's Unimed, not this bill
+    { id: "other", date: "2026-09-02", type: "expense", amount: 520_00, accountId: acc, categoryId: other, description: "UNIMED" }
+  );
+  linkObligationPayments(l, TODAY);
+  assert.equal(l.transactions.find((x) => x.id === "aug")?.obligationId, "unimed");
+  assert.equal(l.transactions.find((x) => x.id === "other")?.obligationId, undefined);
+  // and it now knows what its payment looks like, so November's links itself
+  l.transactions.push({ id: "nov", date: "2026-11-19", type: "expense", amount: 520_00, accountId: acc, categoryId: health, description: "Pagamento efetuado|UNIMED SEGUROS" });
+  assert.equal(linkObligationPayments(l, "2026-11-25"), 1);
+  assert.equal(settlementFor(unimed, "2026-11-20")?.transactionId, "nov");
+});
+
+test("with no amount known, a bill only takes look-alike payments in its own category", () => {
+  const l = ledgerWith(obligation({ id: "gym", name: "Academia" }));
+  l.transactions.push({ id: "x", date: "2026-09-02", type: "expense", amount: 99_00, accountId: l.accounts[0].id, description: "ACADEMIA SMART" });
+  linkObligationPayments(l, TODAY);
+  assert.equal(l.transactions[0].obligationId, undefined);
+});

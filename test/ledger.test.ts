@@ -2,6 +2,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   accountBalance,
+  applyCategory,
+  budgetFor,
+  editBudget,
+  ruleCategory,
+  contributionsInMonth,
+  fixedMonthlyIncome,
+  monthPlan,
   formatMoney,
   linkToRule,
   localeForCurrency,
@@ -183,4 +190,131 @@ test("deleting a rule keeps its transactions but unlinks them", () => {
   assert.equal(l.recurring.length, 0);
   assert.equal(l.transactions.length, before);
   assert.ok(l.transactions.every((x) => !x.recurringId));
+});
+
+test("fixed income is what active income rules bring in per month, the budget's yardstick", () => {
+  const l = ledger();
+  l.recurring.push(
+    { id: "s", description: "Salary", type: "income", amount: 6000_00, accountId: "bank", frequency: "monthly", startDate: "2026-01-05", nextDate: "2026-11-05" },
+    { id: "b", description: "Bonus", type: "income", amount: 1200_00, accountId: "bank", frequency: "yearly", startDate: "2026-12-20", nextDate: "2026-12-20" },
+    { id: "rent", description: "Rent", type: "expense", amount: 2000_00, accountId: "bank", frequency: "monthly", startDate: "2026-01-10", nextDate: "2026-11-10" },
+    // an ended job no longer funds the budget
+    { id: "old", description: "Old job", type: "income", amount: 3000_00, accountId: "bank", frequency: "monthly", startDate: "2025-01-05", nextDate: "2026-07-05", endDate: "2026-06-30" }
+  );
+  assert.equal(fixedMonthlyIncome(l), 6000_00 + 100_00);
+});
+
+test("investing toward the monthly goal counts aportes, never spending", () => {
+  const l = ledger();
+  l.investments.movements.push(
+    { id: "a", assetId: "x", date: "2026-10-05", type: "buy", amount: 500_00 },
+    { id: "b", assetId: "x", date: "2026-10-20", type: "buy", amount: 300_00 },
+    { id: "c", assetId: "x", date: "2026-10-25", type: "sell", amount: 100_00 },
+    { id: "d", assetId: "x", date: "2026-09-30", type: "buy", amount: 999_00 }
+  );
+  assert.equal(contributionsInMonth(l, "2026-10"), 800_00);
+  // the budget's spending total is untouched by aportes
+  assert.equal([...spendingByCategory(l, "2026-10").values()].reduce((s, v) => s + v, 0), 50_00);
+});
+
+test("each month keeps its own plan: a new month starts from the last one, and editing it leaves history alone", () => {
+  const l = ledger();
+  // limits from before plans were per month are where every month starts
+  l.budgets.push({ categoryId: "food", limit: 500_00 });
+  editBudget(l, "2026-09", (b) => (b.investmentGoal = 1000_00));
+  assert.deepEqual(budgetFor(l, "2026-09"), { budgets: [{ categoryId: "food", limit: 500_00 }], investmentGoal: 1000_00 });
+  // October has no plan yet: it is September's
+  assert.deepEqual(budgetFor(l, "2026-10"), budgetFor(l, "2026-09"));
+  editBudget(l, "2026-10", (b) => {
+    b.budgets = [{ categoryId: "food", limit: 700_00 }];
+    b.investmentGoal = 1500_00;
+  });
+  // September is history: it keeps what was planned then
+  assert.deepEqual(budgetFor(l, "2026-09"), { budgets: [{ categoryId: "food", limit: 500_00 }], investmentGoal: 1000_00 });
+  assert.equal(budgetFor(l, "2026-12").investmentGoal, 1500_00);
+  assert.equal(budgetFor(l, "2026-08").investmentGoal, undefined);
+  // a plan survives a save and load
+  assert.deepEqual(parseLedger(JSON.stringify(l)).plans, l.plans);
+  // a deleted category leaves every month's plan
+  removeCategory(l, "food");
+  assert.deepEqual(budgetFor(l, "2026-09").budgets, []);
+  assert.deepEqual(budgetFor(l, "2026-10").budgets, []);
+});
+
+test("the month's plan keeps fixed costs out of the category limits, so a health plan is not double counted", () => {
+  const l = ledger();
+  l.categories.push({ id: "health", name: "Health", kind: "expense", color: "#000" });
+  l.recurring.push(
+    { id: "s", description: "Salary", type: "income", amount: 5000_00, accountId: "bank", categoryId: "pay", frequency: "monthly", startDate: "2026-01-01", nextDate: "2026-11-01" },
+    { id: "hp", description: "Health plan", type: "expense", amount: 500_00, accountId: "bank", categoryId: "health", frequency: "monthly", startDate: "2026-01-15", nextDate: "2026-11-15" }
+  );
+  l.transactions.push(
+    { id: "hp-oct", date: "2026-10-15", type: "expense", amount: 500_00, accountId: "bank", categoryId: "health", description: "Health plan", recurringId: "hp" },
+    { id: "pharm", date: "2026-10-18", type: "expense", amount: 80_00, accountId: "bank", categoryId: "health", description: "Pharmacy" },
+    { id: "water", date: "2026-10-20", type: "expense", amount: 90_00, accountId: "bank", description: "Water" }
+  );
+  l.obligations.push({ id: "w", name: "Water", kind: "payment", frequency: "monthly", day: 20, since: "2026-01-01", amount: 100_00, remindDays: 3, settled: [{ due: "2026-10-20", status: "done", date: "2026-10-20", transactionId: "water" }] });
+  editBudget(l, "2026-10", (b) => {
+    b.budgets = [{ categoryId: "health", limit: 100_00 }, { categoryId: "food", limit: 600_00 }];
+    b.investmentGoal = 1500_00;
+  });
+  l.investments.movements.push({ id: "a", assetId: "x", date: "2026-10-06", type: "buy", amount: 1000_00 });
+
+  const p = monthPlan(l, "2026-10");
+  assert.deepEqual(p.income, { planned: 5000_00, actual: 5000_00 });
+  assert.deepEqual(p.fixed, { planned: 500_00, actual: 500_00 });
+  assert.equal(p.fixedByCategory.get("health"), 500_00);
+  assert.equal(p.bills.actual, 90_00); // settles an obligation: a bill, not day-to-day spending
+  // the pharmacy and lunch are what the limits cover; the health plan is not
+  assert.deepEqual(p.daily, { planned: 700_00, actual: 80_00 + 50_00 });
+  assert.deepEqual(p.invest, { planned: 1500_00, actual: 1000_00 });
+});
+
+test("a fixed-amount bill with a category counts with fixed costs and in its category, not against the limit", () => {
+  const l = ledger();
+  l.categories.push({ id: "health", name: "Health", kind: "expense", color: "#000" });
+  l.obligations.push(
+    { id: "hp", name: "Health plan", kind: "payment", frequency: "monthly", day: 15, since: "2026-01-01", amount: 500_00, remindDays: 3, fixed: true, categoryId: "health", settled: [{ due: "2026-10-15", status: "done", date: "2026-10-15", transactionId: "hp-oct" }] },
+    { id: "light", name: "Light", kind: "payment", frequency: "monthly", day: 10, since: "2026-01-01", amount: 150_00, remindDays: 3, settled: [] }
+  );
+  l.transactions.push({ id: "hp-oct", date: "2026-10-15", type: "expense", amount: 500_00, accountId: "bank", categoryId: "health", description: "Health plan" });
+  const p = monthPlan(l, "2026-10");
+  assert.deepEqual(p.fixed, { planned: 500_00, actual: 500_00 });
+  assert.equal(p.bills.planned, 150_00);
+  assert.equal(p.fixedByCategory.get("health"), 500_00);
+  assert.equal(p.daily.actual, 50_00); // only the lunch
+});
+
+test("changing a transaction's category moves its look-alikes and the next ones, but not generic bank wording", () => {
+  const l = ledger();
+  l.categories.push({ id: "transport", name: "Transport", kind: "expense", color: "#000" });
+  l.transactions.push(
+    { id: "u1", date: "2026-09-02", type: "expense", amount: 20_00, accountId: "card", categoryId: "food", description: "UBER *TRIP 1234" },
+    { id: "u2", date: "2026-10-04", type: "expense", amount: 25_00, accountId: "card", description: "Uber Trip 5678" },
+    { id: "pix", date: "2026-10-05", type: "expense", amount: 30_00, accountId: "bank", description: "Pix enviado" }
+  );
+  const u2 = l.transactions.find((x) => x.id === "u2")!;
+  u2.categoryId = "transport";
+  assert.equal(applyCategory(l, u2, "transport"), 1);
+  assert.equal(l.transactions.find((x) => x.id === "u1")?.categoryId, "transport");
+  // a ride synced later lands in the same category
+  assert.equal(ruleCategory(l, { type: "expense", description: "UBER *TRIP 9999" }), "transport");
+  // income with the same words is not an expense category's
+  assert.equal(ruleCategory(l, { type: "income", description: "Uber Trip" }), undefined);
+  // "Pix enviado" names nobody: no rule, nothing else changes
+  const pix = l.transactions.find((x) => x.id === "pix")!;
+  assert.equal(applyCategory(l, pix, "food"), 0);
+  assert.equal(ruleCategory(l, { type: "expense", description: "Pix enviado" }), undefined);
+  // deleting the category forgets its rule
+  removeCategory(l, "transport");
+  assert.equal(ruleCategory(l, { type: "expense", description: "UBER *TRIP 1" }), undefined);
+});
+
+test("a bill payment from before the bill was registered counts with its bill in that month's plan", () => {
+  const l = ledger();
+  l.obligations.push({ id: "hp", name: "Health plan", kind: "payment", frequency: "monthly", day: 15, since: "2026-11-01", amount: 500_00, remindDays: 3, fixed: true, payee: "UNIMED", settled: [] });
+  l.transactions.push({ id: "hp-oct", date: "2026-10-15", type: "expense", amount: 500_00, accountId: "bank", description: "UNIMED", obligationId: "hp" });
+  const p = monthPlan(l, "2026-10");
+  assert.equal(p.fixed.actual, 500_00);
+  assert.equal(p.daily.actual, 50_00);
 });

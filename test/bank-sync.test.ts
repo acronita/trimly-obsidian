@@ -361,3 +361,17 @@ test("history older than the window is imported, re-linked when its id changes, 
   applyBankData(l, data([]), WINDOW, TODAY);
   assert.equal(l.transactions.length, 1);
 });
+
+test("a category the user taught wins over the bank's for new synced transactions", () => {
+  const ifood = () => data([tx("IFOOD 123", "p-card", "2026-10-10", 80, "DEBIT", { categoryId: "11020000" })]);
+  const plain = fresh();
+  applyBankData(plain, ifood(), WINDOW, TODAY);
+  const fromBank = plain.transactions[0].categoryId;
+  assert.ok(fromBank, "the bank's category maps to one of Trimly's");
+
+  const l = fresh();
+  const taught = l.categories.find((c) => c.kind === "expense" && c.id !== fromBank)!;
+  l.categoryRules = [{ key: "ifood", categoryId: taught.id }];
+  applyBankData(l, ifood(), WINDOW, TODAY);
+  assert.equal(l.transactions[0].categoryId, taught.id);
+});

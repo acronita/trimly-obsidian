@@ -26,6 +26,7 @@ import {
   parseAmount,
   payableOccurrences,
   paymentOf,
+  billOf,
   settlementFor,
   todayISO,
 } from "./ledger";
@@ -410,9 +411,17 @@ export class TransactionModal extends Modal {
       return;
     }
     if (this.draft.type === "income") return;
+    // a payment of the bill with no occurrence of its own, e.g. from before the bill was registered
+    const bill = billOf(this.ledger, this.draft);
+    if (bill) {
+      new Setting(contentEl)
+        .setName(m.payment)
+        .setDesc(m.billPayment(bill.name))
+        .addButton((b) => b.setButtonText(m.unlinkPayment).onClick(() => link(null)));
+    }
     const options = payableOccurrences(this.ledger, this.draft);
     if (options.length === 0) {
-      new Setting(contentEl).setName(m.payment).setDesc(m.noPayable);
+      if (!bill) new Setting(contentEl).setName(m.payment).setDesc(m.noPayable);
       return;
     }
     let picked = 0;
@@ -963,6 +972,7 @@ export class ObligationModal extends Modal {
 
   constructor(
     app: App,
+    private ledger: Ledger,
     existing: Obligation | null,
     private onSave: (o: Obligation) => void,
     private onDelete: ((o: Obligation) => void) | null
@@ -1046,6 +1056,19 @@ export class ObligationModal extends Modal {
           this.draft.amount = c && c > 0 ? c : undefined;
         });
       });
+      new Setting(contentEl)
+        .setName(m.fixed)
+        .setDesc(m.fixedDesc)
+        .addToggle((tg) => tg.setValue(!!this.draft.fixed).onChange((v) => (this.draft.fixed = v || undefined)));
+      new Setting(contentEl)
+        .setName(m.category)
+        .setDesc(m.categoryDesc)
+        .addDropdown((d) =>
+          d
+            .addOptions(categoryOptions(this.ledger, "expense"))
+            .setValue(this.draft.categoryId ?? "")
+            .onChange((v) => (this.draft.categoryId = v || undefined))
+        );
     }
     let remind = String(this.draft.remindDays);
     new Setting(contentEl).setName(m.remindDays).addText((text) => {
@@ -1085,7 +1108,11 @@ export class ObligationModal extends Modal {
         else delete this.draft.month;
         if (yearly && lastMonth !== month) this.draft.endMonth = lastMonth;
         else delete this.draft.endMonth;
-        if (this.draft.kind !== "payment") delete this.draft.amount;
+        if (this.draft.kind !== "payment") {
+          delete this.draft.amount;
+          delete this.draft.fixed;
+          delete this.draft.categoryId;
+        }
         // a new one starts with the current month (or year), so what was already done in it can be recorded
         const today = todayISO();
         if (!this.onDelete) this.draft.since = yearly ? `${today.slice(0, 4)}-01-01` : `${today.slice(0, 7)}-01`;
