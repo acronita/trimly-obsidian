@@ -32,8 +32,8 @@ passphrase that never leaves your device.
   what is available to invest, the investment and what is left, in three columns: planned (fixed
   income, bills and limits), so far, and forecast (what happened plus recurring occurrences and bills
   still due this month and what is left of each category's limit). Two bars show where the income
-  goes, planned and forecast, on one scale, and *Gastos por categoria × planejado* shows each
-  category's spending against its plan, the ones most over it first, the excess in red. Bills to pay count as fixed costs when marked *Valor
+  goes, planned and forecast, on one scale; two more bars on the same scale split category spending
+  by category, with the rest of the income greyed, to see which categories grow. Bills to pay count as fixed costs when marked *Valor
   fixo*, else as variable bills; card bills are not counted (their purchases already are, by
   category). Each category tile counts its bills on its own (recurring rules and obligations in that
   category, e.g. a health plan) plus an *Extra* limit you set for the rest; a category without one

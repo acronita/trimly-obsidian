@@ -949,11 +949,6 @@ button.trimly-add.is-icon {
   border-left: 2px solid var(--trimly-card-bg);
 }
 
-.trimly-plan-track.is-thin {
-  height: 10px;
-  margin-bottom: 10px;
-}
-
 .trimly-plan-seg.is-faded {
   opacity: 0.25;
 }
@@ -963,6 +958,10 @@ button.trimly-add.is-icon {
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px 28px;
   margin-top: 6px;
+}
+
+.trimly-plan-section {
+  margin: 18px 0 8px;
 }
 
 .trimly-plan-forecast {

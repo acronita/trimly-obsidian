@@ -11,8 +11,9 @@
   limit (`monthPlan` takes `today`; new `pendingRecurring` for any rule type). Investing moved below
   *Disponível pra investir*, so *Sobra* says whether the plan leaves money after the goal. *Dia a
   dia* is now *Gastos por categoria*; the donuts became two bars of where the income goes (planned
-  and forecast, one scale); a new *Gastos por categoria × planejado* chart shows each category's
-  spending against its plan, the most over first; and the category tiles are three per row. Why: the
+  and forecast, one scale), plus two more on the same scale that split category spending by
+  category with the rest greyed (new `spendingByCategory` on the plan); and the category tiles are
+  three per row. Why: the
   plan showed what was set, not whether the month was following it or could reach the investment
   goal. Files touched: `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
   `src/i18n/en.ts`, `test/ledger.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.

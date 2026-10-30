@@ -1304,6 +1304,8 @@ export interface MonthPlan {
   invest: PlanLine;
   /** expense rules and bills per month by category id ("" = uncategorized): the part of a category already committed */
   fixedByCategory: Map<string, number>;
+  /** `spending` split by category id ("" = uncategorized): its limit, what was spent outside bills, and the forecast */
+  spendingByCategory: Map<string, PlanLine>;
 }
 
 /**
@@ -1348,6 +1350,7 @@ export function monthPlan(ledger: Ledger, month: string, today = todayISO()): Mo
     spending: line(budget.budgets.reduce((s, b) => s + b.limit, 0)),
     invest: line(budget.investmentGoal ?? 0),
     fixedByCategory,
+    spendingByCategory: new Map(budget.budgets.map((b) => [b.categoryId, line(b.limit)])),
   };
   const spentByCategory = new Map<string, number>();
   for (const tx of ledger.transactions) {
@@ -1373,9 +1376,17 @@ export function monthPlan(ledger: Ledger, month: string, today = todayISO()): Mo
     if (o.fixed) fixedDue += due;
     else billsDue += due;
   }
+  // until the month is over, what is left of a limit is still expected to be spent
+  const open = month >= monthOf(today);
+  for (const [key, spent] of spentByCategory) {
+    if (!plan.spendingByCategory.has(key)) plan.spendingByCategory.set(key, line(0));
+    plan.spendingByCategory.get(key)!.actual = spent;
+  }
   let spendingLeft = 0;
-  if (month >= monthOf(today)) {
-    for (const b of budget.budgets) spendingLeft += Math.max(0, b.limit - (spentByCategory.get(b.categoryId) ?? 0));
+  for (const l of plan.spendingByCategory.values()) {
+    const left = open ? Math.max(0, l.planned - l.actual) : 0;
+    l.projected = l.actual + left;
+    spendingLeft += left;
   }
   plan.income.projected = plan.income.actual + pendingRecurring(ledger, month, "income");
   plan.fixed.projected = plan.fixed.actual + fixedDue;

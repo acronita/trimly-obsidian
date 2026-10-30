@@ -1144,7 +1144,7 @@ export class TrimlyView extends ItemView {
     line(t.budgets.invest, plan.invest, "out");
     line(t.budgets.leftover, leftover, "total");
 
-    // where the income goes, planned and forecast, on one scale so the two bars compare
+    // where the income goes, planned and forecast, on one scale so all bars compare
     const card = this.card(row, t.budgets.splitTitle);
     const parts = [
       { name: t.budgets.fixedCosts, color: PLAN_COLORS.fixed, line: plan.fixed },
@@ -1152,37 +1152,61 @@ export class TrimlyView extends ItemView {
       { name: t.budgets.spending, color: PLAN_COLORS.spending, line: plan.spending },
       { name: t.budgets.invest, color: PLAN_COLORS.invest, line: plan.invest },
     ];
-    const bars = (["planned", "projected"] as const).map((c) => {
-      const out = parts.reduce((s, x) => s + x.line[c], 0);
-      return { c, income: plan.income[c], out, rest: plan.income[c] - out };
-    });
-    const scale = Math.max(1, ...bars.map((x) => Math.max(x.income, x.out)));
-    for (const bar of bars) {
-      const label = card.createDiv("trimly-plan-bar-label");
-      label.createSpan({ text: bar.c === "planned" ? t.budgets.planned : t.budgets.forecast });
-      label.createSpan({ cls: "trimly-muted", text: t.budgets.incomeOf(this.money(Math.round(bar.income))) });
+    const barCols = ["planned", "projected"] as const;
+    const scale = Math.max(1, ...barCols.map((c) => Math.max(plan.income[c], parts.reduce((s, x) => s + x.line[c], 0))));
+    type Seg = { name: string; color: string; value: number; faded?: boolean };
+    const drawBar = (label: string, sub: string, segs: Seg[]) => {
+      const head = card.createDiv("trimly-plan-bar-label");
+      head.createSpan({ text: label });
+      head.createSpan({ cls: "trimly-muted", text: sub });
       const track = card.createDiv("trimly-plan-track");
-      const seg = (value: number, color: string, name: string) => {
-        if (value <= 0) return;
-        const el = track.createDiv({ cls: "trimly-plan-seg", attr: { "aria-label": `${name}: ${this.money(Math.round(value))}` } });
-        el.setCssProps({ "--trimly-pct": `${(value / scale) * 100}%`, "--trimly-color": color });
-      };
-      for (const x of parts) seg(x.line[bar.c], x.color, x.name);
-      // a positive rest is what is left; a negative one is spending beyond the income
-      if (bar.rest >= 0) seg(bar.rest, NEUTRAL, t.budgets.leftover);
-      else {
-        const short = card.createDiv({ cls: "trimly-plan-short is-expense", text: t.budgets.overBy(this.money(Math.round(-bar.rest))) });
-        short.setCssProps({ "--trimly-color": PLAN_COLORS.short });
+      for (const x of segs) {
+        if (x.value <= 0) continue;
+        const el = track.createDiv({ cls: `trimly-plan-seg ${x.faded ? "is-faded" : ""}`, attr: { "aria-label": `${x.name}: ${this.money(Math.round(x.value))}` } });
+        el.setCssProps({ "--trimly-pct": `${(x.value / scale) * 100}%`, "--trimly-color": x.color });
       }
+    };
+    const legend = (items: { name: string; color: string }[]) => {
+      const el = card.createDiv("trimly-plan-legend");
+      for (const x of items) {
+        const item = el.createSpan("trimly-legend-row");
+        item.createSpan("trimly-dot").setCssProps({ "--trimly-color": x.color });
+        item.createSpan({ text: x.name });
+      }
+    };
+    for (const c of barCols) {
+      const rest = plan.income[c] - parts.reduce((s, x) => s + x.line[c], 0);
+      drawBar(c === "planned" ? t.budgets.planned : t.budgets.forecast, t.budgets.incomeOf(this.money(Math.round(plan.income[c]))), [
+        ...parts.map((x) => ({ name: x.name, color: x.color, value: x.line[c] })),
+        { name: t.budgets.leftover, color: NEUTRAL, value: rest },
+      ]);
+      // a negative rest is spending beyond the income
+      if (rest < 0) card.createDiv({ cls: "trimly-plan-short is-expense", text: t.budgets.overBy(this.money(Math.round(-rest))) });
     }
-    const legend = card.createDiv("trimly-plan-legend");
-    for (const x of [...parts, { name: t.budgets.leftover, color: NEUTRAL }]) {
-      const item = legend.createSpan("trimly-legend-row");
-      item.createSpan("trimly-dot").setCssProps({ "--trimly-color": x.color });
-      item.createSpan({ text: x.name });
-    }
+    legend([...parts, { name: t.budgets.leftover, color: NEUTRAL }]);
 
-    this.categoryChart(body, ledger, plan.fixedByCategory, spending);
+    // the same bars with category spending split by category and the rest greyed, to see which categories grow
+    const cats = [...plan.spendingByCategory.keys()]
+      .map((id) => ({ id, cat: this.category(ledger, id), order: ledger.categories.findIndex((x) => x.id === id) }))
+      .sort((x, y) => (x.order < 0 ? Infinity : x.order) - (y.order < 0 ? Infinity : y.order));
+    card.createDiv({ cls: "trimly-eyebrow trimly-plan-section", text: t.budgets.spending });
+    for (const c of barCols) {
+      drawBar(c === "planned" ? t.budgets.planned : t.budgets.forecast, this.money(Math.round(plan.spending[c])), [
+        { name: t.budgets.fixedCosts, color: NEUTRAL, value: plan.fixed[c], faded: true },
+        { name: t.budgets.bills, color: NEUTRAL, value: plan.bills[c], faded: true },
+        ...cats.map((x) => ({
+          name: x.cat?.name ?? t.common.uncategorized,
+          color: x.cat?.color ?? NEUTRAL,
+          value: plan.spendingByCategory.get(x.id)?.[c] ?? 0,
+        })),
+        { name: t.budgets.invest, color: NEUTRAL, value: plan.invest[c], faded: true },
+      ]);
+    }
+    legend(
+      cats
+        .filter((x) => (plan.spendingByCategory.get(x.id)?.projected ?? 0) > 0 || (plan.spendingByCategory.get(x.id)?.planned ?? 0) > 0)
+        .map((x) => ({ name: x.cat?.name ?? t.common.uncategorized, color: x.cat?.color ?? NEUTRAL }))
+    );
 
     const bar = body.createDiv("trimly-section-bar");
     bar.createDiv({ cls: "trimly-muted", text: t.budgets.hint });
@@ -1226,41 +1250,6 @@ export class TrimlyView extends ItemView {
         r.createDiv("trimly-row-main").createDiv({ cls: "trimly-row-title", text: c.name });
         this.limitInput(r, 0, t.budgets.setLimit, (l, cents) => setLimit(l, month, c.id, cents));
       }
-    }
-  }
-
-  /** Each category's spending against its plan (its bills plus its limit), the ones most over it first. */
-  private categoryChart(body: HTMLElement, ledger: Ledger, fixedByCategory: Map<string, number>, spending: Map<string, number>) {
-    const budget = budgetFor(ledger, this.month);
-    const rows = ledger.categories
-      .filter((c) => c.kind === "expense")
-      .map((c) => ({
-        c,
-        planned: Math.round((fixedByCategory.get(c.id) ?? 0) + (budget.budgets.find((b) => b.categoryId === c.id)?.limit ?? 0)),
-        spent: spending.get(c.id) ?? 0,
-      }))
-      .filter((r) => r.planned > 0 || r.spent > 0)
-      .sort((a, b) => b.spent - b.planned - (a.spent - a.planned));
-    if (!rows.length) return;
-    const card = this.card(body, t.budgets.byCategoryTitle);
-    const scale = Math.max(1, ...rows.map((r) => Math.max(r.planned, r.spent)));
-    for (const r of rows) {
-      const over = r.spent - r.planned;
-      const head = card.createDiv("trimly-plan-bar-label");
-      head.createSpan({ text: r.c.name });
-      head.createSpan({
-        cls: over > 0 ? "is-expense" : "trimly-muted",
-        text: over > 0 ? t.budgets.over(this.money(over)) : t.budgets.spentOf(this.money(r.spent), this.money(r.planned)),
-      });
-      const track = card.createDiv("trimly-plan-track is-thin");
-      const seg = (value: number, color: string, cls = "") => {
-        if (value <= 0) return;
-        track.createDiv(`trimly-plan-seg ${cls}`).setCssProps({ "--trimly-pct": `${(value / scale) * 100}%`, "--trimly-color": color });
-      };
-      // spent within the plan, the plan still unspent (faded), and spending beyond it in red
-      seg(Math.min(r.spent, r.planned), r.c.color);
-      seg(r.planned - r.spent, r.c.color, "is-faded");
-      seg(over, PLAN_COLORS.short);
     }
   }
 

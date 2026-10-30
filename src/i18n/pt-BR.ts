@@ -232,7 +232,6 @@ export const ptBR = {
     forecastShort: (v: string, missing: string) => `Pela previsão do mês dá pra investir ${v}, ${missing} a menos que a meta.`,
     forecastNoGoal: (v: string) => `Pela previsão do mês dá pra investir ${v}.`,
     forecastDeficit: (v: string) => `Pela previsão, faltam ${v} pra fechar o mês.`,
-    byCategoryTitle: "Gastos por categoria × planejado",
     planTitle: "Plano do mês",
     splitTitle: "Para onde vai a receita",
     planned: "Planejado",

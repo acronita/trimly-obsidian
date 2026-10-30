@@ -378,3 +378,18 @@ test("the forecast tells how much is really left to invest once what is still du
   // once the month is over, nothing more is assumed for the limits
   assert.equal(monthPlan(l, "2026-10", "2026-11-05").spending.projected, 50_00);
 });
+
+test("category spending splits by category, so the bars show which categories grow past their limit", () => {
+  const l = ledger();
+  l.categories.push({ id: "fun", name: "Fun", kind: "expense", color: "#000" });
+  l.transactions.push({ id: "bar", date: "2026-10-12", type: "expense", amount: 300_00, accountId: "card", categoryId: "fun", description: "Bar" });
+  editBudget(l, "2026-10", (b) => (b.budgets = [{ categoryId: "food", limit: 200_00 }]));
+  const p = monthPlan(l, "2026-10", "2026-10-20");
+  // food: 50 of its 200 spent, the rest still expected
+  assert.deepEqual(p.spendingByCategory.get("food"), { planned: 200_00, actual: 50_00, projected: 200_00 });
+  // fun has no limit (zero): what was spent is all of it
+  assert.deepEqual(p.spendingByCategory.get("fun"), { planned: 0, actual: 300_00, projected: 300_00 });
+  // the split adds up to the category spending line
+  const sum = [...p.spendingByCategory.values()].reduce((s, x) => s + x.projected, 0);
+  assert.equal(sum, p.spending.projected);
+});

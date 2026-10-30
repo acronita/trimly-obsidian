@@ -227,7 +227,6 @@ export const en: Strings = {
     forecastShort: (v: string, missing: string) => `By this month's forecast, ${v} can be invested, ${missing} less than the goal.`,
     forecastNoGoal: (v: string) => `By this month's forecast, ${v} can be invested.`,
     forecastDeficit: (v: string) => `By the forecast, the month is ${v} short.`,
-    byCategoryTitle: "Category spending × plan",
     planTitle: "Month's plan",
     splitTitle: "Where the income goes",
     planned: "Planned",
