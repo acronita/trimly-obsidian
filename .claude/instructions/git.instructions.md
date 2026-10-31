@@ -21,22 +21,23 @@ applyTo: '**'
 - `hotfix/<x.y.z>` — urgent fix cut directly from `main` for an already-released version.
   Merges into both `main` and `develop`, then gets tagged, same as a release branch.
 
-Releases are **requested, not automatic** — a version bump or a merge to `develop` does not
-by itself create a release. A release only happens when explicitly asked for (see below).
+Releases are decided by the agents, not requested: a version bump or a merge to `develop` does
+not by itself create one, but when a relevant, verified set of changes has accumulated on
+`develop`, evaluate it and cut the release without asking (see below).
 
-## Committing After a Task
+## Committing and Pushing (never ask)
 
-Once a requested code change is implemented, verified (typecheck/build), and its docs are
-updated, commit it without waiting for a separate "commit this" prompt: create (or reuse, if
-one is already open for this task) the `feature/*`/`fix/*`/`chore/*` branch off `develop` and
-commit there. This is a standing instruction — it overrides the general "never commit unless
-explicitly asked" default for this project.
+Never ask "want me to commit?" or "can I push?". Decide and act.
 
-**Do not merge the branch into `develop`, delete it, or push anything, unless the user explicitly
-says the feature/fix is done** (e.g. "fecha essa branch", "merge isso", "pode fechar") — same
-rule as releases: a branch may stay open across several commits while he tests it, tries more
-changes, or comes back to it later. Committing is automatic; closing (merge + branch deletion)
-and pushing are not.
+- **Commit** whenever a relevant, verified change is complete (typecheck/build pass, docs
+  updated). Skip trivial or half-done states. Work on a `feature/*`/`fix/*`/`chore/*` branch
+  off `develop` (reuse an open one for the same task).
+- **Merge into `develop`, delete the finished branch, and push `develop`** as soon as the
+  change is done and verified. No confirmation, no waiting for the user to say "done".
+- **`main` and releases** are the only step that needs evaluation: judge whether the
+  accumulated changes on `develop` justify a release (see Release Procedure). If yes, do it
+  end to end, including the push and tag, without asking. If no, leave it.
+- Never add AI/Claude attribution to commits (see CLAUDE.md).
 
 ## Commit Messages (Conventional Commits)
 
@@ -71,7 +72,7 @@ chore: pin esbuild to 0.28.1
 
 ## Release Procedure
 
-Agents decide when a release is warranted (e.g. a finished, verified set of `feat`/`fix` changes on `develop`) and may cut one on their own; the user can also request one explicitly. When the user asks for a release, use the
+Agents decide when a release is warranted (a relevant, verified set of `feat`/`fix` changes on `develop`) and cut it on their own; the user can also request one. When the user asks for a release, use the
 `release` skill (`.claude/skills/release/`) instead of doing these steps ad hoc — it
 encodes the full sequence below.
 
