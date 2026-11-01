@@ -22,7 +22,7 @@ plugin) to pick up the new build. Without `.env.local` the copy step is skipped.
 
 ## Releases
 
-Pushing a bare `x.y.z` tag runs `.github/workflows/release.yml`: tests, build, provenance attestation
+Pushing a bare `x.y.z` tag runs `.github/workflows/release.yml`: tests, build, provenance attestation (public repository only)
 and a GitHub Release with the three plugin files. See `.claude/skills/release/SKILL.md`.
 
 ## Verifying a change
