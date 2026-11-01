@@ -6,6 +6,13 @@ Your vault may be synced or pushed to a Git remote; your finances shouldn't be r
 stores all of its data in a single file encrypted with AES-256-GCM, using a key derived from a
 passphrase that never leaves your device.
 
+> **Built for Brazil.** Trimly is made for people who keep their money in Brazil: the interface is in
+> Brazilian Portuguese first, bank sync uses Brazilian Open Finance (Pluggy), quotes and proventos
+> come from B3, returns are compared with CDI, IPCA, poupança, IBOV and IFIX, and features like
+> *Obrigações* (DAS MEI, IRPF) and *compras parceladas* follow how things work there. It runs
+> anywhere and has an English translation, but if your accounts and investments are outside Brazil,
+> most of what sets it apart won't apply to you.
+
 ## Screenshots
 
 > **All values in these screenshots are fictitious.** They come from a made-up test ledger, not
