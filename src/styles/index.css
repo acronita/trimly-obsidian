@@ -881,6 +881,9 @@ button.trimly-add.is-icon {
   border-radius: 8px;
 }
 
+.trimly-bars-col.is-clickable { cursor: pointer; }
+.trimly-bars-col.is-clickable:hover .trimly-bars-pair { background: var(--background-modifier-hover); }
+
 .trimly-bars-col.is-current .trimly-bars-pair {
   background: var(--background-modifier-hover);
 }
