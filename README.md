@@ -6,6 +6,28 @@ Your vault may be synced or pushed to a Git remote; your finances shouldn't be r
 stores all of its data in a single file encrypted with AES-256-GCM, using a key derived from a
 passphrase that never leaves your device.
 
+> **Built for Brazil.** Trimly is made for people who keep their money in Brazil: the interface is in
+> Brazilian Portuguese first, bank sync uses Brazilian Open Finance (Pluggy), quotes and proventos
+> come from B3, returns are compared with CDI, IPCA, poupança, IBOV and IFIX, and features like
+> *Obrigações* (DAS MEI, IRPF) and *compras parceladas* follow how things work there. It runs
+> anywhere and has an English translation, but if your accounts and investments are outside Brazil,
+> most of what sets it apart won't apply to you.
+
+## Screenshots
+
+> **All values in these screenshots are fictitious.** They come from a made-up test ledger, not
+> anyone's real finances, so balances and amounts are not meant to be realistic.
+
+| Overview | Accounts and cards |
+|---|---|
+| ![Overview](docs/screenshots/visao-geral.jpg) | ![Accounts and credit cards](docs/screenshots/contas-cartoes.jpg) |
+| **Obrigações** | **Recurring** |
+| ![Obligations](docs/screenshots/obrigacoes.jpg) | ![Recurring and subscriptions](docs/screenshots/recorrentes.jpg) |
+| **Investments** | **Returns** |
+| ![Investments overview](docs/screenshots/investimentos.jpg) | ![Returns vs. CDI and IPCA](docs/screenshots/rentabilidade.jpg) |
+| **Allocation targets** | **Proventos** |
+| ![Allocation targets](docs/screenshots/metas.jpg) | ![Proventos](docs/screenshots/proventos.jpg) |
+
 ## Features
 
 - **Overview** — net worth, the month's income, expenses and savings rate (projected with recurring
