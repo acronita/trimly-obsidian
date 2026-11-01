@@ -13,6 +13,10 @@
   no dividends; B3 lists them without a key. Files touched: `src/b3.ts`, `src/proventos.ts`,
   `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/proventos.test.ts`,
   `test/encryption-rule.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
+- 2026-11-01 — *Próximos proventos* lists which tickers were looked up on B3 and the latest provento
+  paid for each (new `lastPaidProventos`), open when nothing is upcoming. Why: an empty card didn't
+  say whether the lookup ran. Files touched: `src/proventos.ts`, `src/view.ts`,
+  `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/proventos.test.ts`.
 - 2026-11-01 — The release workflow only signs build provenance attestations on a public repository.
   Why: GitHub refuses them on a private repository without a paid plan, which failed the 0.18.0
   release before it was published. Files touched: `.github/workflows/release.yml`.

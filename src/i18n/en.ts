@@ -494,6 +494,9 @@ export const en: Strings = {
     dataCom: (date: string) => `Record date ${date}`,
     payOn: (date: string) => `paid ${date}`,
     payTbd: "payment date not set",
+    lastPaid: (tickers: string) => `Looked up on B3: ${tickers}. Latest provento of each`,
+    paidOn: (date: string) => `paid ${date}`,
+    noneListed: "no recent provento on B3",
     perShare: (value: string) => `${value} per share`,
     kind: { dividend: "Dividend", jcp: "JCP", income: "Income", other: "Provento" },
     upcomingNote:
