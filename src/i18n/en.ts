@@ -434,6 +434,31 @@ export const en: Strings = {
     note:
       "Returns are time-weighted from the daily snapshots, so deposits and withdrawals don't count as gains or losses. " +
       "They start with your first sync.",
+    dragHint: "Drag across the chart to see the change over a stretch.",
+    compare: "Comparison",
+    cmpHead: (period: string, value: string) => `${period}, the portfolio returned ${value}.`,
+    cmpPeriod12: "Over the last 12 months",
+    cmpPeriodSince: (date: string) => `Since ${date}`,
+    cmpCdi: (share: string, cdi: string) => `CDI: returned ${share} of the CDI, which was ${cdi}.`,
+    cmpRealGain: (value: string) => `IPCA: real gain of ${value}, above inflation.`,
+    cmpRealLoss: (value: string) => `IPCA: real loss of ${value}, below inflation.`,
+    cmpIpcaPending: "IPCA: no month in the period has closed and been published yet. IBGE releases each month a few days after it ends.",
+    cmpPoupancaPending: "Poupança: only whole months after the first position count, since it pays on the deposit's anniversary.",
+    cmpAhead: (index: string, pp: string) => `${index}: ${pp} ahead.`,
+    cmpBehind: (index: string, pp: string) => `${index}: ${pp} behind.`,
+    pp: (value: string) => `${value} percentage point(s)`,
+    cmpShort: "With less than 3 months of history the comparison swings a lot; it is worth checking again over time.",
+    about: "About the benchmarks",
+    aboutCdi:
+      "The rate of one-day loans between banks, tied to the Selic. It is the yardstick for fixed income: CDB, LCI/LCA and Tesouro Selic usually pay a percentage of it, and 100% of the CDI is what a floating-rate investment is expected to return.",
+    aboutIpca:
+      "Official inflation, measured by IBGE and released a few days after each month ends. Returning more than the IPCA means gaining purchasing power; less means losing it, even as the balance grows.",
+    aboutPoupanca:
+      "Pays on the deposit's anniversary: 0.5% a month plus TR while the Selic is above 8.5% a year, or 70% of the Selic plus TR below that. It is the floor: falling behind it means the simplest investment would have returned more.",
+    aboutIbov:
+      "The Ibovespa, the most traded stocks on B3, by price (dividends not added). It is the reference for the stock part of the portfolio and swings much more than fixed income.",
+    aboutIfix:
+      "B3's real estate fund index, with the funds' payouts already added. It is the reference for the FII part.",
   },
 
   movements: {

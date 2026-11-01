@@ -631,6 +631,44 @@ button.trimly-add.is-icon {
 .trimly-key.is-ibov::before { background: var(--color-cyan); }
 .trimly-key.is-ifix::before { background: var(--color-pink); }
 
+/* the portfolio against each benchmark, in words */
+.trimly-compare-head {
+  font-weight: var(--font-semibold);
+  margin-bottom: 8px;
+}
+
+.trimly-view ul.trimly-compare {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.trimly-view .trimly-compare .trimly-key {
+  display: flex;
+  align-items: baseline;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+}
+
+.trimly-compare .trimly-key::before { flex: none; }
+
+.trimly-about {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 20px;
+}
+
+.trimly-about-item { font-size: var(--font-ui-small); }
+
+.trimly-view .trimly-about-name {
+  color: var(--text-normal);
+  font-weight: var(--font-semibold);
+  margin-bottom: 2px;
+}
+
 .trimly-line-plot {
   position: relative;
   height: 160px;
@@ -656,6 +694,29 @@ button.trimly-add.is-icon {
 .trimly-line-plot.is-hover .trimly-line-dot,
 .trimly-line-plot.is-hover .trimly-line-tip {
   display: block;
+}
+
+/* a stretch marked by dragging */
+.trimly-line-band {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  top: 0;
+  bottom: 0;
+  left: var(--trimly-x);
+  width: var(--trimly-w);
+  background: var(--interactive-accent);
+  opacity: 0.12;
+}
+
+.trimly-line-plot.is-selected .trimly-line-band,
+.trimly-line-plot.is-selected .trimly-line-tip {
+  display: block;
+}
+
+.trimly-line-plot.is-range {
+  cursor: crosshair;
+  user-select: none;
 }
 
 .trimly-line-guide {

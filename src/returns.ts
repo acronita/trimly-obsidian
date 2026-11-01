@@ -94,15 +94,19 @@ function monthEnd(month: string): string {
 
 /**
  * Monthly rates (IPCA, poupança) of the months that lie entirely after `from` and
- * end by `to`, compounded, as a fraction.
+ * end by `to`, compounded, as a fraction; null when no such month is published yet.
  */
-export function monthlyRateReturn(rates: Rate[], from: string, to: string): number {
+export function monthlyRateReturn(rates: Rate[], from: string, to: string): number | null {
   let f = 1;
+  let months = 0;
   for (const r of rates) {
     const month = r.date.slice(0, 7);
-    if (`${month}-01` > from && monthEnd(month) <= to) f *= 1 + r.rate / 100;
+    if (`${month}-01` > from && monthEnd(month) <= to) {
+      f *= 1 + r.rate / 100;
+      months++;
+    }
   }
-  return f - 1;
+  return months ? f - 1 : null;
 }
 
 /** Close on `date` (last one on or before it), or null before the first. */

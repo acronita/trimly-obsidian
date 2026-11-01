@@ -73,13 +73,16 @@ export interface LineSeries {
  * Lines over time; `xs` holds one timestamp per value, so gaps between points
  * keep their width. Hovering (or touching) shows the nearest point: a guide
  * line, a dot per series and `tooltip(i)`'s lines (first one as the heading).
+ * With `range`, dragging across the chart marks a stretch and shows
+ * `range(from, to)`'s lines for it until the next click.
  */
 export function lineChart(
   parent: HTMLElement,
   xs: number[],
   series: LineSeries[],
   labels: { start: string; end: string },
-  tooltip?: (i: number) => string[]
+  tooltip?: (i: number) => string[],
+  range?: (from: number, to: number) => string[]
 ) {
   const wrap = parent.createDiv("trimly-line");
   const plot = wrap.createDiv("trimly-line-plot");
@@ -113,25 +116,62 @@ export function lineChart(
     // HTML overlay: dots drawn inside the stretched SVG would turn into ellipses
     const guide = plot.createDiv("trimly-line-guide");
     const dots = series.map((s) => plot.createDiv(`trimly-line-dot ${s.cls}`));
+    if (range) plot.addClass("is-range");
+    const band = range ? plot.createDiv("trimly-line-band") : null;
     const tip = plot.createDiv("trimly-line-tip");
-    const show = (e: PointerEvent) => {
+    const nearest = (e: PointerEvent) => {
       const rect = plot.getBoundingClientRect();
-      if (rect.width <= 0) return;
+      if (rect.width <= 0) return null;
       const at = x0 + ((e.clientX - rect.left) / rect.width) * span;
       let i = 0;
       for (let k = 1; k < xs.length; k++) if (Math.abs(xs[k] - at) < Math.abs(xs[i] - at)) i = k;
-      const left = (x(i) / W) * 100;
-      guide.setCssProps({ "--trimly-x": `${left}%` });
-      series.forEach((s, k) => dots[k].setCssProps({ "--trimly-x": `${left}%`, "--trimly-y": `${(y(s.values[i]) / H) * 100}%` }));
+      return i;
+    };
+    const fillTip = (lines: string[], left: number) => {
       tip.empty();
-      tooltip(i).forEach((line, k) => tip.createDiv({ cls: k === 0 ? "trimly-line-tip-head" : "", text: line }));
+      lines.forEach((line, k) => tip.createDiv({ cls: k === 0 ? "trimly-line-tip-head" : "", text: line }));
       tip.setCssProps({ "--trimly-x": `${left}%` });
       // keep the box inside the chart: flip it to the left of the guide on the right half
       tip.toggleClass("is-left", left > 50);
+    };
+    // drag start while the button is down, and the stretch marked by the last drag
+    let dragFrom: number | null = null;
+    let selected = false;
+    const select = (a: number, b: number) => {
+      if (!band || !range) return;
+      const [from, to] = a < b ? [a, b] : [b, a];
+      const l = (x(from) / W) * 100;
+      const r = (x(to) / W) * 100;
+      band.setCssProps({ "--trimly-x": `${l}%`, "--trimly-w": `${r - l}%` });
+      fillTip(range(from, to), r);
+      selected = true;
+      plot.removeClass("is-hover");
+      plot.addClass("is-selected");
+    };
+    const show = (e: PointerEvent) => {
+      const i = nearest(e);
+      if (i === null) return;
+      if (dragFrom !== null && i !== dragFrom) return select(dragFrom, i);
+      if (selected) return;
+      const left = (x(i) / W) * 100;
+      guide.setCssProps({ "--trimly-x": `${left}%` });
+      series.forEach((s, k) => dots[k].setCssProps({ "--trimly-x": `${left}%`, "--trimly-y": `${(y(s.values[i]) / H) * 100}%` }));
+      fillTip(tooltip(i), left);
       plot.addClass("is-hover");
     };
     plot.addEventListener("pointermove", show);
-    plot.addEventListener("pointerdown", show);
+    plot.addEventListener("pointerdown", (e) => {
+      // a new click clears the last stretch
+      selected = false;
+      plot.removeClass("is-selected");
+      if (range && e.button === 0) {
+        dragFrom = nearest(e);
+        plot.setPointerCapture(e.pointerId);
+      }
+      show(e);
+    });
+    plot.addEventListener("pointerup", () => (dragFrom = null));
+    plot.addEventListener("pointercancel", () => (dragFrom = null));
     plot.addEventListener("pointerleave", () => plot.removeClass("is-hover"));
   }
 
