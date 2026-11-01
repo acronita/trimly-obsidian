@@ -552,6 +552,13 @@ button.trimly-add.is-icon {
 .trimly-key.is-ifix::before {
   background: var(--color-pink);
 }
+.trimly-proventos-last {
+  margin-top: 10px;
+}
+.trimly-proventos-last summary {
+  cursor: pointer;
+  margin-bottom: 4px;
+}
 .trimly-compare-head {
   font-weight: var(--font-semibold);
   margin-bottom: 8px;

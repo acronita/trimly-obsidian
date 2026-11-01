@@ -491,6 +491,22 @@ export const ptBR = {
     share: (pct: string) => `${pct} dos proventos`,
     recent: "Últimos pagamentos",
     movementsLink: "Movimentações",
+    upcoming: "Próximos proventos",
+    upcomingTotal: (value: string) => `${value} previstos`,
+    upcomingNone: "Nenhum provento anunciado para os seus ativos da B3.",
+    upcomingLoading: "Buscando os proventos anunciados na B3…",
+    upcomingError: (e: string) => `Proventos da B3 indisponíveis: ${e}`,
+    upcomingOff: "Ligue Agenda de proventos nas opções para ver os proventos anunciados.",
+    dataCom: (date: string) => `Data-com ${date}`,
+    payOn: (date: string) => `pagamento ${date}`,
+    payTbd: "pagamento a definir",
+    lastPaid: (tickers: string) => `Consultados na B3: ${tickers}. Último provento de cada um`,
+    paidOn: (date: string) => `pago ${date}`,
+    noneListed: "nenhum provento recente na B3",
+    perShare: (value: string) => `${value} por cota`,
+    kind: { dividend: "Dividendo", jcp: "JCP", income: "Rendimento", other: "Provento" },
+    upcomingNote:
+      "Valores estimados pela quantidade de hoje; só recebe quem tinha o ativo na data-com. JCP já com os 15% de IR retidos.",
   },
 
   targets: {
@@ -783,6 +799,10 @@ export const ptBR = {
     benchmarksDesc:
       "Busca CDI, IPCA e poupança no Banco Central (api.bcb.gov.br) e IBOV e IFIX no site da B3 (sistemaswebb3-listados.b3.com.br) quando você abre os investimentos. " +
       "Só o índice e as datas são pedidos; nada sobre você ou sua carteira é enviado.",
+    proventos: "Agenda de proventos",
+    proventosDesc:
+      "Busca no site da B3 (sistemaswebb3-listados.b3.com.br) os dividendos, JCP e rendimentos anunciados dos seus ativos com código da B3. " +
+      "Só as quatro letras de cada código são enviadas (PETR para PETR4), sem quantidades nem valores.",
     quotes: "Cotações (brapi, opcional)",
     quotesIntro:
       "Atualiza ações, FIIs, ETFs e BDRs pela brapi.dev: preço, variação do dia e nome da empresa. " +
@@ -837,6 +857,7 @@ export const ptBR = {
     bcbSeries: (code: number, status: number) => `Série ${code} do Banco Central falhou (HTTP ${status})`,
     bcbSeriesBody: (code: number, detail: string) => `Série ${code} do Banco Central falhou: ${detail}`,
     b3Index: (index: string, status: number) => `${index} da B3 falhou (HTTP ${status})`,
+    b3Proventos: (issuer: string, status: number) => `Proventos de ${issuer} na B3 falharam (HTTP ${status})`,
     brapiRejected: "A brapi recusou o token",
     brapiQuote: (ticker: string) => `Cotação de ${ticker}`,
     brapiLimit: "limite de requisições da brapi atingido; tente mais tarde",

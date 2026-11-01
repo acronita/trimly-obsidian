@@ -485,6 +485,22 @@ export const en: Strings = {
     share: (pct: string) => `${pct} of income`,
     recent: "Recent payments",
     movementsLink: "Movements",
+    upcoming: "Upcoming proventos",
+    upcomingTotal: (value: string) => `${value} expected`,
+    upcomingNone: "No proventos announced for your B3 positions.",
+    upcomingLoading: "Fetching announced proventos from B3…",
+    upcomingError: (e: string) => `B3 proventos unavailable: ${e}`,
+    upcomingOff: "Turn on Proventos calendar in settings to see announced proventos.",
+    dataCom: (date: string) => `Record date ${date}`,
+    payOn: (date: string) => `paid ${date}`,
+    payTbd: "payment date not set",
+    lastPaid: (tickers: string) => `Looked up on B3: ${tickers}. Latest provento of each`,
+    paidOn: (date: string) => `paid ${date}`,
+    noneListed: "no recent provento on B3",
+    perShare: (value: string) => `${value} per share`,
+    kind: { dividend: "Dividend", jcp: "JCP", income: "Income", other: "Provento" },
+    upcomingNote:
+      "Estimated by today's quantity; only those holding the asset on the record date receive it. JCP net of the 15% tax withheld.",
   },
 
   targets: {
@@ -776,6 +792,10 @@ export const en: Strings = {
     benchmarksDesc:
       "Fetches CDI, IPCA and poupança from the Central Bank of Brazil (api.bcb.gov.br) and IBOV and IFIX from the B3 website (sistemaswebb3-listados.b3.com.br) when you open the investments view. " +
       "Only the index and the dates are requested; nothing about you or your portfolio is sent.",
+    proventos: "Proventos calendar",
+    proventosDesc:
+      "Fetches the dividends, JCP and income announced for your positions with a B3 ticker from the B3 website (sistemaswebb3-listados.b3.com.br). " +
+      "Only the four letters of each ticker are sent (PETR for PETR4), no quantities or amounts.",
     quotes: "Quotes (brapi, optional)",
     quotesIntro:
       "Updates stocks, real estate funds, ETFs and BDRs from brapi.dev: price, daily change and company name. " +
@@ -830,6 +850,7 @@ export const en: Strings = {
     bcbSeries: (code: number, status: number) => `Central Bank series ${code} failed (HTTP ${status})`,
     bcbSeriesBody: (code: number, detail: string) => `Central Bank series ${code} failed: ${detail}`,
     b3Index: (index: string, status: number) => `B3's ${index} failed (HTTP ${status})`,
+    b3Proventos: (issuer: string, status: number) => `B3 proventos of ${issuer} failed (HTTP ${status})`,
     brapiRejected: "brapi rejected the token",
     brapiQuote: (ticker: string) => `Quote for ${ticker}`,
     brapiLimit: "brapi request limit reached; try again later",

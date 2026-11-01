@@ -73,7 +73,9 @@ passphrase that never leaves your device.
   class, an evolution chart, time-weighted returns (month by month, 12 months, since start)
   compared with CDI, IPCA, poupança, IBOV and IFIX (drag across the chart for any stretch, a
   comparison in words and what each benchmark means), every contribution, withdrawal and tax, and the income (dividends,
-  JCP, interest, coupons) per month and per position. Positions come from bank sync or are added by
+  JCP, interest, coupons) per month and per position, plus the upcoming proventos B3 has announced
+  for positions with a B3 ticker (data-com, payment date, value per share and an estimate by your
+  quantity). Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.
@@ -102,7 +104,7 @@ passphrase that never leaves your device.
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
 - The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle,
-  the benchmarks toggle, the hide-values toggle and how obligation reminders are shown.
+  the benchmarks toggle, the proventos calendar toggle, the hide-values toggle and how obligation reminders are shown.
 - **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With
@@ -111,7 +113,10 @@ passphrase that never leaves your device.
   from `sistemaswebb3-listados.b3.com.br` (the B3 website's index statistics, one request per index
   per year); only the index and the dates are requested. The B3 address is not a documented API: if
   it changes, the IBOV and IFIX columns stay empty with a notice and the rest keeps working. Turn off
-  *Comparar com índices* in settings to stop both. With a brapi token, Trimly sends the
+  *Comparar com índices* in settings to stop both. With positions that have a B3 ticker, the income
+  tab fetches their announced proventos from the same B3 website, sending only each ticker's
+  four-letter issuer code (PETR for PETR4), at most once a day; the result stays in memory, never in
+  the vault. Turn off *Agenda de proventos* to stop it. With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
   reference rates (European Central Bank data) from `api.frankfurter.dev`, at most once a day; only
