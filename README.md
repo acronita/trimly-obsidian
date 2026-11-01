@@ -75,7 +75,8 @@ passphrase that never leaves your device.
   comparison in words and what each benchmark means), every contribution, withdrawal and tax, and the income (dividends,
   JCP, interest, coupons) per month and per position, plus the upcoming proventos B3 has announced
   for positions with a B3 ticker (data-com, payment date, value per share and an estimate by your
-  quantity). Positions come from bank sync or are added by
+  quantity), with next month's income forecast for FIIs that haven't announced yet; positions whose
+  bank sends no income get it estimated from B3's proventos. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.

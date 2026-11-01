@@ -497,6 +497,12 @@ export const en: Strings = {
     lastPaid: (tickers: string) => `Looked up on B3: ${tickers}. Latest provento of each`,
     paidOn: (date: string) => `paid ${date}`,
     noneListed: "no recent provento on B3",
+    forecast: "forecast",
+    forecastBy: "By the last payment, not announced yet",
+    forecastNote: "Forecast: a FII that pays every month and hasn't announced yet, at the last payment's value per share, a month later.",
+    estimated: "estimated from B3",
+    estimatedNote:
+      "For positions whose income the bank doesn't report, amounts are estimated from B3's proventos × today's quantity; they are off if you bought or sold shares in the period.",
     perShare: (value: string) => `${value} per share`,
     kind: { dividend: "Dividend", jcp: "JCP", income: "Income", other: "Provento" },
     upcomingNote:

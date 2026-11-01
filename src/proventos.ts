@@ -103,23 +103,30 @@ export interface UpcomingProvento {
   provento: Provento;
   /** expected payment in cents, net of JCP tax, by today's quantity; null without one */
   amount: number | null;
+  /** not announced yet: projected from the last monthly payment (`monthlyForecast`) */
+  forecast?: boolean;
 }
 
 /**
  * Proventos of the open positions still to be paid (payment date from `today`
  * on, or no payment date yet with a data-com from `today` on), by payment date.
+ * A monthly payer with nothing announced gets its forecast instead.
  */
 export function upcomingProventos(ledger: Ledger, proventos: Provento[], today: string): UpcomingProvento[] {
   const out: UpcomingProvento[] = [];
   for (const a of ledger.investments.assets) {
     const ticker = !a.closed && tickerOf(a);
     if (!ticker) continue;
+    const amount = (p: Provento) => (a.quantity ? Math.round(a.quantity * p.perShare * (p.kind === "jcp" ? JCP_NET : 1) * 100) : null);
+    let announced = false;
     for (const p of proventos) {
       if (p.ticker !== ticker) continue;
       if (p.payDate ? p.payDate < today : p.dataCom < today) continue;
-      const net = p.perShare * (p.kind === "jcp" ? JCP_NET : 1);
-      out.push({ asset: a, provento: p, amount: a.quantity ? Math.round(a.quantity * net * 100) : null });
+      out.push({ asset: a, provento: p, amount: amount(p) });
+      announced = true;
     }
+    const forecast = announced ? null : monthlyForecast(proventos, ticker, today);
+    if (forecast) out.push({ asset: a, provento: forecast, amount: amount(forecast), forecast: true });
   }
   const key = (u: UpcomingProvento) => u.provento.payDate ?? "9999-12-31";
   return out.sort((x, y) => key(x).localeCompare(key(y)) || x.provento.ticker.localeCompare(y.provento.ticker));
@@ -140,4 +147,66 @@ export function lastPaidProventos(ledger: Ledger, proventos: Provento[], today: 
     }
     return { ticker, provento: last };
   });
+}
+
+/** "2026-10-15" -> "2026-11-15"; the day is kept within the next month. */
+function nextMonthDay(iso: string): string {
+  const [y, m, d] = iso.split("-").map(Number);
+  const last = new Date(y, m + 1, 0).getDate();
+  const next = new Date(y, m, Math.min(d, last));
+  return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+}
+
+const DAY_MS = 86_400_000;
+const daysApart = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) / DAY_MS;
+
+/**
+ * Next month's income of a ticker that pays every month (FIIs), from its last
+ * payment: same value per share, one month later. null when the last two
+ * payments were not about a month apart, the last one is over 45 days old, or
+ * the projected date already passed without an announcement.
+ */
+export function monthlyForecast(proventos: Provento[], ticker: string, today: string): Provento | null {
+  const paid = proventos
+    .filter((p) => p.ticker === ticker && p.kind === "income" && p.payDate && p.payDate < today)
+    .sort((a, b) => (b.payDate ?? "").localeCompare(a.payDate ?? ""));
+  if (paid.length < 2) return null;
+  const [last, before] = paid as [Provento & { payDate: string }, Provento & { payDate: string }];
+  const gap = daysApart(last.payDate, before.payDate);
+  if (gap < 20 || gap > 40 || daysApart(today, last.payDate) > 45) return null;
+  const payDate = nextMonthDay(last.payDate);
+  if (payDate < today) return null;
+  return { ...last, dataCom: nextMonthDay(last.dataCom), payDate };
+}
+
+/** A provento paid on a position, estimated from B3 when the bank sync brought none. */
+export interface EstimatedPayout {
+  assetId: string;
+  date: string;
+  /** cents, net of JCP tax, by today's quantity */
+  amount: number;
+  provento: Provento;
+}
+
+/**
+ * Proventos paid from `from` (exclusive) to `today` on open positions with a
+ * ticker and a quantity that have no income movement at all, by today's
+ * quantity. A position with movements only counts proventos whose data-com
+ * falls on or after its first movement.
+ */
+export function estimatedPayouts(ledger: Ledger, proventos: Provento[], from: string, today: string): EstimatedPayout[] {
+  const out: EstimatedPayout[] = [];
+  for (const a of ledger.investments.assets) {
+    const ticker = !a.closed && tickerOf(a);
+    if (!ticker || !a.quantity) continue;
+    const own = ledger.investments.movements.filter((m) => m.assetId === a.id);
+    if (own.some((m) => m.type === "income")) continue;
+    const since = own.reduce<string | null>((min, m) => (min === null || m.date < min ? m.date : min), null);
+    for (const p of proventos) {
+      if (p.ticker !== ticker || !p.payDate || p.payDate <= from || p.payDate > today) continue;
+      if (since && p.dataCom < since) continue;
+      out.push({ assetId: a.id, date: p.payDate, amount: Math.round(a.quantity * p.perShare * (p.kind === "jcp" ? JCP_NET : 1) * 100), provento: p });
+    }
+  }
+  return out.sort((x, y) => y.date.localeCompare(x.date));
 }

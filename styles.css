@@ -552,6 +552,9 @@ button.trimly-add.is-icon {
 .trimly-key.is-ifix::before {
   background: var(--color-pink);
 }
+.trimly-amount.is-forecast {
+  opacity: 0.6;
+}
 .trimly-proventos-last {
   margin-top: 10px;
 }
