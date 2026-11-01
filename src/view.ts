@@ -43,7 +43,6 @@ import {
   centsToInput,
   fixedMonthlyIncome,
   monthPlan,
-  incomeByMonth,
   movementFlow,
   monthOf,
   monthSummary,
@@ -92,7 +91,8 @@ import {
 } from "./ledger";
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
-import { lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
+import { estimatedPayouts, lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
+import type { EstimatedPayout } from "./proventos";
 import { averagePrice, institutionOf, tickerOf } from "./quotes";
 import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
@@ -187,6 +187,8 @@ export class TrimlyView extends ItemView {
   private movementFilter: MovementFilter = { assetId: "", type: "", allTime: false };
   /** amount typed in the Targets tab to plan a contribution, in cents; not saved */
   private contribution = 0;
+  /** month picked in the income tab's bars; null shows the current one */
+  private incomeMonth: string | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: TrimlyPlugin) {
     super(leaf);
@@ -2333,14 +2335,18 @@ export class TrimlyView extends ItemView {
   private renderIncome(body: HTMLElement, ledger: Ledger) {
     if (ledger.investments.assets.length === 0) return this.emptyInvestments(body);
     this.renderUpcomingProventos(body, ledger);
-    const payouts = ledger.investments.movements.filter((m) => m.type === "income");
+    const today = todayISO();
+    const from = this.yearAgo();
+    const received = ledger.investments.movements.filter((m) => m.type === "income");
+    // positions whose bank sync brings no income get B3's proventos × today's quantity
+    const proventos = this.plugin.proventos(proventoIssuers(ledger));
+    const estimated = proventos ? estimatedPayouts(ledger, proventos, from, today) : [];
+    const payouts: { assetId: string; date: string; amount: number }[] = [...received, ...estimated];
     if (payouts.length === 0) {
       const card = body.createDiv("trimly-card");
       this.empty(card, "coins", t.income.empty);
       return;
     }
-    const today = todayISO();
-    const from = this.yearAgo();
     const last12 = payouts.filter((m) => m.date > from && m.date <= today);
     const total12 = last12.reduce((s, m) => s + m.amount, 0);
     const thisMonth = monthOf(today);
@@ -2358,16 +2364,31 @@ export class TrimlyView extends ItemView {
     chip(t.income.yield12, value > 0 ? this.pct((total12 / value) * 100, 2) : "—");
 
     const chartCard = this.card(body, t.income.perMonth);
-    const byMonth = incomeByMonth(ledger, `${shiftMonth(thisMonth, -11)}-01`, today);
+    const byMonth = new Map<string, number>();
+    for (const m of payouts) if (m.date >= `${shiftMonth(thisMonth, -11)}-01` && m.date <= today) byMonth.set(monthOf(m.date), (byMonth.get(monthOf(m.date)) ?? 0) + m.amount);
+    const months = Array.from({ length: 12 }, (_, i) => shiftMonth(thisMonth, i - 11));
+    const selected = this.incomeMonth && months.includes(this.incomeMonth) ? this.incomeMonth : thisMonth;
+    const detail = createDiv();
+    const showMonth = (month: string) => {
+      this.incomeMonth = month;
+      detail.empty();
+      const list = [...received, ...estimated].filter((m) => monthOf(m.date) === month).sort((a, b) => (a.date < b.date ? 1 : -1));
+      detail.createDiv({ cls: "trimly-section-title", text: `${this.monthLabel(month)} · ${this.money(byMonth.get(month) ?? 0)}` });
+      if (list.length === 0) detail.createDiv({ cls: "trimly-muted", text: t.income.noneInMonth });
+      for (const m of list) this.payoutRow(detail, ledger, m);
+    };
     bars(
       chartCard,
-      Array.from({ length: 12 }, (_, i) => shiftMonth(thisMonth, i - 11)).map((m) => ({
+      months.map((m) => ({
         label: this.shortMonth(m),
         value: byMonth.get(m) ?? 0,
-        current: m === thisMonth,
+        current: m === selected,
       })),
-      (g) => `${g.label}: ${this.money(g.value)}`
+      (g) => `${g.label}: ${this.money(g.value)}`,
+      (_, i) => showMonth(months[i])
     );
+    chartCard.appendChild(detail);
+    showMonth(selected);
 
     const row = body.createDiv("trimly-grid");
     const byAsset = this.card(row, t.income.byPosition);
@@ -2389,8 +2410,21 @@ export class TrimlyView extends ItemView {
     }
 
     const recent = this.card(row, t.income.recent, { label: t.income.movementsLink, onClick: () => this.openMovements("income") });
-    const sorted = [...payouts].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
-    for (const m of sorted) this.movementRow(recent, ledger, m, true);
+    const sorted = [...received, ...estimated].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+    for (const m of sorted) this.payoutRow(recent, ledger, m);
+    if (estimated.length) body.createDiv({ cls: "trimly-muted", text: t.income.estimatedNote });
+  }
+
+  /** A received provento: the bank's movement, or one estimated from B3. */
+  private payoutRow(parent: HTMLElement, ledger: Ledger, m: Movement | EstimatedPayout) {
+    if (!("provento" in m)) return this.movementRow(parent, ledger, m, true);
+    const a = ledger.investments.assets.find((x) => x.id === m.assetId);
+    const r = parent.createDiv("trimly-row");
+    if (a) this.iconTile(r, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
+    const main = r.createDiv("trimly-row-main");
+    main.createDiv({ cls: "trimly-row-title", text: `${m.provento.ticker} · ${t.income.kind[m.provento.kind]}` });
+    main.createDiv({ cls: "trimly-row-sub", text: `${this.shortDate(m.date)} · ${t.income.estimated}` });
+    r.createDiv({ cls: "trimly-amount is-income is-forecast", text: `+${this.money(m.amount)}` });
   }
 
   /** Proventos B3 has announced for the positions with a ticker, by payment month. */
@@ -2412,7 +2446,7 @@ export class TrimlyView extends ItemView {
     } else {
       if (total) card.createDiv({ cls: "trimly-summary-value is-income", text: t.income.upcomingTotal(`+${this.money(total)}`) });
       let month: string | null = null;
-      for (const { asset, provento: p, amount } of upcoming) {
+      for (const { asset, provento: p, amount, forecast } of upcoming) {
         const m = p.payDate ? monthOf(p.payDate) : "";
         if (m !== month) {
           month = m;
@@ -2422,18 +2456,19 @@ export class TrimlyView extends ItemView {
         r.addEventListener("click", () => this.showAsset(asset.id));
         this.iconTile(r, ASSET_CLASS_ICONS[asset.assetClass], ASSET_CLASS_COLORS[asset.assetClass]);
         const main = r.createDiv("trimly-row-main");
-        main.createDiv({ cls: "trimly-row-title", text: `${p.ticker} · ${t.income.kind[p.kind]}` });
+        main.createDiv({ cls: "trimly-row-title", text: `${p.ticker} · ${t.income.kind[p.kind]}${forecast ? ` · ${t.income.forecast}` : ""}` });
         main.createDiv({
           cls: "trimly-row-sub",
           text: [
-            t.income.dataCom(this.shortDate(p.dataCom)),
+            forecast ? t.income.forecastBy : t.income.dataCom(this.shortDate(p.dataCom)),
             p.payDate ? t.income.payOn(this.shortDate(p.payDate)) : t.income.payTbd,
             t.income.perShare(perShare.format(p.perShare)),
           ].join(" · "),
         });
-        r.createDiv({ cls: "trimly-amount is-income", text: amount === null ? "—" : `+${this.money(amount)}` });
+        r.createDiv({ cls: `trimly-amount is-income${forecast ? " is-forecast" : ""}`, text: amount === null ? "—" : `+${this.money(amount)}` });
       }
       foot(t.income.upcomingNote);
+      if (upcoming.some((u) => u.forecast)) foot(t.income.forecastNote);
     }
     // what B3 returned for each position, so an empty list reads as "nothing announced", not "not looked up"
     const last = lastPaidProventos(ledger, proventos, todayISO());

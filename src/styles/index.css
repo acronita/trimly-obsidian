@@ -631,6 +631,9 @@ button.trimly-add.is-icon {
 .trimly-key.is-ibov::before { background: var(--color-cyan); }
 .trimly-key.is-ifix::before { background: var(--color-pink); }
 
+/* forecast or estimated, not a payment that happened */
+.trimly-amount.is-forecast { opacity: 0.6; }
+
 /* what B3 returned for each position, folded under the upcoming proventos */
 .trimly-proventos-last {
   margin-top: 10px;
@@ -877,6 +880,9 @@ button.trimly-add.is-icon {
   padding: 0 4px;
   border-radius: 8px;
 }
+
+.trimly-bars-col.is-clickable { cursor: pointer; }
+.trimly-bars-col.is-clickable:hover .trimly-bars-pair { background: var(--background-modifier-hover); }
 
 .trimly-bars-col.is-current .trimly-bars-pair {
   background: var(--background-modifier-hover);

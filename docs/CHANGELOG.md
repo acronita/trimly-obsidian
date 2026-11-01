@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.20.0 — 2026-11-01
+
+- 2026-11-01 — *Próximos proventos* forecasts next month's income of a FII that pays every month and
+  hasn't announced yet (last two payments about a month apart, the last within 45 days): same value
+  per share, one month after the last payment, marked *previsto*, replaced by the announcement once
+  B3 lists it (new `monthlyForecast`). The income tab also estimates what was received for positions
+  the bank sync brings no income for, from B3's proventos × today's quantity, counting only payments
+  whose data-com is on or after the position's first movement (new `estimatedPayouts`), in the
+  12-month totals, yield, per-month bars, per position and latest payments, marked *estimado pela
+  B3*. `incomeByMonth` in `ledger.ts` was folded into the view. Why: B3 lists the FIIs' month-end
+  announcements days later, so the card was empty right when the next payment was most expected,
+  and Pluggy reports no FII income, so received proventos showed nothing. Files touched:
+  `src/proventos.ts`, `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/proventos.test.ts`, `README.md`, `docs/FAQ.md`,
+  `docs/ARCHITECTURE.md`.
+- 2026-11-01 — The income tab's monthly bars are clickable: a click picks the month and lists its
+  proventos under the chart (received and estimated), the current month by default (`bars` takes an
+  optional `onSelect`). Why: the bars showed totals but no way to see what made up another month.
+  Files touched: `src/charts.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`.
+
 ## 0.19.0 — 2026-11-01
 
 - 2026-11-01 — The income tab opens with *Próximos proventos*: dividends, JCP and FII income B3 has

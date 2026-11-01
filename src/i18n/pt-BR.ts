@@ -503,6 +503,13 @@ export const ptBR = {
     lastPaid: (tickers: string) => `Consultados na B3: ${tickers}. Último provento de cada um`,
     paidOn: (date: string) => `pago ${date}`,
     noneListed: "nenhum provento recente na B3",
+    forecast: "previsto",
+    noneInMonth: "Nenhum provento neste mês.",
+    forecastBy: "Pelo último pagamento, ainda não anunciado",
+    forecastNote: "Previsto: FII que paga todo mês e ainda não anunciou, com o mesmo valor por cota do último pagamento, um mês depois.",
+    estimated: "estimado pela B3",
+    estimatedNote:
+      "Para ativos cujos rendimentos o banco não informa, os valores são estimados com os proventos da B3 × a quantidade de hoje; erram se você comprou ou vendeu cotas no período.",
     perShare: (value: string) => `${value} por cota`,
     kind: { dividend: "Dividendo", jcp: "JCP", income: "Rendimento", other: "Provento" },
     upcomingNote:

@@ -186,14 +186,21 @@ export interface Bar {
   current?: boolean;
 }
 
-/** One bar per group, e.g. income per month. */
-export function bars(parent: HTMLElement, groups: Bar[], tooltip: (g: Bar) => string) {
+/** One bar per group, e.g. income per month. With `onSelect`, a click picks a group (highlighted like `current`). */
+export function bars(parent: HTMLElement, groups: Bar[], tooltip: (g: Bar) => string, onSelect?: (g: Bar, i: number) => void) {
   const wrap = parent.createDiv("trimly-bars");
   const max = Math.max(1, ...groups.map((g) => g.value));
   for (const g of groups) {
     const col = wrap.createDiv("trimly-bars-col");
     if (g.current) col.addClass("is-current");
     col.setAttr("aria-label", tooltip(g));
+    if (onSelect) {
+      col.addClass("is-clickable");
+      col.addEventListener("click", () => {
+        wrap.querySelectorAll(".trimly-bars-col").forEach((c) => c.toggleClass("is-current", c === col));
+        onSelect(g, groups.indexOf(g));
+      });
+    }
     const pair = col.createDiv("trimly-bars-pair");
     pair.createDiv("trimly-bars-bar is-income").setCssProps({ "--trimly-h": `${(g.value / max) * 100}%` });
     col.createDiv({ cls: "trimly-bars-label", text: g.label });
