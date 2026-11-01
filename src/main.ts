@@ -2,6 +2,7 @@ import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian"
 import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
+import { fetchProventos } from "./b3";
 import { fetchBenchmarks } from "./bcb";
 import { fetchRates } from "./fx";
 import { LANGUAGES, LANGUAGE_NAMES, Language, setLanguage, t } from "./i18n";
@@ -26,6 +27,7 @@ import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
 import { applyQuotes, quoteTickers } from "./quotes";
+import type { Provento } from "./proventos";
 import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
 import { TrimlyView, VIEW_TYPE_TRIMLY, dueWhen, openTransactionModal } from "./view";
@@ -42,6 +44,8 @@ export interface TrimlySettings {
   rememberPassphrase: boolean;
   /** fetch public CDI/IPCA series from the Central Bank to compare investments with */
   benchmarks: boolean;
+  /** fetch announced proventos of the positions' issuers from B3 */
+  proventos: boolean;
   /** interface language; Brazilian Portuguese first */
   language: Language;
   /** mask money amounts on screen (eye button in the header) */
@@ -66,6 +70,7 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   currency: "BRL",
   rememberPassphrase: true,
   benchmarks: true,
+  proventos: true,
   language: "pt-BR",
   hideValues: false,
   reminders: "app",
@@ -87,6 +92,11 @@ export default class TrimlyPlugin extends Plugin {
   private benchmarkLoading = false;
   private benchmarkFailedAt = 0;
   benchmarkError: string | null = null;
+  /** announced proventos, kept in memory only (never in the vault) for the day */
+  private proventoCache: { key: string; day: string; data: Provento[] } | null = null;
+  private proventoLoading = false;
+  private proventoFailedAt = 0;
+  proventoError: string | null = null;
   /** set when data.json predates the language setting: the ledger's starter names are still English */
   private translateOnUnlock = false;
   /** day each obligation occurrence was last reminded of ("id:due" → YYYY-MM-DD); memory only */
@@ -495,6 +505,37 @@ export default class TrimlyPlugin extends Plugin {
     return cached?.data ?? null;
   }
 
+  /**
+   * Announced proventos of `issuers`, cached for the day like the benchmarks:
+   * starts a fetch when missing and re-renders when it lands; null when turned
+   * off or never loaded.
+   */
+  proventos(issuers: string[]): Provento[] | null {
+    if (!this.settings.proventos || issuers.length === 0) return null;
+    const today = todayISO();
+    const key = issuers.join(",");
+    const cached = this.proventoCache;
+    if (cached && cached.day === today && cached.key === key) return cached.data;
+    if (!this.proventoLoading && Date.now() - this.proventoFailedAt > BENCHMARK_RETRY_MS) void this.loadProventos(issuers, key, today);
+    return cached?.data ?? null;
+  }
+
+  private async loadProventos(issuers: string[], key: string, today: string) {
+    this.proventoLoading = true;
+    try {
+      const res = await fetchProventos(issuers);
+      this.proventoCache = { key, day: today, data: res.proventos };
+      this.proventoError = res.errors.length ? res.errors.join("; ") : null;
+      if (res.errors.length) this.proventoFailedAt = Date.now();
+    } catch (e) {
+      this.proventoFailedAt = Date.now();
+      this.proventoError = (e as Error).message;
+    } finally {
+      this.proventoLoading = false;
+      this.refreshViews();
+    }
+  }
+
   private async loadBenchmarks(from: string, today: string) {
     this.benchmarkLoading = true;
     const floor = toISODate(new Date(Date.now() - BENCHMARK_MAX_DAYS * 86_400_000));
@@ -660,6 +701,16 @@ class TrimlySettingTab extends PluginSettingTab {
       .addToggle((tg) =>
         tg.setValue(p.settings.benchmarks).onChange(async (v) => {
           p.settings.benchmarks = v;
+          await p.saveSettings();
+          p.refreshViews();
+        })
+      );
+    new Setting(containerEl)
+      .setName(s.proventos)
+      .setDesc(s.proventosDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.proventos).onChange(async (v) => {
+          p.settings.proventos = v;
           await p.saveSettings();
           p.refreshViews();
         })

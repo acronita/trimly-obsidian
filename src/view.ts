@@ -92,6 +92,7 @@ import {
 } from "./ledger";
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
+import { proventoIssuers, upcomingProventos } from "./proventos";
 import { averagePrice, institutionOf, tickerOf } from "./quotes";
 import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
@@ -2331,6 +2332,7 @@ export class TrimlyView extends ItemView {
 
   private renderIncome(body: HTMLElement, ledger: Ledger) {
     if (ledger.investments.assets.length === 0) return this.emptyInvestments(body);
+    this.renderUpcomingProventos(body, ledger);
     const payouts = ledger.investments.movements.filter((m) => m.type === "income");
     if (payouts.length === 0) {
       const card = body.createDiv("trimly-card");
@@ -2389,6 +2391,51 @@ export class TrimlyView extends ItemView {
     const recent = this.card(row, t.income.recent, { label: t.income.movementsLink, onClick: () => this.openMovements("income") });
     const sorted = [...payouts].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
     for (const m of sorted) this.movementRow(recent, ledger, m, true);
+  }
+
+  /** Proventos B3 has announced for the positions with a ticker, by payment month. */
+  private renderUpcomingProventos(body: HTMLElement, ledger: Ledger) {
+    const issuers = proventoIssuers(ledger);
+    if (issuers.length === 0) return;
+    const proventos = this.plugin.proventos(issuers);
+    const upcoming = proventos ? upcomingProventos(ledger, proventos, todayISO()) : [];
+    const total = upcoming.reduce((s, u) => s + (u.amount ?? 0), 0);
+    const card = this.card(body, t.income.upcoming);
+    const foot = (text: string) => card.createDiv({ cls: "trimly-muted trimly-card-foot", text });
+    if (!proventos) {
+      foot(!this.plugin.settings.proventos ? t.income.upcomingOff : this.plugin.proventoError ? t.income.upcomingError(this.plugin.proventoError) : t.income.upcomingLoading);
+      return;
+    }
+    if (upcoming.length === 0) {
+      this.empty(card, "calendar", t.income.upcomingNone);
+    } else {
+      if (total) card.createDiv({ cls: "trimly-summary-value is-income", text: t.income.upcomingTotal(`+${this.money(total)}`) });
+      const perShare = new Intl.NumberFormat(this.plugin.locale(), { style: "currency", currency: "BRL", maximumFractionDigits: 4 });
+      let month: string | null = null;
+      for (const { asset, provento: p, amount } of upcoming) {
+        const m = p.payDate ? monthOf(p.payDate) : "";
+        if (m !== month) {
+          month = m;
+          card.createDiv({ cls: "trimly-section-title", text: m ? this.monthLabel(m) : t.income.payTbd });
+        }
+        const r = card.createDiv("trimly-row is-clickable");
+        r.addEventListener("click", () => this.showAsset(asset.id));
+        this.iconTile(r, ASSET_CLASS_ICONS[asset.assetClass], ASSET_CLASS_COLORS[asset.assetClass]);
+        const main = r.createDiv("trimly-row-main");
+        main.createDiv({ cls: "trimly-row-title", text: `${p.ticker} · ${t.income.kind[p.kind]}` });
+        main.createDiv({
+          cls: "trimly-row-sub",
+          text: [
+            t.income.dataCom(this.shortDate(p.dataCom)),
+            p.payDate ? t.income.payOn(this.shortDate(p.payDate)) : t.income.payTbd,
+            t.income.perShare(perShare.format(p.perShare)),
+          ].join(" · "),
+        });
+        r.createDiv({ cls: "trimly-amount is-income", text: amount === null ? "—" : `+${this.money(amount)}` });
+      }
+      foot(t.income.upcomingNote);
+    }
+    if (this.plugin.proventoError) foot(t.income.upcomingError(this.plugin.proventoError));
   }
 
   private renderTargets(body: HTMLElement, ledger: Ledger) {

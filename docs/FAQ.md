@@ -68,6 +68,12 @@ Brazil; IPCA and poupança only count months that are over (poupança pays on th
 deposit made on the 1st stands for the month). IBOV and IFIX come from B3's daily closes; IBOV is a
 price index (dividends not included), IFIX includes the funds' payouts.
 
+**A position doesn't show in *Próximos proventos*, or shows no amount.**
+Only open positions whose code is a B3 ticker (PETR4, HGLG11, TAEE11) are looked up, and only what B3
+has already announced shows; FIIs usually announce at the end of each month. The amount needs the
+position's quantity; without one, only the value per share shows. The estimate uses today's
+quantity, so shares bought after the data-com don't actually receive it.
+
 **I deleted an imported transaction and it came back.**
 Synced accounts mirror the bank for the last 90 days (12 months are imported), so the next sync
 restores anything the bank still lists. Recategorize or edit the description instead; those changes are kept.
