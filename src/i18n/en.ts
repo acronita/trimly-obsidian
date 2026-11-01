@@ -498,6 +498,7 @@ export const en: Strings = {
     paidOn: (date: string) => `paid ${date}`,
     noneListed: "no recent provento on B3",
     forecast: "forecast",
+    noneInMonth: "No proventos this month.",
     forecastBy: "By the last payment, not announced yet",
     forecastNote: "Forecast: a FII that pays every month and hasn't announced yet, at the last payment's value per share, a month later.",
     estimated: "estimated from B3",

@@ -15,6 +15,11 @@
   `src/proventos.ts`, `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`,
   `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/proventos.test.ts`, `README.md`, `docs/FAQ.md`,
   `docs/ARCHITECTURE.md`.
+- 2026-11-01 — The income tab's monthly bars are clickable: a click picks the month and lists its
+  proventos under the chart (received and estimated), the current month by default (`bars` takes an
+  optional `onSelect`). Why: the bars showed totals but no way to see what made up another month.
+  Files touched: `src/charts.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`.
 
 ## 0.19.0 — 2026-11-01
 

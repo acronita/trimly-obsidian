@@ -504,6 +504,7 @@ export const ptBR = {
     paidOn: (date: string) => `pago ${date}`,
     noneListed: "nenhum provento recente na B3",
     forecast: "previsto",
+    noneInMonth: "Nenhum provento neste mês.",
     forecastBy: "Pelo último pagamento, ainda não anunciado",
     forecastNote: "Previsto: FII que paga todo mês e ainda não anunciou, com o mesmo valor por cota do último pagamento, um mês depois.",
     estimated: "estimado pela B3",
