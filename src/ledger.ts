@@ -928,16 +928,6 @@ export function movementFlow(m: Movement): number {
   }
 }
 
-/** Income paid per month ("YYYY-MM") between `from` and `to` (inclusive). */
-export function incomeByMonth(ledger: Ledger, from: string, to: string): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const m of ledger.investments.movements) {
-    if (m.type !== "income" || m.date < from || m.date > to) continue;
-    out.set(monthOf(m.date), (out.get(monthOf(m.date)) ?? 0) + m.amount);
-  }
-  return out;
-}
-
 /** Aportes (buy movements) made in `month`, in cents. */
 export function contributionsInMonth(ledger: Ledger, month: string): number {
   return ledger.investments.movements.filter((m) => m.type === "buy" && monthOf(m.date) === month).reduce((s, m) => s + m.amount, 0);

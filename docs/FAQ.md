@@ -72,7 +72,15 @@ price index (dividends not included), IFIX includes the funds' payouts.
 Only open positions whose code is a B3 ticker (PETR4, HGLG11, TAEE11) are looked up, and only what B3
 has already announced shows; FIIs usually announce at the end of each month. The amount needs the
 position's quantity; without one, only the value per share shows. The estimate uses today's
-quantity, so shares bought after the data-com don't actually receive it.
+quantity, so shares bought after the data-com don't actually receive it. A FII that pays every month
+and hasn't announced yet shows a *previsto* line at its last value per share, a month after the last
+payment; the announcement replaces it once B3 lists it.
+
+**The income tab shows proventos marked *estimado pela B3*.**
+Some banks don't report FII income or dividends as movements. For a position with none at all,
+Trimly estimates what it received from B3's proventos × today's quantity, counting only payments
+after the position's first movement. Buying or selling shares in the period makes it inexact; once
+the bank reports income for the position, only the bank's numbers are used.
 
 **I deleted an imported transaction and it came back.**
 Synced accounts mirror the bank for the last 90 days (12 months are imported), so the next sync
