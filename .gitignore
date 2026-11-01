@@ -29,3 +29,6 @@ Thumbs.db
 
 # Local audit notes — never commit or sync
 .tmp/
+
+# Maestri: cópias locais de roles/prompts internos (regenerado automaticamente)
+.maestri/
