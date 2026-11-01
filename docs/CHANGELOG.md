@@ -6,6 +6,9 @@
   recurring, investments, returns, allocation targets, proventos), flagged as fictitious values.
   Why: the screenshots taken on 2026-10-27 never made it into the README, and their test ledger uses
   amounts much higher than a typical one. Files touched: `README.md`, `docs/screenshots/*.jpg`.
+- 2026-11-01 — README states up front that Trimly is built for Brazil (Open Finance, B3, CDI/IPCA,
+  DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
+  someone abroad installs it. Files touched: `README.md`.
 
 ## 0.20.0 — 2026-11-01
 
