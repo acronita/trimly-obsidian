@@ -124,3 +124,20 @@ export function upcomingProventos(ledger: Ledger, proventos: Provento[], today: 
   const key = (u: UpcomingProvento) => u.provento.payDate ?? "9999-12-31";
   return out.sort((x, y) => key(x).localeCompare(key(y)) || x.provento.ticker.localeCompare(y.provento.ticker));
 }
+
+/** Per open position with a B3 ticker, the latest provento already paid (or null when B3 lists none), by ticker. */
+export function lastPaidProventos(ledger: Ledger, proventos: Provento[], today: string): { ticker: string; provento: Provento | null }[] {
+  const tickers = new Set<string>();
+  for (const a of ledger.investments.assets) {
+    const ticker = !a.closed && tickerOf(a);
+    if (ticker) tickers.add(ticker);
+  }
+  return [...tickers].sort().map((ticker) => {
+    let last: Provento | null = null;
+    for (const p of proventos) {
+      if (p.ticker !== ticker || !p.payDate || p.payDate >= today) continue;
+      if (!last || p.payDate > (last.payDate ?? "")) last = p;
+    }
+    return { ticker, provento: last };
+  });
+}

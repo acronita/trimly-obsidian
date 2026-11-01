@@ -500,6 +500,9 @@ export const ptBR = {
     dataCom: (date: string) => `Data-com ${date}`,
     payOn: (date: string) => `pagamento ${date}`,
     payTbd: "pagamento a definir",
+    lastPaid: (tickers: string) => `Consultados na B3: ${tickers}. Último provento de cada um`,
+    paidOn: (date: string) => `pago ${date}`,
+    noneListed: "nenhum provento recente na B3",
     perShare: (value: string) => `${value} por cota`,
     kind: { dividend: "Dividendo", jcp: "JCP", income: "Rendimento", other: "Provento" },
     upcomingNote:

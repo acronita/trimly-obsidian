@@ -631,6 +631,16 @@ button.trimly-add.is-icon {
 .trimly-key.is-ibov::before { background: var(--color-cyan); }
 .trimly-key.is-ifix::before { background: var(--color-pink); }
 
+/* what B3 returned for each position, folded under the upcoming proventos */
+.trimly-proventos-last {
+  margin-top: 10px;
+}
+
+.trimly-proventos-last summary {
+  cursor: pointer;
+  margin-bottom: 4px;
+}
+
 /* the portfolio against each benchmark, in words */
 .trimly-compare-head {
   font-weight: var(--font-semibold);

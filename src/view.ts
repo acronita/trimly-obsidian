@@ -92,7 +92,7 @@ import {
 } from "./ledger";
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
-import { proventoIssuers, upcomingProventos } from "./proventos";
+import { lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
 import { averagePrice, institutionOf, tickerOf } from "./quotes";
 import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
@@ -2406,11 +2406,11 @@ export class TrimlyView extends ItemView {
       foot(!this.plugin.settings.proventos ? t.income.upcomingOff : this.plugin.proventoError ? t.income.upcomingError(this.plugin.proventoError) : t.income.upcomingLoading);
       return;
     }
+    const perShare = new Intl.NumberFormat(this.plugin.locale(), { style: "currency", currency: "BRL", maximumFractionDigits: 4 });
     if (upcoming.length === 0) {
       this.empty(card, "calendar", t.income.upcomingNone);
     } else {
       if (total) card.createDiv({ cls: "trimly-summary-value is-income", text: t.income.upcomingTotal(`+${this.money(total)}`) });
-      const perShare = new Intl.NumberFormat(this.plugin.locale(), { style: "currency", currency: "BRL", maximumFractionDigits: 4 });
       let month: string | null = null;
       for (const { asset, provento: p, amount } of upcoming) {
         const m = p.payDate ? monthOf(p.payDate) : "";
@@ -2434,6 +2434,19 @@ export class TrimlyView extends ItemView {
         r.createDiv({ cls: "trimly-amount is-income", text: amount === null ? "—" : `+${this.money(amount)}` });
       }
       foot(t.income.upcomingNote);
+    }
+    // what B3 returned for each position, so an empty list reads as "nothing announced", not "not looked up"
+    const last = lastPaidProventos(ledger, proventos, todayISO());
+    const fold = card.createEl("details", "trimly-proventos-last");
+    fold.open = upcoming.length === 0;
+    fold.createEl("summary", { cls: "trimly-muted", text: t.income.lastPaid(last.map((l) => l.ticker).join(", ")) });
+    for (const { ticker, provento: p } of last) {
+      fold.createDiv({
+        cls: "trimly-row-sub",
+        text: p
+          ? `${ticker} · ${t.income.kind[p.kind]} · ${t.income.paidOn(this.shortDate(p.payDate ?? p.dataCom))} · ${t.income.perShare(perShare.format(p.perShare))}`
+          : `${ticker} · ${t.income.noneListed}`,
+      });
     }
     if (this.plugin.proventoError) foot(t.income.upcomingError(this.plugin.proventoError));
   }

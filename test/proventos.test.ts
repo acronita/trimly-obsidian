@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultLedger, newId } from "../src/ledger.ts";
 import type { Asset } from "../src/ledger.ts";
-import { issuerOf, parseCashDividends, proventoIssuers, tickerOfIsin, upcomingProventos } from "../src/proventos.ts";
+import { issuerOf, lastPaidProventos, parseCashDividends, proventoIssuers, tickerOfIsin, upcomingProventos } from "../src/proventos.ts";
 import type { CashDividend } from "../src/proventos.ts";
 
 const asset = (extra: Partial<Asset>): Asset => ({ id: newId(), name: "x", assetClass: "stock", value: 0, updatedAt: "2026-10-01", ...extra });
@@ -78,6 +78,25 @@ test("upcoming proventos: still to be paid, estimated by quantity, JCP net of ta
       ["PETR4", "dividend", 47_16],
       // no quantity known: listed, without an amount; no payment date yet goes last
       ["HGLG11", "income", null],
+    ]
+  );
+});
+
+test("the latest paid provento per position shows the lookup ran even with nothing upcoming", () => {
+  const l = defaultLedger();
+  l.investments.assets.push(asset({ code: "HGLG11", assetClass: "reit" }), asset({ code: "XPTO3" }));
+  const proventos = parseCashDividends([
+    row({ isinCode: "BRHGLGCTF004", label: "RENDIMENTO", rate: "1,10", paymentDate: "15/09/2026" }),
+    row({ isinCode: "BRHGLGCTF004", label: "RENDIMENTO", rate: "1,17", paymentDate: "15/10/2026" }),
+    // announced but not paid yet: it belongs to the upcoming list
+    row({ isinCode: "BRHGLGCTF004", label: "RENDIMENTO", rate: "1,20", paymentDate: "16/11/2026" }),
+  ]);
+  const last = lastPaidProventos(l, proventos, "2026-11-01");
+  assert.deepEqual(
+    last.map((x) => [x.ticker, x.provento?.payDate ?? null, x.provento?.perShare ?? null]),
+    [
+      ["HGLG11", "2026-10-15", 1.17],
+      ["XPTO3", null, null],
     ]
   );
 });
