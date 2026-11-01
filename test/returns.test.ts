@@ -64,6 +64,8 @@ test("IPCA only counts months fully inside the period", () => {
   // August ends after the period; September is entirely inside
   close(monthlyRateReturn(ipca, "2026-08-15", "2026-09-30"), 0.0082);
   close(monthlyRateReturn(ipca, "2026-07-31", "2026-09-30"), 0.9968 * 1.0082 - 1);
+  // no month over yet: unknown, not 0%, so a two-week-old portfolio doesn't look like it beat inflation
+  assert.equal(monthlyRateReturn(ipca, "2026-09-10", "2026-09-25"), null);
 });
 
 test("monthly returns line up with the benchmarks of each month", () => {

@@ -71,7 +71,8 @@ passphrase that never leaves your device.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
   class, an evolution chart, time-weighted returns (month by month, 12 months, since start)
-  compared with CDI, IPCA, poupança, IBOV and IFIX, every contribution, withdrawal and tax, and the income (dividends,
+  compared with CDI, IPCA, poupança, IBOV and IFIX (drag across the chart for any stretch, a
+  comparison in words and what each benchmark means), every contribution, withdrawal and tax, and the income (dividends,
   JCP, interest, coupons) per month and per position. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset

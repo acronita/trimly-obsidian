@@ -2118,9 +2118,19 @@ export class TrimlyView extends ItemView {
           this.longDate(points[i].date),
           `${t.perf.portfolio}: ${this.signedPct(points[i].index - 1)}`,
           ...cols.map((c) => `${c.label}: ${this.signedPct(c.ret(first, points[i].date))}`),
-        ]
+        ],
+        (a, b) => {
+          const [from, to] = [points[a].date, points[b].date];
+          return [
+            `${this.longDate(from)} – ${this.longDate(to)}`,
+            `${t.perf.portfolio}: ${this.signedPct(periodReturn(points, from, to))}`,
+            ...cols.map((c) => `${c.label}: ${this.signedPct(c.ret(from, to))}`),
+          ];
+        }
       );
+      chartCard.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.perf.dragHint });
       this.benchmarkNote(chartCard, bench);
+      this.renderComparison(body, points, bench);
     }
 
     const row = body.createDiv("trimly-grid");
@@ -2135,10 +2145,64 @@ export class TrimlyView extends ItemView {
       }
       this.benchmarkNote(monthCard, bench);
     }
+    this.renderAboutBenchmarks(body);
     body.createDiv({
       cls: "trimly-muted",
       text: t.perf.note,
     });
+  }
+
+  /** The portfolio against each benchmark over 12 months (or since the start, when shorter), in words. */
+  private renderComparison(parent: HTMLElement, points: IndexPoint[], bench: Benchmarks | null) {
+    if (!bench) return;
+    const first = points[0].date;
+    const today = todayISO();
+    const now = new Date();
+    const yearAgo = toISODate(new Date(now.getFullYear() - 1, now.getMonth(), now.getDate()));
+    const from = first <= yearAgo ? yearAgo : first;
+    const p = periodReturn(points, from, today);
+    if (p === null) return;
+    const card = this.card(parent, t.perf.compare);
+    const period = first <= yearAgo ? t.perf.cmpPeriod12 : t.perf.cmpPeriodSince(this.longDate(first));
+    card.createDiv({ cls: "trimly-compare-head", text: t.perf.cmpHead(period, this.signedPct(p)) });
+    const list = card.createEl("ul", "trimly-compare");
+    const line = (cls: string, text: string) => list.createEl("li", { cls: `trimly-key ${cls}` }).createSpan({ text });
+    const pp = (diff: number) => t.perf.pp(new Intl.NumberFormat(this.plugin.locale(), { maximumFractionDigits: 2 }).format(Math.abs(diff) * 100));
+
+    const cdi = cdiReturn(bench.cdi, from, today);
+    // a share of a CDI near zero (a few days) or of a negative return says nothing
+    if (cdi > 0 && p > 0) line("is-cdi", t.perf.cmpCdi(this.pct((p / cdi) * 100, 0), this.signedPct(cdi)));
+    else line("is-cdi", (p >= cdi ? t.perf.cmpAhead : t.perf.cmpBehind)("CDI", pp(p - cdi)));
+    const ipca = monthlyRateReturn(bench.ipca, from, today);
+    if (ipca === null) line("is-ipca", t.perf.cmpIpcaPending);
+    else {
+      const real = (1 + p) / (1 + ipca) - 1;
+      line("is-ipca", real >= 0 ? t.perf.cmpRealGain(this.pct(real * 100, 2)) : t.perf.cmpRealLoss(this.pct(-real * 100, 2)));
+    }
+    const poupanca = monthlyRateReturn(bench.poupanca, from, today);
+    if (poupanca === null) line("is-poupanca", t.perf.cmpPoupancaPending);
+    else line("is-poupanca", (p >= poupanca ? t.perf.cmpAhead : t.perf.cmpBehind)(t.perf.poupanca, pp(p - poupanca)));
+    for (const [label, cls, closes] of [["IBOV", "is-ibov", bench.ibov], ["IFIX", "is-ifix", bench.ifix]] as const) {
+      const r = closeReturn(closes, from, today);
+      if (r !== null) line(cls, (p >= r ? t.perf.cmpAhead : t.perf.cmpBehind)(label, pp(p - r)));
+    }
+    if ((this.ts(today) - this.ts(first)) / 86_400_000 < 90) card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.perf.cmpShort });
+  }
+
+  private renderAboutBenchmarks(parent: HTMLElement) {
+    const card = this.card(parent, t.perf.about);
+    const list = card.createDiv("trimly-about");
+    for (const [label, cls, text] of [
+      ["CDI", "is-cdi", t.perf.aboutCdi],
+      ["IPCA", "is-ipca", t.perf.aboutIpca],
+      [t.perf.poupanca, "is-poupanca", t.perf.aboutPoupanca],
+      ["IBOV", "is-ibov", t.perf.aboutIbov],
+      ["IFIX", "is-ifix", t.perf.aboutIfix],
+    ]) {
+      const item = list.createDiv("trimly-about-item");
+      item.createDiv({ cls: `trimly-key ${cls} trimly-about-name` }).createSpan({ text: label });
+      item.createDiv({ cls: "trimly-muted", text });
+    }
   }
 
   private movementLabel(m: Movement) {

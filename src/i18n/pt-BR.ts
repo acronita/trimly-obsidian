@@ -440,6 +440,31 @@ export const ptBR = {
     note:
       "Rentabilidade ponderada no tempo a partir dos registros diários: aportes e resgates não contam como ganho ou perda. " +
       "Começa na sua primeira sincronização.",
+    dragHint: "Arraste no gráfico para ver a variação de um trecho.",
+    compare: "Comparação",
+    cmpHead: (period: string, value: string) => `${period}, a carteira rendeu ${value}.`,
+    cmpPeriod12: "Nos últimos 12 meses",
+    cmpPeriodSince: (date: string) => `Desde ${date}`,
+    cmpCdi: (share: string, cdi: string) => `CDI: rendeu ${share} do CDI, que foi ${cdi}.`,
+    cmpRealGain: (value: string) => `IPCA: ganho real de ${value}, acima da inflação.`,
+    cmpRealLoss: (value: string) => `IPCA: perda real de ${value}, abaixo da inflação.`,
+    cmpIpcaPending: "IPCA: nenhum mês do período foi fechado e publicado ainda. O IBGE divulga cada mês uns dias depois que ele acaba.",
+    cmpPoupancaPending: "Poupança: só conta meses inteiros depois da primeira posição, porque ela rende no aniversário.",
+    cmpAhead: (index: string, pp: string) => `${index}: ${pp} acima.`,
+    cmpBehind: (index: string, pp: string) => `${index}: ${pp} abaixo.`,
+    pp: (value: string) => `${value} ponto(s) percentual(is)`,
+    cmpShort: "Com menos de 3 meses de histórico a comparação oscila muito; vale mais olhar de novo com o tempo.",
+    about: "Sobre os índices",
+    aboutCdi:
+      "Taxa dos empréstimos de um dia entre bancos, colada na Selic. É a régua da renda fixa: CDB, LCI/LCA e Tesouro Selic costumam render um percentual dele, e 100% do CDI é o esperado de uma aplicação pós-fixada.",
+    aboutIpca:
+      "A inflação oficial, medida pelo IBGE e publicada alguns dias depois que o mês acaba. Render acima do IPCA é ganhar poder de compra; abaixo, é perder, mesmo com o saldo crescendo.",
+    aboutPoupanca:
+      "Rende no aniversário do depósito: 0,5% ao mês mais a TR enquanto a Selic está acima de 8,5% ao ano, ou 70% da Selic mais a TR abaixo disso. É o piso: perder dela quer dizer que a aplicação mais simples teria rendido mais.",
+    aboutIbov:
+      "O Ibovespa, com as ações mais negociadas da B3, pelo preço (sem somar dividendos). É a referência para a parte de ações da carteira e oscila bem mais que a renda fixa.",
+    aboutIfix:
+      "O índice dos fundos imobiliários da B3, já somando os rendimentos que os fundos pagam. É a referência para a parte de FIIs.",
   },
 
   movements: {

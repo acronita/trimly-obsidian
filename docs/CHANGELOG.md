@@ -19,6 +19,17 @@
   that now counts as no values, and its other errors show their message. Poupança is fetched from the
   first snapshot's date instead of the 1st of its month, so it stays inside the daily series' 10-year
   window. Files touched: `src/bcb.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`.
+- 2026-11-01 — The performance tab explains the benchmarks. Dragging across the cumulative chart
+  marks a stretch and shows the portfolio's and each benchmark's change over it (`lineChart` takes an
+  optional `range`); a click clears it. A *Comparação* card puts the last 12 months (or since the
+  start, when shorter) in words: share of the CDI, real gain or loss over the IPCA, and points ahead
+  of or behind poupança, IBOV and IFIX, with a note while the history is under 3 months. *Sobre os
+  índices* says what each one is. IPCA and poupança now show "—" instead of +0% for a period with
+  no closed month (`monthlyRateReturn` returns null). Why: the numbers alone didn't say what each
+  index is or how the portfolio did against them, and platforms like Status Invest let you inspect a
+  stretch of the chart. Files touched: `src/charts.ts`, `src/returns.ts`, `src/view.ts`,
+  `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/returns.test.ts`,
+  `README.md`, `docs/ARCHITECTURE.md`.
 
 ## 0.17.0 — 2026-10-30
 
