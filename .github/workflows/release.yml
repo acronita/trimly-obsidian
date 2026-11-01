@@ -28,7 +28,9 @@ jobs:
 
       - run: npm run build
 
+      # attestations need a public repository (or a paid plan); a private one would fail the release
       - uses: actions/attest-build-provenance@v2
+        if: ${{ !github.event.repository.private }}
         with:
           subject-path: |
             main.js
