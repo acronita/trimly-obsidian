@@ -803,6 +803,7 @@ export const en: Strings = {
     loadingMovements: (name: string) => `Loading movements of ${name}`,
     loadingItem: "Loading item",
     bcbSeries: (code: number, status: number) => `Central Bank series ${code} failed (HTTP ${status})`,
+    bcbSeriesBody: (code: number, detail: string) => `Central Bank series ${code} failed: ${detail}`,
     b3Index: (index: string, status: number) => `B3's ${index} failed (HTTP ${status})`,
     brapiRejected: "brapi rejected the token",
     brapiQuote: (ticker: string) => `Quote for ${ticker}`,

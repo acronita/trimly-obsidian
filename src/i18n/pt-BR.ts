@@ -810,6 +810,7 @@ export const ptBR = {
     loadingMovements: (name: string) => `Carregar as movimentações de ${name}`,
     loadingItem: "Carregar o item",
     bcbSeries: (code: number, status: number) => `Série ${code} do Banco Central falhou (HTTP ${status})`,
+    bcbSeriesBody: (code: number, detail: string) => `Série ${code} do Banco Central falhou: ${detail}`,
     b3Index: (index: string, status: number) => `${index} da B3 falhou (HTTP ${status})`,
     brapiRejected: "A brapi recusou o token",
     brapiQuote: (ticker: string) => `Cotação de ${ticker}`,

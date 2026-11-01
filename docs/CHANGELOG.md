@@ -13,6 +13,12 @@
   or FII portfolio beat its market. Files touched: `src/b3.ts`, `src/bcb.ts`, `src/returns.ts`,
   `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
   `test/returns.test.ts`, `README.md`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`.
+- 2026-11-01 — Fix: every benchmark failed with "res.json.map is not a function" when the period had
+  no IPCA published yet (e.g. a portfolio started last month, on the 1st of the next). To Obsidian's
+  user agent the Central Bank answers "no values" with HTTP 200 and an error object instead of a 404;
+  that now counts as no values, and its other errors show their message. Poupança is fetched from the
+  first snapshot's date instead of the 1st of its month, so it stays inside the daily series' 10-year
+  window. Files touched: `src/bcb.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`.
 
 ## 0.17.0 — 2026-10-30
 

@@ -32,7 +32,14 @@ async function series(code: number, from: string, to: string): Promise<Rate[]> {
   // SGS answers 404 when the range has no values yet (e.g. this month's IPCA)
   if (res.status === 404) return [];
   if (res.status >= 300) throw new Error(t.errors.bcbSeries(code, res.status));
-  return (res.json as { data: string; valor: string }[]).map((r) => ({ date: fromBr(r.data), rate: Number(r.valor) }));
+  // to a browser user agent (Obsidian's) errors come back as 200 with an object instead of the list
+  const body = res.json as { data: string; valor: string }[] | { error?: string; erro?: string | { statusCode?: number; detail?: string } };
+  if (!Array.isArray(body)) {
+    const err = body.erro;
+    if (typeof err === "object" && err.statusCode === 404) return [];
+    throw new Error(t.errors.bcbSeriesBody(code, body.error ?? (typeof err === "object" ? (err.detail ?? "") : (err ?? ""))));
+  }
+  return body.map((r) => ({ date: fromBr(r.data), rate: Number(r.valor) }));
 }
 
 /**
@@ -49,8 +56,9 @@ export async function fetchBenchmarks(from: string, to: string): Promise<Benchma
   const [cdi, ipca, poupanca, idx] = await Promise.all([
     series(CDI_DAILY, from, to),
     series(IPCA_MONTHLY, monthStart, to),
-    // the deposit made on the 1st stands for the whole month
-    series(POUPANCA, monthStart, to).then((rates) => rates.filter((r) => r.date.endsWith("-01"))),
+    // the deposit made on the 1st stands for the whole month. Starting at `from` keeps this daily
+    // series inside its 10-year window, and loses nothing: a month only counts when it starts after `from`
+    series(POUPANCA, from, to).then((rates) => rates.filter((r) => r.date.endsWith("-01"))),
     indexes,
   ]);
   return { cdi, ipca, poupanca, ...idx };
