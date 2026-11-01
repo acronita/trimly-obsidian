@@ -422,9 +422,11 @@ export const ptBR = {
 
   perf: {
     history: "O histórico é montado a cada sincronização. Volte depois da próxima.",
-    benchOff: "Ligue Comparar com CDI e IPCA nas opções para ver os índices.",
-    benchError: (e: string) => `CDI e IPCA indisponíveis: ${e}`,
-    benchLoading: "Carregando CDI e IPCA…",
+    benchOff: "Ligue Comparar com índices nas opções para ver CDI, IPCA, poupança, IBOV e IFIX.",
+    benchError: (e: string) => `Índices indisponíveis: ${e}`,
+    benchLoading: "Carregando os índices…",
+    indexError: (e: string) => `IBOV e IFIX indisponíveis: ${e}`,
+    poupanca: "Poupança",
     evolution: "Evolução",
     value: "Valor",
     invested: "Aplicado",
@@ -752,10 +754,10 @@ export const ptBR = {
     currencyDesc:
       "Código de três letras, ex.: BRL, USD, EUR. Contas e compras em outra moeda aparecem na moeda original, com a conversão para esta pela cotação do dia (Banco Central Europeu).",
     investments: "Investimentos",
-    benchmarks: "Comparar com CDI e IPCA",
+    benchmarks: "Comparar com índices",
     benchmarksDesc:
-      "Busca as séries públicas de CDI e IPCA no Banco Central (api.bcb.gov.br) quando você abre os investimentos. " +
-      "Só a série e um intervalo de datas são pedidos; nada sobre você ou sua carteira é enviado.",
+      "Busca CDI, IPCA e poupança no Banco Central (api.bcb.gov.br) e IBOV e IFIX no site da B3 (sistemaswebb3-listados.b3.com.br) quando você abre os investimentos. " +
+      "Só o índice e as datas são pedidos; nada sobre você ou sua carteira é enviado.",
     quotes: "Cotações (brapi, opcional)",
     quotesIntro:
       "Atualiza ações, FIIs, ETFs e BDRs pela brapi.dev: preço, variação do dia e nome da empresa. " +
@@ -808,6 +810,7 @@ export const ptBR = {
     loadingMovements: (name: string) => `Carregar as movimentações de ${name}`,
     loadingItem: "Carregar o item",
     bcbSeries: (code: number, status: number) => `Série ${code} do Banco Central falhou (HTTP ${status})`,
+    b3Index: (index: string, status: number) => `${index} da B3 falhou (HTTP ${status})`,
     brapiRejected: "A brapi recusou o token",
     brapiQuote: (ticker: string) => `Cotação de ${ticker}`,
     brapiLimit: "limite de requisições da brapi atingido; tente mais tarde",

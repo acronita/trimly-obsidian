@@ -63,8 +63,10 @@ Time-weighted, from the daily snapshots each sync records: deposits and withdraw
 gains or losses, and dividends, JCP, interest and coupons paid out do count as gains. The money
 moved comes from each position's movements; for a position whose movements Pluggy doesn't return,
 it is estimated from the change in amount invested, which is approximate when a deposit and a
-market move happen between the same two syncs. CDI and IPCA come from the Central Bank of Brazil; IPCA
-only counts months that are over and published.
+market move happen between the same two syncs. CDI, IPCA and poupança come from the Central Bank of
+Brazil; IPCA and poupança only count months that are over (poupança pays on the anniversary, and the
+deposit made on the 1st stands for the month). IBOV and IFIX come from B3's daily closes; IBOV is a
+price index (dividends not included), IFIX includes the funds' payouts.
 
 **I deleted an imported transaction and it came back.**
 Synced accounts mirror the bank for the last 90 days (12 months are imported), so the next sync

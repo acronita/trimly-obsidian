@@ -93,7 +93,7 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { averagePrice, institutionOf, tickerOf } from "./quotes";
-import { IndexPoint, cdiReturn, ipcaReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
+import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
@@ -2003,9 +2003,27 @@ export class TrimlyView extends ItemView {
     return false;
   }
 
-  /** Where the CDI/IPCA columns stand, when they are not shown. */
-  private benchmarkNote(parent: HTMLElement, loaded: boolean) {
-    if (loaded) return;
+  /** The benchmark columns, in order: label, chart class and return between two dates. */
+  private benchColumns(bench: Benchmarks): { label: string; cls: string; ret: (from: string, to: string) => number | null }[] {
+    return [
+      { label: "CDI", cls: "is-cdi", ret: (from, to) => cdiReturn(bench.cdi, from, to) },
+      { label: "IPCA", cls: "is-ipca", ret: (from, to) => monthlyRateReturn(bench.ipca, from, to) },
+      { label: t.perf.poupanca, cls: "is-poupanca", ret: (from, to) => monthlyRateReturn(bench.poupanca, from, to) },
+      { label: "IBOV", cls: "is-ibov", ret: (from, to) => closeReturn(bench.ibov, from, to) },
+      { label: "IFIX", cls: "is-ifix", ret: (from, to) => closeReturn(bench.ifix, from, to) },
+    ];
+  }
+
+  private benchHead() {
+    return ["", t.perf.portfolio, "CDI", "IPCA", t.perf.poupanca, "IBOV", "IFIX"];
+  }
+
+  /** Where the benchmark columns stand, when they are not shown or B3's are missing. */
+  private benchmarkNote(parent: HTMLElement, bench: Benchmarks | null) {
+    if (bench) {
+      if (bench.indexError) parent.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.perf.indexError(bench.indexError) });
+      return;
+    }
     const text = !this.plugin.settings.benchmarks
       ? t.perf.benchOff
       : this.plugin.benchmarkError
@@ -2037,7 +2055,7 @@ export class TrimlyView extends ItemView {
     );
   }
 
-  /** Portfolio vs CDI and IPCA over this month, 12 months and since the first snapshot. */
+  /** Portfolio vs the benchmarks over this month, 12 months and since the first snapshot. */
   private renderPeriodsCard(parent: HTMLElement, ledger: Ledger, link?: { label: string; onClick: () => void }) {
     const card = this.card(parent, t.perf.title, link);
     const points = portfolioIndex(ledger.investments.snapshots);
@@ -2051,18 +2069,14 @@ export class TrimlyView extends ItemView {
     if (first <= yearAgo) periods.push([t.perf.months12, yearAgo]);
     periods.push([t.perf.since(this.longDate(first)), first]);
 
-    const table = card.createDiv("trimly-perf-table");
-    this.perfRow(table, ["", t.perf.portfolio, "CDI", "IPCA"], true);
+    const table = card.createDiv("trimly-perf-table is-bench");
+    const cols = bench ? this.benchColumns(bench) : [];
+    this.perfRow(table, this.benchHead(), true);
     for (const [label, start] of periods) {
       const from = start < first ? first : start;
-      this.perfRow(table, [
-        label,
-        periodReturn(points, from, today),
-        bench ? cdiReturn(bench.cdi, from, today) : null,
-        bench ? ipcaReturn(bench.ipca, from, today) : null,
-      ]);
+      this.perfRow(table, [label, periodReturn(points, from, today), ...(bench ? cols.map((c) => c.ret(from, today)) : new Array<null>(5).fill(null))]);
     }
-    this.benchmarkNote(card, !!bench);
+    this.benchmarkNote(card, bench);
   }
 
   /** A row of the performance table; numbers are fractions, shown as signed percentages. */
@@ -2089,11 +2103,11 @@ export class TrimlyView extends ItemView {
       const legend = chartCard.createDiv("trimly-legend-inline");
       legend.createSpan("trimly-key is-accent").createSpan({ text: t.perf.portfolio });
       const series = [{ values: points.map((p) => (p.index - 1) * 100), cls: "is-accent" }];
-      if (bench) {
-        legend.createSpan("trimly-key is-cdi").createSpan({ text: "CDI" });
-        legend.createSpan("trimly-key is-ipca").createSpan({ text: "IPCA" });
-        series.push({ values: points.map((p) => cdiReturn(bench.cdi, first, p.date) * 100), cls: "is-cdi" });
-        series.push({ values: points.map((p) => ipcaReturn(bench.ipca, first, p.date) * 100), cls: "is-ipca" });
+      // a column without data (B3 down) stays out of the chart
+      const cols = bench ? this.benchColumns(bench).filter((c) => c.ret(first, points[points.length - 1].date) !== null) : [];
+      for (const c of cols) {
+        legend.createSpan(`trimly-key ${c.cls}`).createSpan({ text: c.label });
+        series.push({ values: points.map((p) => (c.ret(first, p.date) ?? 0) * 100), cls: c.cls });
       }
       lineChart(
         chartCard,
@@ -2103,15 +2117,10 @@ export class TrimlyView extends ItemView {
         (i) => [
           this.longDate(points[i].date),
           `${t.perf.portfolio}: ${this.signedPct(points[i].index - 1)}`,
-          ...(bench
-            ? [
-                `CDI: ${this.signedPct(cdiReturn(bench.cdi, first, points[i].date))}`,
-                `IPCA: ${this.signedPct(ipcaReturn(bench.ipca, first, points[i].date))}`,
-              ]
-            : []),
+          ...cols.map((c) => `${c.label}: ${this.signedPct(c.ret(first, points[i].date))}`),
         ]
       );
-      this.benchmarkNote(chartCard, !!bench);
+      this.benchmarkNote(chartCard, bench);
     }
 
     const row = body.createDiv("trimly-grid");
@@ -2119,12 +2128,12 @@ export class TrimlyView extends ItemView {
     const monthCard = this.card(row, t.perf.monthByMonth);
     if (this.needsHistory(monthCard, points)) {
       const bench = this.plugin.benchmarks(points[0].date);
-      const table = monthCard.createDiv("trimly-perf-table");
-      this.perfRow(table, ["", t.perf.portfolio, "CDI", "IPCA"], true);
+      const table = monthCard.createDiv("trimly-perf-table is-bench");
+      this.perfRow(table, this.benchHead(), true);
       for (const m of monthlyReturns(points, bench, todayISO()).reverse()) {
-        this.perfRow(table, [this.monthLabel(m.month), m.portfolio, m.cdi, m.ipca]);
+        this.perfRow(table, [this.monthLabel(m.month), m.portfolio, m.cdi, m.ipca, m.poupanca, m.ibov, m.ifix]);
       }
-      this.benchmarkNote(monthCard, !!bench);
+      this.benchmarkNote(monthCard, bench);
     }
     body.createDiv({
       cls: "trimly-muted",

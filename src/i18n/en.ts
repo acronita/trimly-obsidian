@@ -416,9 +416,11 @@ export const en: Strings = {
 
   perf: {
     history: "History builds up with each bank sync. Check back after the next one.",
-    benchOff: "Turn on Compare with CDI and IPCA in settings to see the benchmarks.",
-    benchError: (e: string) => `CDI and IPCA unavailable: ${e}`,
-    benchLoading: "Loading CDI and IPCA…",
+    benchOff: "Turn on Compare with benchmarks in settings to see CDI, IPCA, poupança, IBOV and IFIX.",
+    benchError: (e: string) => `Benchmarks unavailable: ${e}`,
+    benchLoading: "Loading the benchmarks…",
+    indexError: (e: string) => `IBOV and IFIX unavailable: ${e}`,
+    poupanca: "Poupança",
     evolution: "Evolution",
     value: "Value",
     invested: "Invested",
@@ -745,10 +747,10 @@ export const en: Strings = {
     currencyDesc:
       "Three-letter currency code, for example BRL, USD, EUR. Accounts and purchases in another currency show in their own currency, converted to this one at the day's rate (European Central Bank).",
     investments: "Investments",
-    benchmarks: "Compare with CDI and IPCA",
+    benchmarks: "Compare with benchmarks",
     benchmarksDesc:
-      "Fetches the public CDI and IPCA series from the Central Bank of Brazil (api.bcb.gov.br) when you open the investments view. " +
-      "Only the series and a date range are requested; nothing about you or your portfolio is sent.",
+      "Fetches CDI, IPCA and poupança from the Central Bank of Brazil (api.bcb.gov.br) and IBOV and IFIX from the B3 website (sistemaswebb3-listados.b3.com.br) when you open the investments view. " +
+      "Only the index and the dates are requested; nothing about you or your portfolio is sent.",
     quotes: "Quotes (brapi, optional)",
     quotesIntro:
       "Updates stocks, real estate funds, ETFs and BDRs from brapi.dev: price, daily change and company name. " +
@@ -801,6 +803,7 @@ export const en: Strings = {
     loadingMovements: (name: string) => `Loading movements of ${name}`,
     loadingItem: "Loading item",
     bcbSeries: (code: number, status: number) => `Central Bank series ${code} failed (HTTP ${status})`,
+    b3Index: (index: string, status: number) => `B3's ${index} failed (HTTP ${status})`,
     brapiRejected: "brapi rejected the token",
     brapiQuote: (ticker: string) => `Quote for ${ticker}`,
     brapiLimit: "brapi request limit reached; try again later",
