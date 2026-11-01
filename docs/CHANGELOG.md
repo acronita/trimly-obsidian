@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.18.0 — 2026-11-01
+
+- 2026-11-01 — Returns compare with poupança, IBOV and IFIX besides CDI and IPCA, in the periods
+  and month-by-month tables and the cumulative chart. Poupança is the Central Bank's SGS series 195
+  (the deposit made on the 1st; a month counts once it is over). IBOV and IFIX are B3's daily closes
+  from its website's index statistics (new `src/b3.ts`, one request per index per year, no key);
+  brapi's free plan has no IFIX history and only 90 days per request. That address is not a
+  documented API, so if it fails only those two columns go empty, with a notice. The setting is now
+  *Comparar com índices* (same `benchmarks` key). `ipcaReturn` became `monthlyRateReturn`; new
+  `closeReturn`. Why: the roadmap's *Mais benchmarks*; CDI and IPCA alone don't say whether a stock
+  or FII portfolio beat its market. Files touched: `src/b3.ts`, `src/bcb.ts`, `src/returns.ts`,
+  `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/returns.test.ts`, `README.md`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`.
+
 ## 0.17.0 — 2026-10-30
 
 - 2026-10-30 — Planning shows whether spending and investing follow the plan, then what the month

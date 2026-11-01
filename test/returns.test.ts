@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { cdiReturn, ipcaReturn, monthlyReturns, periodReturn, portfolioIndex } from "../src/returns.ts";
+import { cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "../src/returns.ts";
 import type { PortfolioSnapshot } from "../src/ledger.ts";
 
 const close = (actual: number | null, expected: number) => {
@@ -62,8 +62,8 @@ test("IPCA only counts months fully inside the period", () => {
     { date: "2026-09-01", rate: 0.82 },
   ];
   // August ends after the period; September is entirely inside
-  close(ipcaReturn(ipca, "2026-08-15", "2026-09-30"), 0.0082);
-  close(ipcaReturn(ipca, "2026-07-31", "2026-09-30"), 0.9968 * 1.0082 - 1);
+  close(monthlyRateReturn(ipca, "2026-08-15", "2026-09-30"), 0.0082);
+  close(monthlyRateReturn(ipca, "2026-07-31", "2026-09-30"), 0.9968 * 1.0082 - 1);
 });
 
 test("monthly returns line up with the benchmarks of each month", () => {
@@ -72,7 +72,23 @@ test("monthly returns line up with the benchmarks of each month", () => {
     snap("2026-09-30", 1010_00, 1000_00),
     snap("2026-10-25", 1030_20, 1000_00),
   ]);
-  const months = monthlyReturns(idx, { cdi: [{ date: "2026-10-01", rate: 0.05 }], ipca: [{ date: "2026-09-01", rate: 0.82 }] }, "2026-10-25");
+  const months = monthlyReturns(
+    idx,
+    {
+      cdi: [{ date: "2026-10-01", rate: 0.05 }],
+      ipca: [{ date: "2026-09-01", rate: 0.82 }],
+      poupanca: [
+        { date: "2026-09-01", rate: 0.67 },
+        { date: "2026-10-01", rate: 0.68 },
+      ],
+      ibov: [
+        { date: "2026-09-30", close: 100 },
+        { date: "2026-10-24", close: 95 },
+      ],
+      ifix: null,
+    },
+    "2026-10-25"
+  );
   assert.deepEqual(
     months.map((m) => m.month),
     ["2026-09", "2026-10"]
@@ -83,4 +99,24 @@ test("monthly returns line up with the benchmarks of each month", () => {
   close(months[0].ipca, 0.0082);
   // October's IPCA is not out yet
   assert.equal(months[1].ipca, null);
+  // poupança pays on the anniversary: October's yield only counts once the month is over
+  close(months[0].poupanca, 0.0067);
+  assert.equal(months[1].poupanca, null);
+  // B3 down: the IFIX column stays empty instead of showing a 0% month
+  assert.equal(months[1].ifix, null);
+  close(months[1].ibov, -0.05);
+});
+
+test("an index return runs from the last close on or before each date", () => {
+  const ibov = [
+    { date: "2026-10-02", close: 100 },
+    { date: "2026-10-05", close: 110 },
+    { date: "2026-10-09", close: 121 },
+  ];
+  // the 3rd and 4th are a weekend: the 2nd's close stands for them
+  close(closeReturn(ibov, "2026-10-04", "2026-10-08"), 0.1);
+  // a portfolio older than the data counts from the first close
+  close(closeReturn(ibov, "2026-09-01", "2026-10-09"), 0.21);
+  assert.equal(closeReturn([], "2026-10-01", "2026-10-09"), null);
+  assert.equal(closeReturn(null, "2026-10-01", "2026-10-09"), null);
 });

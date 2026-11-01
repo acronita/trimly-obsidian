@@ -1,5 +1,6 @@
 /**
- * Portfolio returns from the daily snapshots, and CDI/IPCA benchmarks.
+ * Portfolio returns from the daily snapshots, and the benchmarks: CDI, IPCA,
+ * poupança, IBOV and IFIX.
  *
  * Returns are time-weighted: money put in or taken out is not gain or loss,
  * and income paid out (dividends, coupons) is. Snapshots record their flows at
@@ -18,15 +19,26 @@ export interface IndexPoint {
   index: number;
 }
 
-/** One value of a BCB series: CDI per day, or IPCA per month (dated the 1st), in percent. */
+/** One value of a BCB series: CDI per day, or IPCA and poupança per month (dated the 1st), in percent. */
 export interface Rate {
   date: string;
   rate: number;
 }
 
+/** An index's closing points on a trading day (IBOV, IFIX), oldest first. */
+export interface Close {
+  date: string;
+  close: number;
+}
+
 export interface Benchmarks {
   cdi: Rate[];
   ipca: Rate[];
+  poupanca: Rate[];
+  /** null when B3 could not be reached; see `indexError` */
+  ibov: Close[] | null;
+  ifix: Close[] | null;
+  indexError?: string;
 }
 
 /** Chain the per-snapshot returns into a cumulative index. */
@@ -80,14 +92,38 @@ function monthEnd(month: string): string {
   return toISODate(new Date(y, m, 0));
 }
 
-/** IPCA of the months that lie entirely after `from` and end by `to`, compounded, as a fraction. */
-export function ipcaReturn(ipca: Rate[], from: string, to: string): number {
+/**
+ * Monthly rates (IPCA, poupança) of the months that lie entirely after `from` and
+ * end by `to`, compounded, as a fraction.
+ */
+export function monthlyRateReturn(rates: Rate[], from: string, to: string): number {
   let f = 1;
-  for (const r of ipca) {
+  for (const r of rates) {
     const month = r.date.slice(0, 7);
     if (`${month}-01` > from && monthEnd(month) <= to) f *= 1 + r.rate / 100;
   }
   return f - 1;
+}
+
+/** Close on `date` (last one on or before it), or null before the first. */
+function closeAt(closes: Close[], date: string): number | null {
+  let value: number | null = null;
+  for (const c of closes) {
+    if (c.date > date) break;
+    value = c.close;
+  }
+  return value;
+}
+
+/**
+ * Index change between the closes on `from` and on `to`, as a fraction; `from`
+ * before the first close counts from it. null without closes.
+ */
+export function closeReturn(closes: Close[] | null, from: string, to: string): number | null {
+  if (!closes || closes.length === 0) return null;
+  const start = closeAt(closes, from) ?? closes[0].close;
+  const end = closeAt(closes, to);
+  return end === null || start === 0 ? null : end / start - 1;
 }
 
 export interface MonthReturn {
@@ -97,6 +133,10 @@ export interface MonthReturn {
   cdi: number | null;
   /** null until the IBGE publishes the month */
   ipca: number | null;
+  /** null until the month ends: poupança pays on the anniversary */
+  poupanca: number | null;
+  ibov: number | null;
+  ifix: number | null;
 }
 
 /** Month by month from the first snapshot's month to `today`'s, oldest first. */
@@ -110,11 +150,15 @@ export function monthlyReturns(points: IndexPoint[], bench: Benchmarks | null, t
     const end = monthEnd(m);
     const to = end > today ? today : end;
     const ipca = bench?.ipca.find((r) => r.date.startsWith(m));
+    const poupanca = end <= today ? bench?.poupanca.find((r) => r.date.startsWith(m)) : undefined;
     out.push({
       month: m,
       portfolio: periodReturn(points, from, to),
       cdi: bench ? cdiReturn(bench.cdi, from, to) : null,
       ipca: ipca ? ipca.rate / 100 : null,
+      poupanca: poupanca ? poupanca.rate / 100 : null,
+      ibov: closeReturn(bench?.ibov ?? null, from, to),
+      ifix: closeReturn(bench?.ifix ?? null, from, to),
     });
   }
   return out;

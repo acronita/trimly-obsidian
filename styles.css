@@ -543,6 +543,15 @@ button.trimly-add.is-icon {
 .trimly-key.is-ipca::before {
   background: var(--color-purple);
 }
+.trimly-key.is-poupanca::before {
+  background: var(--color-yellow);
+}
+.trimly-key.is-ibov::before {
+  background: var(--color-cyan);
+}
+.trimly-key.is-ifix::before {
+  background: var(--color-pink);
+}
 .trimly-line-plot {
   position: relative;
   height: 160px;
@@ -594,6 +603,15 @@ button.trimly-add.is-icon {
 .trimly-line-dot.is-ipca {
   background: var(--color-purple);
 }
+.trimly-line-dot.is-poupanca {
+  background: var(--color-yellow);
+}
+.trimly-line-dot.is-ibov {
+  background: var(--color-cyan);
+}
+.trimly-line-dot.is-ifix {
+  background: var(--color-pink);
+}
 .trimly-line-tip {
   top: 4px;
   left: var(--trimly-x);
@@ -636,6 +654,15 @@ button.trimly-add.is-icon {
 .trimly-line-stroke.is-ipca {
   stroke: var(--color-purple);
 }
+.trimly-line-stroke.is-poupanca {
+  stroke: var(--color-yellow);
+}
+.trimly-line-stroke.is-ibov {
+  stroke: var(--color-cyan);
+}
+.trimly-line-stroke.is-ifix {
+  stroke: var(--color-pink);
+}
 .trimly-line-area {
   stroke: none;
   opacity: 0.12;
@@ -669,6 +696,12 @@ button.trimly-add.is-icon {
 }
 .trimly-perf-row:last-child {
   border-bottom: none;
+}
+.trimly-perf-table.is-bench {
+  overflow-x: auto;
+}
+.trimly-perf-table.is-bench .trimly-perf-row {
+  grid-template-columns: minmax(5.5em, 1.4fr) repeat(6, minmax(4.4em, 1fr));
 }
 .trimly-perf-row.is-head {
   font-size: var(--font-ui-smaller);

@@ -71,7 +71,7 @@ passphrase that never leaves your device.
 - **Investments** — a switch at the top toggles the dashboard to investments: portfolio value,
   profit, allocation by class and institution, upcoming maturities, every position grouped by
   class, an evolution chart, time-weighted returns (month by month, 12 months, since start)
-  compared with CDI and IPCA, every contribution, withdrawal and tax, and the income (dividends,
+  compared with CDI, IPCA, poupança, IBOV and IFIX, every contribution, withdrawal and tax, and the income (dividends,
   JCP, interest, coupons) per month and per position. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
@@ -105,9 +105,12 @@ passphrase that never leaves your device.
 - **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With
-  investments that have history, the investments view also fetches the public CDI and IPCA series
-  from `api.bcb.gov.br` (Central Bank of Brazil); only the series and a date range are requested.
-  Turn off *Compare with CDI and IPCA* in settings to stop it. With a brapi token, Trimly sends the
+  investments that have history, the investments view also fetches the public CDI, IPCA and
+  poupança series from `api.bcb.gov.br` (Central Bank of Brazil) and the IBOV and IFIX daily closes
+  from `sistemaswebb3-listados.b3.com.br` (the B3 website's index statistics, one request per index
+  per year); only the index and the dates are requested. The B3 address is not a documented API: if
+  it changes, the IBOV and IFIX columns stay empty with a notice and the rest keeps working. Turn off
+  *Comparar com índices* in settings to stop both. With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
   reference rates (European Central Bank data) from `api.frankfurter.dev`, at most once a day; only
