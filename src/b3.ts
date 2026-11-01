@@ -1,14 +1,17 @@
 import { requestUrl } from "obsidian";
 import { t } from "./i18n";
+import { parseCashDividends } from "./proventos";
+import type { CashDividend, Provento } from "./proventos";
 import type { Close } from "./returns";
 
 /**
- * IBOV and IFIX daily closes from the B3 website's public index statistics.
- * Not a documented API: it is what the site's "estatísticas históricas" page
- * calls, so it can change without notice. No key, and nothing about the user is
- * sent: only the index and the year.
+ * Data from the B3 website's public pages: IBOV and IFIX daily closes (index
+ * statistics) and announced proventos (listed companies, FIIs included). Not a
+ * documented API: it is what the site's pages call, so it can change without
+ * notice. No key; only the index and year, or the issuer code ("PETR"), is sent.
  */
 const BASE = "https://sistemaswebb3-listados.b3.com.br/indexStatisticsProxy/IndexCall/GetPortfolioDay";
+const COMPANY = "https://sistemaswebb3-listados.b3.com.br/listedCompaniesProxy/CompanyCall/GetListedSupplementCompany";
 
 /** One row per day of the month; rateValue1..12 are that day's close in each month ("3.311,48"), null without trading. */
 type DayRow = { day: number } & Record<string, string | null | number>;
@@ -39,4 +42,25 @@ export async function fetchIndexCloses(index: string, from: string, to: string):
   for (let y = Number(from.slice(0, 4)); y <= Number(to.slice(0, 4)); y++) years.push(y);
   const all = await Promise.all(years.map((y) => year(index, y)));
   return all.flat().filter((c) => c.date <= to);
+}
+
+export interface ProventoFetch {
+  proventos: Provento[];
+  /** one message per issuer that could not be read */
+  errors: string[];
+}
+
+/** Announced proventos of each issuer ("PETR", "HGLG"), one request each. */
+export async function fetchProventos(issuers: string[]): Promise<ProventoFetch> {
+  const out: ProventoFetch = { proventos: [], errors: [] };
+  await Promise.all(
+    issuers.map(async (issuer) => {
+      const query = btoa(JSON.stringify({ issuingCompany: issuer, language: "pt-br" }));
+      const res = await requestUrl({ url: `${COMPANY}/${query}`, throw: false });
+      if (res.status >= 300) return void out.errors.push(t.errors.b3Proventos(issuer, res.status));
+      const body = res.json as { cashDividends?: CashDividend[] }[] | null;
+      out.proventos.push(...parseCashDividends((Array.isArray(body) ? body[0]?.cashDividends : undefined) ?? []));
+    })
+  );
+  return out;
 }

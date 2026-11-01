@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.19.0 — 2026-11-01
+
+- 2026-11-01 — The income tab opens with *Próximos proventos*: dividends, JCP and FII income B3 has
+  announced for the open positions with a B3 ticker, grouped by payment month, each with data-com,
+  payment date, value per share and an estimate by today's quantity (JCP net of the 15% withheld),
+  plus the total expected. They come from the B3 website's listed-company page data (new
+  `fetchProventos` in `src/b3.ts`, one request per issuer, FIIs included), matched to the ticker by
+  the ISIN's share type (new `src/proventos.ts`), cached in memory for the day and never written to
+  the vault. New setting *Agenda de proventos* (on by default; new `proventos` key in `data.json`).
+  Why: the roadmap's *Agenda de proventos futuros*, dropped in October because brapi's free plan has
+  no dividends; B3 lists them without a key. Files touched: `src/b3.ts`, `src/proventos.ts`,
+  `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/proventos.test.ts`,
+  `test/encryption-rule.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
+
 ## 0.18.0 — 2026-11-01
 
 - 2026-11-01 — Returns compare with poupança, IBOV and IFIX besides CDI and IPCA, in the periods
