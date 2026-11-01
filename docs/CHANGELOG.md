@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- 2026-11-01 — README gets a *Screenshots* section with eight screens (overview, accounts, obrigações,
+  recurring, investments, returns, allocation targets, proventos), flagged as fictitious values.
+  Why: the screenshots taken on 2026-10-27 never made it into the README, and their test ledger uses
+  amounts much higher than a typical one. Files touched: `README.md`, `docs/screenshots/*.jpg`.
+
 ## 0.20.0 — 2026-11-01
 
 - 2026-11-01 — *Próximos proventos* forecasts next month's income of a FII that pays every month and

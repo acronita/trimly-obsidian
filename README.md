@@ -6,6 +6,21 @@ Your vault may be synced or pushed to a Git remote; your finances shouldn't be r
 stores all of its data in a single file encrypted with AES-256-GCM, using a key derived from a
 passphrase that never leaves your device.
 
+## Screenshots
+
+> **All values in these screenshots are fictitious.** They come from a made-up test ledger, not
+> anyone's real finances, so balances and amounts are not meant to be realistic.
+
+| Overview | Accounts and cards |
+|---|---|
+| ![Overview](docs/screenshots/visao-geral.jpg) | ![Accounts and credit cards](docs/screenshots/contas-cartoes.jpg) |
+| **Obrigações** | **Recurring** |
+| ![Obligations](docs/screenshots/obrigacoes.jpg) | ![Recurring and subscriptions](docs/screenshots/recorrentes.jpg) |
+| **Investments** | **Returns** |
+| ![Investments overview](docs/screenshots/investimentos.jpg) | ![Returns vs. CDI and IPCA](docs/screenshots/rentabilidade.jpg) |
+| **Allocation targets** | **Proventos** |
+| ![Allocation targets](docs/screenshots/metas.jpg) | ![Proventos](docs/screenshots/proventos.jpg) |
+
 ## Features
 
 - **Overview** — net worth, the month's income, expenses and savings rate (projected with recurring
