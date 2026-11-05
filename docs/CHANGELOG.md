@@ -10,6 +10,19 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.21.0 — 2026-11-05
+
+- 2026-11-05 — Planning gets *Metas de poupança*: a goal has a name, an amount, a date and one account
+  or position it is measured by (new optional `goals` on the ledger; version unchanged). Each tile shows
+  how much is saved, from today's balance, and how much to save per month until the date, or that the
+  goal was reached or is past due (new `goalProgress`). Goals sharing an account or position are flagged,
+  since the balance counts in full in each; a goal whose account was deleted or position closed asks
+  for another link. `progress` in the view takes an optional `warn`, so a goal near its end doesn't turn
+  amber. Why: the roadmap's *Metas de poupança*; only allocation targets and the monthly investment goal
+  existed. Files touched: `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/goals.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 0.20.0 — 2026-11-01
 
 - 2026-11-01 — *Próximos proventos* forecasts next month's income of a FII that pays every month and
