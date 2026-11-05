@@ -47,6 +47,11 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
+- **Income tax** (*IR*, in the investments mode) — an estimate from your movements: average price per
+  asset, each month's result and DARF with its due date, the R$ 20.000 stock exemption meter, losses
+  to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,
+  not day trades, options, fixed income ETFs, FI-Infra, splits or bonus shares. It issues nothing, and
+  lists the positions whose numbers need checking; confirm with the Receita or an accountant.
 - **Savings goals** (*Metas de poupança*, in Planning) — an amount to have by a date (emergency fund,
   a trip), measured by today's balance of one account or position, with how much to save per month until
   then. Goals on the same account or position are flagged, since the balance counts in full in each.

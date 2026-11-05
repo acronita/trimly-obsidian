@@ -10,6 +10,23 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.22.0 — 2026-11-05
+
+- 2026-11-05 — New *IR* tab in the investments mode, with the month picker: average price per asset,
+  each month's sales, result and DARF (code 6015, due the last business day of the next month; under
+  R$ 10 it waits for the next one), the R$ 20.000 stock exemption meter, losses carried forward (stocks,
+  BDRs and ETFs apart from FIIs) and the costs for *Bens e direitos* at the two year-ends the return
+  asks for. Rates are 15% for stocks, BDRs and ETFs and 20% for FIIs. Everything is computed from the
+  movements on the device (new `src/income-tax.ts`); nothing is stored or sent, and no DARF is issued.
+  Positions whose numbers are uncertain (no quantity, shares from before the movements, transfers,
+  amortizations, possible day trades) are listed to check, and a sale with no known cost marks its month
+  incomplete instead of counting a made-up gain. Not covered: day trades, options, fixed income ETFs,
+  FI-Infra, splits and bonus shares. Group and code are shown for stocks (03-01) and FIIs (07-03) only,
+  since the sources disagree on ETFs. Why: the roadmap's *Apoio ao IR de renda variável*, the main
+  reason people pay for Investidor10 or myProfit. Files touched: `src/income-tax.ts`, `src/view.ts`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/income-tax.test.ts`, `README.md`, `docs/ARCHITECTURE.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.21.0 — 2026-11-05
 
 - 2026-11-05 — Planning gets *Metas de poupança*: a goal has a name, an amount, a date and one account

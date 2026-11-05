@@ -95,6 +95,7 @@ import {
 } from "./ledger";
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
+import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
 import { estimatedPayouts, lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
 import type { EstimatedPayout } from "./proventos";
 import { averagePrice, institutionOf, tickerOf } from "./quotes";
@@ -111,7 +112,7 @@ function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   });
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -138,6 +139,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "movements", label: "movements", icon: "arrow-left-right" },
     { id: "income", label: "income", icon: "coins" },
     { id: "targets", label: "targets", icon: "target" },
+    { id: "tax", label: "tax", icon: "landmark" },
   ],
 };
 
@@ -265,6 +267,9 @@ export class TrimlyView extends ItemView {
         break;
       case "targets":
         this.renderTargets(body, ledger);
+        break;
+      case "tax":
+        this.renderTax(body, ledger);
         break;
     }
     root.scrollTop = scroll;
@@ -434,7 +439,7 @@ export class TrimlyView extends ItemView {
       if (m.id === this.mode) b.addClass("is-active");
       b.addEventListener("click", () => this.setMode(m.id));
     }
-    if (this.mode === "accounts") this.renderMonthNav(left);
+    if (this.mode === "accounts" || this.tabs[this.mode] === "tax") this.renderMonthNav(left);
 
     const actions = top.createDiv("trimly-top-actions");
     const hidden = this.plugin.settings.hideValues;
@@ -2539,6 +2544,110 @@ export class TrimlyView extends ItemView {
       });
     }
     if (this.plugin.proventoError) foot(t.income.upcomingError(this.plugin.proventoError));
+  }
+
+  /** Income tax on variable income for the browsed month and its year. An estimate: `src/income-tax.ts` says what it leaves out. */
+  private renderTax(body: HTMLElement, ledger: Ledger) {
+    if (ledger.investments.assets.length === 0) return this.emptyInvestments(body);
+    const positions = taxPositions(ledger);
+    if (positions.length === 0) return this.empty(body, "landmark", t.tax.empty);
+    const months = taxMonths(positions);
+    const current = months.find((m) => m.month === this.month);
+    const year = this.month.slice(0, 4);
+    const signed = (cents: number) => `${cents < 0 ? "−" : ""}${this.money(Math.abs(cents))}`;
+
+    const head = body.createDiv("trimly-page-head");
+    const h = head.createDiv();
+    h.createDiv({ cls: "trimly-eyebrow", text: t.tax.title(this.monthLabel(this.month)) });
+    h.createDiv({ cls: "trimly-page-value", text: current?.darf ? this.money(current.darf) : t.tax.noDarf });
+    if (current?.due) h.createDiv({ cls: "trimly-muted", text: t.tax.dueOn(this.shortDate(current.due)) });
+    if (current?.incomplete) h.createDiv({ cls: "trimly-muted is-expense", text: t.tax.incomplete });
+    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.tax.disclaimer });
+
+    const sold = current?.stockSales ?? 0;
+    const meter = this.card(body, t.tax.exemption);
+    meter.createDiv({
+      cls: `trimly-tile-value ${sold > STOCK_EXEMPTION ? "is-expense" : ""}`,
+      text: sold > STOCK_EXEMPTION ? t.tax.exemptionOver : t.tax.exemptionLeft(this.money(STOCK_EXEMPTION - sold)),
+    });
+    this.progress(meter, sold, STOCK_EXEMPTION, "var(--interactive-accent)");
+    meter.createDiv({ cls: "trimly-muted", text: t.tax.exemptionOf(this.money(sold), this.money(STOCK_EXEMPTION)) });
+    if (current?.exemptGain) meter.createDiv({ cls: "trimly-muted is-income", text: t.tax.exemptGain(this.money(current.exemptGain)) });
+    meter.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.tax.exemptionNote });
+
+    const table = (card: HTMLElement, labels: string[]) => {
+      const el = card.createDiv("trimly-perf-table");
+      const row = el.createDiv("trimly-perf-row is-head");
+      labels.forEach((label, i) => row.createDiv({ cls: i ? "trimly-perf-cell" : "trimly-perf-label", text: label }));
+      return el;
+    };
+
+    const yearCard = this.card(body, t.tax.year(year));
+    const inYear = months.filter((m) => m.month.startsWith(year));
+    if (inYear.length === 0) yearCard.createDiv({ cls: "trimly-muted", text: t.tax.noSales });
+    else {
+      const el = table(yearCard, [t.tax.month, t.tax.sales, t.tax.result, t.tax.darf]);
+      for (const m of inYear) {
+        const row = el.createDiv("trimly-perf-row");
+        row.createDiv({ cls: "trimly-perf-label", text: this.monthLabel(m.month) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(m.common.sales + m.fii.sales) });
+        const result = m.common.gain + m.fii.gain + m.exemptGain;
+        row.createDiv({ cls: `trimly-perf-cell trimly-amount ${result < 0 ? "is-expense" : ""}`, text: `${signed(result)}${m.incomplete ? " *" : ""}` });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: m.darf ? this.money(m.darf) : "—" });
+      }
+    }
+    const latest = months.filter((m) => m.month <= this.month).pop();
+    if (latest && (latest.common.lossCarry || latest.fii.lossCarry)) {
+      yearCard.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.tax.losses(this.money(latest.common.lossCarry), this.money(latest.fii.lossCarry)) });
+    }
+
+    const label = (a: Asset) => a.code?.trim().toUpperCase() || a.name;
+    const count = (n: number) => (this.plugin.settings.hideValues ? "••••" : new Intl.NumberFormat(this.plugin.locale(), { maximumFractionDigits: 6 }).format(n));
+    const held = positions.filter((p) => p.quantity > 0).sort((x, y) => (label(x.asset) < label(y.asset) ? -1 : 1));
+    if (held.length) {
+      const el = table(this.card(body, t.tax.averageTitle), [t.tax.position, t.tax.quantity, t.tax.average, t.tax.cost]);
+      for (const p of held) {
+        const row = el.createDiv("trimly-perf-row");
+        row.createDiv({ cls: "trimly-perf-label", text: label(p.asset) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: count(p.quantity) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(Math.round(p.cost / p.quantity)) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(p.cost) });
+      }
+    }
+
+    // the return filed in a year looks at the year before it, and asks for that year-end and the previous one
+    const filed = String(Number(year) - 1);
+    const before = String(Number(year) - 2);
+    const atYearEnds = positions
+      .map((p) => ({ p, end: p.at(`${filed}-12-31`), start: p.at(`${before}-12-31`) }))
+      .filter((x) => x.end.quantity > 0 || x.start.quantity > 0)
+      .sort((x, y) => (label(x.p.asset) < label(y.p.asset) ? -1 : 1));
+    if (atYearEnds.length) {
+      const card = this.card(body, t.tax.assetsTitle(filed));
+      const el = table(card, [t.tax.position, t.tax.quantity, t.tax.costAt(before), t.tax.costAt(filed)]);
+      for (const { p, end, start } of atYearEnds) {
+        const code = assetCode(p.kind);
+        const row = el.createDiv("trimly-perf-row");
+        row.createDiv({ cls: "trimly-perf-label", text: code ? `${code} · ${label(p.asset)}` : label(p.asset) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: count(end.quantity) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(start.cost) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(end.cost) });
+      }
+      card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.tax.assetsNote });
+    }
+
+    const flagged = positions.filter((p) => p.issues.length);
+    if (flagged.length) {
+      const card = this.card(body, t.tax.issuesTitle);
+      card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.tax.issuesHint });
+      for (const p of flagged) {
+        const row = card.createDiv("trimly-row is-clickable");
+        const main = row.createDiv("trimly-row-main");
+        main.createDiv({ cls: "trimly-row-title", text: label(p.asset) });
+        for (const issue of p.issues) main.createDiv({ cls: "trimly-muted", text: t.tax.issue[issue] });
+        row.addEventListener("click", () => this.showAsset(p.asset.id));
+      }
+    }
   }
 
   private renderTargets(body: HTMLElement, ledger: Ledger) {
