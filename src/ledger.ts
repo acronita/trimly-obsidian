@@ -159,6 +159,19 @@ export interface Budget {
   limit: number;
 }
 
+/** Money to have by a date (emergency fund, a trip), measured by what one account or position holds. */
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  /** in cents, in the settings' currency */
+  target: number;
+  /** ISO date to reach it by */
+  date: string;
+  /** what it is measured by: an account, or else a position */
+  accountId?: string;
+  assetId?: string;
+}
+
 export interface Recurring {
   id: string;
   description: string;
@@ -393,6 +406,7 @@ export interface Ledger {
   investments: Investments;
   /** each month's plan ("YYYY-MM"), saved once that month is edited; a month without one uses the latest before it */
   plans?: Record<string, MonthBudget>;
+  goals?: SavingsGoal[];
   /** categories learned from the user: transactions whose description has this key get this category */
   categoryRules?: CategoryRule[];
   /** set when bank sync is configured */
@@ -484,6 +498,7 @@ export function parseLedger(json: string): Ledger {
       targets: raw.investments?.targets ?? [],
     },
     plans: raw.plans,
+    goals: raw.goals,
     categoryRules: raw.categoryRules,
     pluggy: raw.pluggy,
     brapi: raw.brapi,
@@ -926,6 +941,57 @@ export function movementFlow(m: Movement): number {
     default:
       return 0;
   }
+}
+
+// ---- savings goals ----
+
+export interface GoalProgress {
+  /** what the linked account or position holds now, in the settings' currency; never negative */
+  saved: number;
+  left: number;
+  /** to save per month to reach the target by the date; 0 once done or late */
+  monthly: number;
+  status: "active" | "done" | "late";
+  /** false when the account was deleted or the position closed */
+  linked: boolean;
+  /** another goal counts the same account or position, so the balance counts in full in both */
+  shared: boolean;
+}
+
+export function goalProgress(ledger: Ledger, goal: SavingsGoal, today: string): GoalProgress {
+  const account = goal.accountId ? ledger.accounts.find((a) => a.id === goal.accountId) : undefined;
+  const asset = goal.assetId ? openAssets(ledger).find((a) => a.id === goal.assetId) : undefined;
+  const balance = account ? toBase(ledger, accountBalance(ledger, account.id), account.currency) : (asset?.value ?? 0);
+  const saved = Math.max(0, Math.round(balance));
+  const left = Math.max(0, goal.target - saved);
+  const status = left === 0 ? "done" : goal.date < today ? "late" : "active";
+  const [fromYear, fromMonth] = today.split("-").map(Number);
+  const [toYear, toMonth] = goal.date.split("-").map(Number);
+  // a goal due this month still has this month to save in
+  const months = Math.max(1, (toYear - fromYear) * 12 + toMonth - fromMonth);
+  return {
+    saved,
+    left,
+    monthly: status === "active" ? Math.ceil(left / months) : 0,
+    status,
+    linked: !!account || !!asset,
+    shared: (ledger.goals ?? []).some(
+      (g) => g.id !== goal.id && (goal.accountId ? g.accountId === goal.accountId : !!goal.assetId && g.assetId === goal.assetId)
+    ),
+  };
+}
+
+export function saveGoal(ledger: Ledger, goal: SavingsGoal) {
+  const goals = ledger.goals ?? [];
+  const i = goals.findIndex((g) => g.id === goal.id);
+  if (i >= 0) goals[i] = goal;
+  else goals.push(goal);
+  ledger.goals = goals;
+}
+
+export function removeGoal(ledger: Ledger, id: string) {
+  const goals = (ledger.goals ?? []).filter((g) => g.id !== id);
+  ledger.goals = goals.length ? goals : undefined;
 }
 
 /** Aportes (buy movements) made in `month`, in cents. */

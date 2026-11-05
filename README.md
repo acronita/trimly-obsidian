@@ -47,6 +47,9 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
+- **Savings goals** (*Metas de poupança*, in Planning) — an amount to have by a date (emergency fund,
+  a trip), measured by today's balance of one account or position, with how much to save per month until
+  then. Goals on the same account or position are flagged, since the balance counts in full in each.
 - **Planning** (*Planejamento*, was Budgets) — whether spending and investing follow the month's plan.
   The top shows spending against what was planned and aportes against the investment goal, each with
   a bar, then how much the month's forecast leaves to invest (and whether the goal fits). The month's

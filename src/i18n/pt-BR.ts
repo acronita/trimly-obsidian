@@ -261,6 +261,19 @@ export const ptBR = {
     setGoal: "Definir meta",
   },
 
+  goals: {
+    title: "Metas de poupança",
+    hint: "Quanto já tem em cada meta, pelo saldo de hoje da conta ou do ativo ligado, e quanto guardar por mês até a data.",
+    add: "Nova meta",
+    perMonth: (v: string) => `Guardar ${v} por mês`,
+    done: "Meta atingida",
+    late: (v: string) => `Prazo vencido, faltam ${v}`,
+    savedOf: (saved: string, target: string) => `${saved} de ${target}`,
+    until: (date: string) => `até ${date}`,
+    unlinked: "A conta ou o ativo ligado não existe mais. Edite a meta para escolher outro.",
+    shared: "Outra meta usa o mesmo saldo: ele conta inteiro nas duas.",
+  },
+
   recurring: {
     fixedIncome: "Receitas fixas / mês",
     fixedCosts: "Custos fixos / mês",
@@ -673,6 +686,18 @@ export const ptBR = {
       icon: "Ícone",
       isDefault: "Categoria padrão",
       isDefaultDesc: "Transações deste tipo sem categoria vão para esta, inclusive as que já existem. Só uma categoria de cada tipo pode ser a padrão.",
+    },
+    goal: {
+      newTitle: "Nova meta de poupança",
+      editTitle: "Editar meta de poupança",
+      name: "Nome",
+      namePlaceholder: "Ex.: Reserva de emergência",
+      target: "Valor da meta",
+      date: "Data da meta",
+      link: "Guardado em",
+      linkDesc: "O progresso é o saldo de hoje desta conta ou deste ativo.",
+      assetOption: (name: string) => `Ativo: ${name}`,
+      noLink: "Adicione uma conta ou um ativo primeiro.",
     },
     asset: {
       newTitle: "Novo ativo",

@@ -17,12 +17,14 @@ import {
   ObligationFrequency,
   ObligationKind,
   Recurring,
+  SavingsGoal,
   Settlement,
   Transaction,
   TxType,
   centsToInput,
   defaultCategory,
   newId,
+  openAssets,
   paidOn,
   parseAmount,
   payableOccurrences,
@@ -964,6 +966,77 @@ export class CategoryModal extends Modal {
         return null;
       },
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class GoalModal extends Modal {
+  private draft: SavingsGoal;
+
+  constructor(
+    app: App,
+    private ledger: Ledger,
+    existing: SavingsGoal | null,
+    private onSave: (g: SavingsGoal) => void,
+    private onDelete: ((g: SavingsGoal) => void) | null
+  ) {
+    super(app);
+    this.draft = existing ? { ...existing } : { id: newId(), name: "", target: 0, date: "" };
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const d = this.draft;
+    const g = t.modals.goal;
+    this.setTitle(this.onDelete ? g.editTitle : g.newTitle);
+    new Setting(contentEl).setName(g.name).addText((text) => text.setPlaceholder(g.namePlaceholder).setValue(d.name).onChange((v) => (d.name = v)));
+    let target = d.target ? centsToInput(d.target) : "";
+    new Setting(contentEl).setName(g.target).addText((text) => {
+      text.inputEl.inputMode = "decimal";
+      text.setValue(target).onChange((v) => (target = v));
+    });
+    dateSetting(contentEl, g.date, d.date, (v) => (d.date = v));
+
+    // a card's balance is debt, so it can't hold savings; a link that is gone falls back to the first option
+    const links: Record<string, string> = {};
+    for (const a of this.ledger.accounts) {
+      if (a.type !== "credit" && (!a.archived || a.id === d.accountId)) links[`account:${a.id}`] = a.name;
+    }
+    for (const a of openAssets(this.ledger)) links[`asset:${a.id}`] = g.assetOption(a.name);
+    const current = d.accountId ? `account:${d.accountId}` : `asset:${d.assetId}`;
+    let link = current in links ? current : (Object.keys(links)[0] ?? "");
+    new Setting(contentEl)
+      .setName(g.link)
+      .setDesc(g.linkDesc)
+      .addDropdown((dd) => dd.addOptions(links).setValue(link).onChange((v) => (link = v)));
+
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!d.name.trim()) return t.common.addName;
+        const cents = parseAmount(target);
+        if (cents === null || cents <= 0) return t.common.amountPositive;
+        if (!d.date) return t.common.pickDate;
+        if (!link) return g.noLink;
+        const linkedId = link.slice(link.indexOf(":") + 1);
+        this.onSave({
+          id: d.id,
+          name: d.name.trim(),
+          target: cents,
+          date: d.date,
+          ...(link.startsWith("account:") ? { accountId: linkedId } : { assetId: linkedId }),
+        });
+        return null;
+      },
+      this.onDelete ? () => this.onDelete?.(d) : null,
       () => this.close()
     );
   }

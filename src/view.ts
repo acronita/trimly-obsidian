@@ -1,7 +1,7 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, GoalModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
@@ -20,6 +20,7 @@ import {
   Obligation,
   ObligationKind,
   Recurring,
+  SavingsGoal,
   Transaction,
   TxType,
   accountBalance,
@@ -42,6 +43,7 @@ import {
   editBudget,
   centsToInput,
   fixedMonthlyIncome,
+  goalProgress,
   monthPlan,
   movementFlow,
   monthOf,
@@ -76,10 +78,12 @@ import {
   unsettleObligation,
   windowStart,
   removeCategory,
+  removeGoal,
   removeRecurring,
   removeManualAsset,
   removeManualMovement,
   saveAsset,
+  saveGoal,
   saveManualMovement,
   shiftMonth,
   sortTransactions,
@@ -1244,6 +1248,8 @@ export class TrimlyView extends ItemView {
       this.limitInput(foot, limit, fixed > 0 ? t.budgets.extra : t.budgets.setLimit, (l, cents) => setLimit(l, month, c.id, cents));
     }
 
+    this.renderGoals(body, ledger);
+
     const unplanned = expenseCats.filter((c) => !shown.includes(c));
     if (unplanned.length) {
       const card = this.card(body, t.budgets.without);
@@ -1254,6 +1260,54 @@ export class TrimlyView extends ItemView {
         this.limitInput(r, 0, t.budgets.setLimit, (l, cents) => setLimit(l, month, c.id, cents));
       }
     }
+  }
+
+  /** Savings goals, soonest first: they follow today's balances, whatever month is being browsed. */
+  private renderGoals(body: HTMLElement, ledger: Ledger) {
+    body.createDiv({ cls: "trimly-section-title", text: t.goals.title });
+    const bar = body.createDiv("trimly-section-bar");
+    bar.createDiv({ cls: "trimly-muted", text: t.goals.hint });
+    const grid = body.createDiv("trimly-tiles trimly-tiles-3");
+    const today = todayISO();
+    const goals = [...(ledger.goals ?? [])].sort((a, b) => (a.date < b.date ? -1 : 1));
+    for (const g of goals) {
+      const p = goalProgress(ledger, g, today);
+      const color = p.status === "late" ? "var(--trimly-expense)" : "var(--interactive-accent)";
+      const tile = grid.createDiv("trimly-tile is-clickable");
+      const top = tile.createDiv("trimly-tile-top");
+      this.iconTile(top, "piggy-bank", color);
+      top.createDiv({ cls: "trimly-tile-tag", text: `${Math.min(100, Math.floor((p.saved / g.target) * 100))}%` });
+      tile.createDiv({ cls: "trimly-tile-name", text: g.name });
+      tile.createDiv({
+        cls: `trimly-tile-value ${p.status === "late" ? "is-expense" : ""}`,
+        text: p.status === "done" ? t.goals.done : p.status === "late" ? t.goals.late(this.money(p.left)) : t.goals.perMonth(this.money(p.monthly)),
+      });
+      this.progress(tile, Math.min(p.saved, g.target), g.target, color, false);
+      const foot = tile.createDiv("trimly-tile-foot is-split");
+      foot.createSpan({ cls: "trimly-muted", text: t.goals.savedOf(this.money(p.saved), this.money(g.target)) });
+      foot.createSpan({ cls: "trimly-muted", text: t.goals.until(this.fmt({ month: "short", year: "numeric" }, this.parseDate(g.date))) });
+      if (!p.linked) tile.createDiv({ cls: "trimly-muted is-expense", text: t.goals.unlinked });
+      else if (p.shared) tile.createDiv({ cls: "trimly-muted", text: t.goals.shared });
+      tile.addEventListener("click", () => this.editGoal(g));
+    }
+    this.addTile(grid, t.goals.add, () => this.editGoal(null));
+  }
+
+  private editGoal(existing: SavingsGoal | null) {
+    const ledger = this.plugin.ledger;
+    if (!ledger) return;
+    new GoalModal(
+      this.app,
+      ledger,
+      existing,
+      (goal) => void this.plugin.mutate((l) => saveGoal(l, goal)),
+      existing
+        ? (goal) =>
+            new ConfirmModal(this.app, t.common.deleteQuoted(goal.name), t.common.delete, () =>
+              void this.plugin.mutate((l) => removeGoal(l, goal.id))
+            ).open()
+        : null
+    ).open();
   }
 
   /** Monthly investment goal: planned like a limit, but aportes toward it are not spending. */
@@ -1276,13 +1330,14 @@ export class TrimlyView extends ItemView {
     });
   }
 
-  private progress(parent: HTMLElement, value: number, max: number, color: string) {
+  /** `warn`: turn amber near the end, for limits; a savings goal near its end is good news. */
+  private progress(parent: HTMLElement, value: number, max: number, color: string, warn = true) {
     const track = parent.createDiv("trimly-progress");
     const pct = max > 0 ? Math.min(100, (value / max) * 100) : 0;
     const fill = track.createDiv("trimly-progress-fill");
     fill.setCssProps({ "--trimly-pct": `${pct}%`, "--trimly-color": color });
     if (value > max) fill.addClass("is-over");
-    else if (pct >= 85) fill.addClass("is-warn");
+    else if (warn && pct >= 85) fill.addClass("is-warn");
   }
 
   private limitInput(parent: HTMLElement, value: number, placeholder: string, save: (l: Ledger, cents: number) => void) {

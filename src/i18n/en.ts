@@ -256,6 +256,19 @@ export const en: Strings = {
     setGoal: "Set goal",
   },
 
+  goals: {
+    title: "Savings goals",
+    hint: "How much each goal has, from today's balance of the linked account or position, and how much to save per month until the date.",
+    add: "New goal",
+    perMonth: (v: string) => `Save ${v} per month`,
+    done: "Goal reached",
+    late: (v: string) => `Past due, ${v} to go`,
+    savedOf: (saved: string, target: string) => `${saved} of ${target}`,
+    until: (date: string) => `by ${date}`,
+    unlinked: "The linked account or position no longer exists. Edit the goal to pick another.",
+    shared: "Another goal uses the same balance: it counts in full in both.",
+  },
+
   recurring: {
     fixedIncome: "Fixed income / month",
     fixedCosts: "Fixed costs / month",
@@ -666,6 +679,18 @@ export const en: Strings = {
       icon: "Icon",
       isDefault: "Default category",
       isDefaultDesc: "Uncategorized transactions of this kind go here, existing ones included. Only one category of each kind can be the default.",
+    },
+    goal: {
+      newTitle: "New savings goal",
+      editTitle: "Edit savings goal",
+      name: "Name",
+      namePlaceholder: "E.g. Emergency fund",
+      target: "Goal amount",
+      date: "Goal date",
+      link: "Saved in",
+      linkDesc: "Progress is today's balance of this account or position.",
+      assetOption: (name: string) => `Position: ${name}`,
+      noLink: "Add an account or a position first.",
     },
     asset: {
       newTitle: "New position",
