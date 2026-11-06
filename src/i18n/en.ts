@@ -186,6 +186,17 @@ export const en: Strings = {
     deleteConfirm: (d: string) => `Delete "${d}"?`,
   },
 
+  portfolios: {
+    main: "Main",
+    pick: "Portfolio",
+    add: "New portfolio",
+    edit: "Edit portfolio",
+    title: "Portfolios",
+    empty: "No positions in this portfolio. Pick the portfolio when editing a position.",
+    hint: "Set positions apart by objective, each portfolio with its own targets. Net worth adds them all up; returns, proventos and income tax stay those of the whole.",
+    deleteConfirm: (name: string) => `Delete the portfolio "${name}"? Its positions go back to Main, and its targets are deleted.`,
+  },
+
   calc: {
     disclaimer: "Simulations at a constant rate, to get an idea: not a forecast or a recommendation. Fields start from your data when possible; nothing here is saved or leaves the device.",
     fill: "Fill in the fields to see the result.",

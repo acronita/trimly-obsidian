@@ -10,6 +10,19 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.28.0 — 2026-11-05
+
+- 2026-11-05 — Positions can be set apart in portfolios by objective (retirement, emergency fund), each
+  with its own allocation targets, weights and contribution plan (new optional `portfolios` on
+  `investments` and `portfolioId` on positions; version unchanged). The Targets tab picks the portfolio,
+  and creates, renames and deletes them; a position's modal picks where it goes, and the Portfolio tab
+  lists each one's value. What is in no portfolio is the main one, so nothing changes until one is
+  created; deleting one returns its positions there and deletes its targets. Deliberately not split by
+  portfolio: returns, evolution, proventos and income tax stay those of the whole, because snapshots
+  only exist for the whole. Why: the roadmap's *Várias carteiras*. Files touched: `src/ledger.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/portfolios.test.ts`,
+  `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.27.0 — 2026-11-05
 
 - 2026-11-05 — Manual Tesouro Direto positions are revalued from the Tesouro Transparente open data: the
