@@ -10,6 +10,20 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.23.0 — 2026-11-05
+
+- 2026-11-05 — The Accounts tab gets *Projeção de saldo*: one account's balance over the next 60 days,
+  with a chart, the balance at the end, its lowest point, the first day below zero and each event with
+  the balance after it (new `balanceForecast`). It adds future transactions and recurring occurrences
+  on the account, plus open bills and card bills, which have no account of their own and so leave the
+  chosen one. It opens on the most used checking account (new `mainAccount`), and the pick lasts until
+  the view closes; nothing is stored. A bill paid by a recurring rule, or a card paid by a recurring
+  transfer, counts once; a bill with no known amount is named, not counted as zero; overdue bills count
+  today. Not in: purchases to come and installments on later card bills. Why: the roadmap's *Projeção
+  de saldo*; recurring rules, bills and card bills were already there, only the sum was missing. Files
+  touched: `src/ledger.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/forecast.test.ts`, `README.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.22.0 — 2026-11-05
 
 - 2026-11-05 — New *IR* tab in the investments mode, with the month picker: average price per asset,

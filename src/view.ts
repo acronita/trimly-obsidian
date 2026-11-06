@@ -12,6 +12,7 @@ import {
   CardBill,
   Category,
   CategoryKind,
+  FORECAST_DAYS,
   Ledger,
   PlannedInstallment,
   MOVEMENT_ICONS,
@@ -26,6 +27,7 @@ import {
   accountBalance,
   accountCurrency,
   accountInUse,
+  balanceForecast,
   baseAmount,
   cardBill,
   cardBills,
@@ -44,6 +46,7 @@ import {
   centsToInput,
   fixedMonthlyIncome,
   goalProgress,
+  mainAccount,
   monthPlan,
   movementFlow,
   monthOf,
@@ -193,6 +196,8 @@ export class TrimlyView extends ItemView {
   private movementFilter: MovementFilter = { assetId: "", type: "", allTime: false };
   /** amount typed in the Targets tab to plan a contribution, in cents; not saved */
   private contribution = 0;
+  /** account picked in the balance forecast; null opens on the main one */
+  private forecastAccount: string | null = null;
   /** month picked in the income tab's bars; null shows the current one */
   private incomeMonth: string | null = null;
 
@@ -964,6 +969,8 @@ export class TrimlyView extends ItemView {
     }
     this.addTile(grid, t.accounts.add, () => this.editAccount(null));
 
+    this.renderBalanceForecast(body, ledger);
+
     if (cards.length) {
       body.createDiv({ cls: "trimly-section-title", text: t.accounts.groupCards });
       const cardGrid = body.createDiv("trimly-tiles");
@@ -982,6 +989,56 @@ export class TrimlyView extends ItemView {
       tile.createDiv({ cls: "trimly-tile-value", text: this.money(invested) });
       tile.addEventListener("click", () => this.setMode("investments"));
     }
+  }
+
+  /** Where one account's balance is heading: the end of the period, its lowest point, and what moves it. */
+  private renderBalanceForecast(body: HTMLElement, ledger: Ledger) {
+    const options = ledger.accounts.filter((a) => a.type !== "credit" && !a.archived);
+    const account = options.find((a) => a.id === this.forecastAccount) ?? mainAccount(ledger);
+    if (!account) return;
+    const f = balanceForecast(ledger, account.id, todayISO());
+    const money = (cents: number) => `${cents < 0 ? "−" : ""}${this.money(Math.abs(cents), account.currency)}`;
+
+    const card = this.card(body, t.forecast.title);
+    const select = card.createEl("select", { cls: "dropdown", attr: { "aria-label": t.forecast.account } });
+    for (const a of options) select.createEl("option", { value: a.id, text: a.name });
+    select.value = account.id;
+    select.addEventListener("change", () => {
+      this.forecastAccount = select.value;
+      this.render();
+    });
+
+    card.createDiv({ cls: `trimly-tile-value ${f.end < 0 ? "is-expense" : ""}`, text: t.forecast.endIn(FORECAST_DAYS, money(f.end)) });
+    card.createDiv({
+      cls: `trimly-muted ${f.negativeOn ? "is-expense" : ""}`,
+      text: f.negativeOn ? `${t.forecast.negative(this.shortDate(f.negativeOn))} · ${t.forecast.lowest(money(f.lowest.balance), this.shortDate(f.lowest.date))}` : t.forecast.lowest(money(f.lowest.balance), this.shortDate(f.lowest.date)),
+    });
+
+    // one point per day that moves, the day's closing balance
+    const closing = new Map<string, number>([[f.today, f.start]]);
+    for (const e of f.events) closing.set(e.date, e.balance);
+    closing.set(f.until, f.end);
+    const days = [...closing.keys()];
+    lineChart(
+      card,
+      days.map((d) => this.ts(d)),
+      [{ values: days.map((d) => (closing.get(d) ?? 0) / 100), cls: "is-accent", area: true }],
+      { start: this.longDate(f.today), end: this.longDate(f.until) },
+      (i) => [this.longDate(days[i]), `${t.forecast.balance}: ${money(closing.get(days[i]) ?? 0)}`]
+    );
+
+    if (f.events.length === 0) card.createDiv({ cls: "trimly-muted", text: t.forecast.none });
+    for (const e of f.events) {
+      const row = card.createDiv("trimly-row");
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: e.description });
+      main.createDiv({ cls: "trimly-row-sub", text: e.projected ? `${this.shortDate(e.date)} · ${t.forecast.openBill}` : this.shortDate(e.date) });
+      const amounts = row.createDiv();
+      amounts.createDiv({ cls: `trimly-amount ${e.amount < 0 ? "is-expense" : "is-income"}`, text: `${e.amount < 0 ? "−" : "+"}${this.money(Math.abs(e.amount), account.currency)}` });
+      amounts.createDiv({ cls: "trimly-amount-sub", text: money(e.balance) });
+    }
+    if (f.unpriced.length) card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.forecast.unpriced([...new Set(f.unpriced)].join(", ")) });
+    card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.forecast.hint });
   }
 
   /** A card shows its current bill and limit instead of a balance that adds up its whole history. */

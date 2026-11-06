@@ -184,6 +184,19 @@ export const en: Strings = {
     deleteConfirm: (d: string) => `Delete "${d}"?`,
   },
 
+  forecast: {
+    title: "Balance forecast",
+    account: "Forecast account",
+    endIn: (days: number, v: string) => `In ${days} days: ${v}`,
+    lowest: (v: string, date: string) => `Lowest balance: ${v} on ${date}`,
+    negative: (date: string) => `Goes negative on ${date}`,
+    balance: "Balance",
+    none: "Nothing expected for this account in the period.",
+    openBill: "open bill, so far",
+    unpriced: (names: string) => `No known amount, left out: ${names}.`,
+    hint: "Adds to today's balance this account's future transactions and recurring rules, plus bills and card bills, which leave the chosen account. The open card bill counts what was charged so far; future purchases and installments on later bills aren't in.",
+  },
+
   accounts: {
     includesInvestments: (v: string) => `Includes ${v} in investments`,
     archived: "Archived",
