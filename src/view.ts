@@ -101,6 +101,7 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
+import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
 import type { ReportFilter, ReportPreset } from "./reports";
 import { estimatedPayouts, lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
@@ -119,7 +120,7 @@ function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   });
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "reports";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "reports";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -148,6 +149,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "income", label: "income", icon: "coins" },
     { id: "targets", label: "targets", icon: "target" },
     { id: "tax", label: "tax", icon: "landmark" },
+    { id: "calculators", label: "calculators", icon: "calculator" },
   ],
 };
 
@@ -203,6 +205,8 @@ export class TrimlyView extends ItemView {
   private contribution = 0;
   /** account picked in the balance forecast; null opens on the main one */
   private forecastAccount: string | null = null;
+  /** what was typed in the calculators, by field; kept while the view is open, never saved */
+  private calcValues = new Map<string, string>();
   /** what the reports tab is showing; kept while the view is open */
   private report: ReportFilter & { preset: ReportPreset | "custom"; accountId: string; categoryId: string; compare: "previous" | "year" } = {
     ...presetRange("thisYear", todayISO()),
@@ -291,6 +295,9 @@ export class TrimlyView extends ItemView {
         break;
       case "tax":
         this.renderTax(body, ledger);
+        break;
+      case "calculators":
+        this.renderCalculators(body, ledger);
         break;
     }
     root.scrollTop = scroll;
@@ -2756,6 +2763,188 @@ export class TrimlyView extends ItemView {
       });
     }
     if (this.plugin.proventoError) foot(t.income.upcomingError(this.plugin.proventoError));
+  }
+
+  // ---- calculators ----
+
+  /**
+   * One calculator: labeled fields and a result recomputed on each keystroke, in
+   * place so the field keeps its focus. `compute` returns null until it can answer.
+   * Money fields are masked while values are hidden, since they start from real data.
+   */
+  private calculator(
+    body: HTMLElement,
+    title: string,
+    fields: { key: string; label: string; money?: boolean; initial?: number | string }[],
+    compute: (get: (key: string) => number | null) => { label: string; value: string; main?: boolean }[] | null,
+    note?: string
+  ) {
+    const card = this.card(body, title);
+    const grid = card.createDiv("trimly-calc-fields");
+    const raw = (key: string) => this.calcValues.get(`${title}:${key}`);
+    const results = card.createDiv("trimly-calc-results");
+    const get = (key: string) => {
+      const field = fields.find((f) => f.key === key);
+      const text = raw(key)?.trim();
+      if (!text) return null;
+      if (field?.money) return parseAmount(text);
+      const n = Number(text.replace(",", ".").replace("%", ""));
+      return Number.isFinite(n) ? n : null;
+    };
+    const show = () => {
+      results.empty();
+      const lines = compute(get);
+      if (!lines) {
+        results.createDiv({ cls: "trimly-muted", text: t.calc.fill });
+        return;
+      }
+      for (const line of lines) {
+        const row = results.createDiv(`trimly-calc-result ${line.main ? "is-main" : ""}`);
+        row.createSpan({ text: line.label });
+        row.createSpan({ cls: "trimly-amount", text: line.value });
+      }
+    };
+    for (const f of fields) {
+      if (raw(f.key) === undefined) {
+        const initial = f.money && typeof f.initial === "number" ? (f.initial > 0 ? centsToInput(f.initial) : "") : String(f.initial ?? "");
+        this.calcValues.set(`${title}:${f.key}`, initial);
+      }
+      const label = grid.createEl("label", { cls: "trimly-calc-field", text: f.label });
+      const input = label.createEl("input", { cls: "trimly-calc-input", type: f.money && this.plugin.settings.hideValues ? "password" : "text" });
+      input.inputMode = "decimal";
+      input.value = raw(f.key) ?? "";
+      input.addEventListener("input", () => {
+        this.calcValues.set(`${title}:${f.key}`, input.value);
+        show();
+      });
+    }
+    show();
+    if (note) card.createDiv({ cls: "trimly-muted trimly-card-foot", text: note });
+  }
+
+  private renderCalculators(body: HTMLElement, ledger: Ledger) {
+    const real = calculatorDefaults(ledger, todayISO());
+    const c = t.calc;
+    const duration = (months: number | null) => (months === null ? c.never : months === 0 ? c.already : c.duration(Math.floor(months / 12), months % 12));
+    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: c.disclaimer });
+
+    this.calculator(
+      body,
+      c.independence.title,
+      [
+        { key: "income", label: c.independence.income, money: true, initial: real.expense },
+        { key: "withdrawal", label: c.independence.withdrawal, initial: "4" },
+        { key: "wealth", label: c.wealth, money: true, initial: real.wealth },
+        { key: "monthly", label: c.contribution, money: true, initial: real.contribution },
+        { key: "rate", label: c.realRate },
+      ],
+      (get) => {
+        const income = get("income");
+        const withdrawal = get("withdrawal");
+        if (!income || !withdrawal || withdrawal <= 0) return null;
+        const needed = wealthForIncome(income, withdrawal);
+        const lines = [{ label: c.independence.needed, value: this.money(needed), main: true }];
+        const rate = get("rate");
+        if (rate !== null) lines.push({ label: c.independence.time, value: duration(monthsToReach(get("wealth") ?? 0, get("monthly") ?? 0, rate, needed)), main: false });
+        lines.push({ label: c.independence.covered, value: this.pct((real.passiveIncome / income) * 100), main: false });
+        return lines;
+      },
+      c.independence.note
+    );
+
+    this.calculator(
+      body,
+      c.compound.title,
+      [
+        { key: "start", label: c.compound.start, money: true, initial: real.wealth },
+        { key: "monthly", label: c.contribution, money: true, initial: real.contribution },
+        { key: "rate", label: c.rate },
+        { key: "months", label: c.months },
+      ],
+      (get) => {
+        const rate = get("rate");
+        const months = get("months");
+        if (rate === null || !months || months < 0) return null;
+        const r = compound(get("start") ?? 0, get("monthly") ?? 0, rate, Math.round(months));
+        return [
+          { label: c.compound.final, value: this.money(r.final), main: true },
+          { label: c.compound.invested, value: this.money(r.invested) },
+          { label: c.compound.interest, value: `${r.interest < 0 ? "−" : ""}${this.money(Math.abs(r.interest))}` },
+        ];
+      }
+    );
+
+    this.calculator(
+      body,
+      c.goal.title,
+      [
+        { key: "target", label: c.goal.target, money: true },
+        { key: "saved", label: c.goal.saved, money: true },
+        { key: "rate", label: c.rate },
+        { key: "months", label: c.months },
+      ],
+      (get) => {
+        const target = get("target");
+        const rate = get("rate");
+        const months = get("months");
+        if (!target || rate === null || !months || months <= 0) return null;
+        const monthly = monthlyToReach(get("saved") ?? 0, rate, Math.round(months), target);
+        return [{ label: c.goal.monthly, value: monthly ? this.money(monthly) : c.goal.alone, main: true }];
+      }
+    );
+
+    this.calculator(
+      body,
+      c.reserve.title,
+      [
+        { key: "cost", label: c.reserve.cost, money: true, initial: real.expense },
+        { key: "months", label: c.reserve.months, initial: "6" },
+        { key: "saved", label: c.reserve.saved, money: true, initial: real.cash },
+        { key: "monthly", label: c.contribution, money: true },
+      ],
+      (get) => {
+        const cost = get("cost");
+        const months = get("months");
+        if (!cost || !months || months <= 0) return null;
+        const target = Math.round(cost * months);
+        const saved = get("saved") ?? 0;
+        const lines = [
+          { label: c.reserve.target, value: this.money(target), main: true },
+          { label: c.reserve.left, value: this.money(Math.max(0, target - saved)), main: false },
+        ];
+        const monthly = get("monthly");
+        if (monthly) lines.push({ label: c.reserve.time, value: duration(monthsToReach(saved, monthly, 0, target)), main: false });
+        return lines;
+      },
+      c.reserve.note
+    );
+
+    this.calculator(
+      body,
+      c.cdb.title,
+      [
+        { key: "cdi", label: c.cdb.cdi },
+        { key: "cdb", label: c.cdb.cdb },
+        { key: "lci", label: c.cdb.lci },
+        { key: "days", label: c.cdb.days },
+      ],
+      (get) => {
+        const cdi = get("cdi");
+        const cdb = get("cdb");
+        const lci = get("lci");
+        const days = get("days");
+        if (!cdi || cdi <= 0 || !cdb || !lci || !days || days <= 0) return null;
+        const r = compareCdbLci(cdi, cdb, lci, days);
+        const better = Math.abs(r.cdbNet - r.lciNet) < 0.005 ? c.cdb.tie : r.cdbNet > r.lciNet ? "CDB" : "LCI/LCA";
+        return [
+          { label: c.cdb.better, value: better, main: true },
+          { label: c.cdb.cdbNet(this.pct(fixedIncomeTax(days))), value: this.pct(r.cdbNet, 2) },
+          { label: c.cdb.lciNet, value: this.pct(r.lciNet, 2) },
+          { label: c.cdb.breakEven, value: c.cdb.ofCdi(this.pct(r.breakEvenCdb)) },
+        ];
+      },
+      c.cdb.note
+    );
   }
 
   /** Income tax on variable income for the browsed month and its year. An estimate: `src/income-tax.ts` says what it leaves out. */
