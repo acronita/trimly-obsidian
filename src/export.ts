@@ -49,7 +49,7 @@ export function transactionsCsv(ledger: Ledger, baseCurrency: string): string {
   const e = t.exportFile;
   const account = (id?: string) => ledger.accounts.find((a) => a.id === id);
   return table(
-    [e.date, e.type, e.amount, e.currency, e.account, e.toAccount, e.category, e.description, e.notes],
+    [e.date, e.type, e.amount, e.currency, e.account, e.toAccount, e.category, e.description, e.notes, e.received],
     byDate(ledger.transactions).map((tx) => [
       tx.date,
       textCell(t.labels.txType[tx.type]),
@@ -60,6 +60,7 @@ export function transactionsCsv(ledger: Ledger, baseCurrency: string): string {
       textCell(ledger.categories.find((c) => c.id === tx.categoryId)?.name),
       textCell(tx.description),
       textCell(tx.notes),
+      moneyCell(tx.toAmount),
     ])
   );
 }

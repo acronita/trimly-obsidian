@@ -168,6 +168,7 @@ export const en: Strings = {
 
   tx: {
     converted: (date: string) => `Converted at the rate of ${date}`,
+    received: (v: string) => `${v} received`,
     purchasedIn: (currency: string) => `Purchase made in ${currency}; below, the amount charged to the account`,
     recurring: "Recurring",
     categoryApplied: (n: number) => (n === 1 ? "Category applied to 1 more matching transaction and the next ones" : `Category applied to ${n} more matching transactions and the next ones`),
@@ -187,6 +188,7 @@ export const en: Strings = {
   },
 
   exportFile: {
+    received: "Amount received",
     date: "Date",
     type: "Type",
     amount: "Amount",
@@ -782,6 +784,9 @@ export const en: Strings = {
       placeholderIncome: "For example, salary",
       placeholderTransfer: "For example, savings",
       placeholderExpense: "For example, supermarket",
+      received: (currency: string) => `Amount received (${currency})`,
+      receivedDesc: "What reached the destination account, after exchange and fees. Empty: uses the day's rate.",
+      enterReceived: (currency: string) => `Enter the amount received in ${currency}: there is no rate to calculate it.`,
       account: "Account",
       fromAccount: "From account",
       toAccount: "To account",

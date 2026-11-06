@@ -10,6 +10,18 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.31.0 — 2026-11-05
+
+- 2026-11-05 — A manual transfer between accounts in different currencies takes both amounts: the new
+  *Valor recebido* field appears when the currencies differ, and left empty it uses the day's rate (new
+  optional `toAmount` on transactions and recurring rules; version unchanged). Each balance moves in its
+  own currency, and the difference is the exchange cost. Older transfers keep moving one amount on both
+  sides. Why: the roadmap's *Transferência entre moedas*, pending since 0.9.0. Still pending: paired bank
+  transfers keep one amount, and positions in another currency. Files touched: `src/ledger.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/export.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/fx-transfers.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
 ## 0.30.0 — 2026-11-05
 
 - 2026-11-05 — Planning gets *Dívidas*: a loan or financing with its balance on a date, interest per month

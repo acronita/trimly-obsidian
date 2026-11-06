@@ -23,7 +23,9 @@ import {
   Settlement,
   Transaction,
   TxType,
+  accountCurrency,
   centsToInput,
+  convert,
   defaultCategory,
   newId,
   openAssets,
@@ -180,16 +182,35 @@ interface TxLike {
   amount: number;
   accountId: string;
   toAccountId?: string;
+  toAmount?: number;
   categoryId?: string;
   description: string;
 }
 
-function validateTxLike(d: TxLike): string | null {
+/** The transfer's two currencies when they differ, so it needs an amount for each side; null otherwise. */
+function transferCurrencies(ledger: Ledger, d: TxLike): { from: string; to: string } | null {
+  if (d.type !== "transfer" || !d.toAccountId) return null;
+  // no currency on an account means the settings' one
+  const base = ledger.fx?.base ?? "";
+  const from = accountCurrency(ledger, d.accountId) ?? base;
+  const to = accountCurrency(ledger, d.toAccountId) ?? base;
+  return from === to ? null : { from, to };
+}
+
+function validateTxLike(d: TxLike, ledger: Ledger): string | null {
   if (!d.description.trim()) return t.modals.tx.addDescription;
   if (!(d.amount > 0)) return t.common.amountPositive;
   if (!d.accountId) return t.modals.tx.pickAccount;
   if (d.type === "transfer" && (!d.toAccountId || d.toAccountId === d.accountId)) {
     return t.modals.tx.pickOtherAccount;
+  }
+  const currencies = transferCurrencies(ledger, d);
+  if (!currencies) delete d.toAmount;
+  else if (!d.toAmount) {
+    // left empty: the day's rate, when there is one
+    const converted = convert(ledger, d.amount, currencies.from, currencies.to);
+    if (converted === d.amount) return t.modals.tx.enterReceived(currencies.to);
+    d.toAmount = converted;
   }
   return null;
 }
@@ -243,8 +264,27 @@ function renderTxLikeFields(container: HTMLElement, ledger: Ledger, draft: TxLik
       d
         .addOptions(accountOptions(ledger, draft.toAccountId))
         .setValue(draft.toAccountId ?? "")
-        .onChange((v) => (draft.toAccountId = v))
+        .onChange((v) => {
+          draft.toAccountId = v;
+          delete draft.toAmount;
+          rerender();
+        })
     );
+    const currencies = transferCurrencies(ledger, draft);
+    if (currencies) {
+      new Setting(container)
+        .setName(t.modals.tx.received(currencies.to))
+        .setDesc(t.modals.tx.receivedDesc)
+        .addText((text) => {
+          text.inputEl.inputMode = "decimal";
+          text.setPlaceholder(centsToInput(convert(ledger, draft.amount, currencies.from, currencies.to)));
+          text.setValue(draft.toAmount ? centsToInput(draft.toAmount) : "").onChange((v) => {
+            const cents = v.trim() ? parseAmount(v) : 0;
+            text.inputEl.toggleClass("trimly-invalid", cents === null);
+            if (cents !== null) draft.toAmount = Math.abs(cents) || undefined;
+          });
+        });
+    }
   } else {
     new Setting(container).setName(t.modals.tx.category).addDropdown((d) =>
       d
@@ -311,7 +351,7 @@ export class TransactionModal extends Modal {
 
   /** Validate and save the draft; returns an error message, or null when saved. */
   private save(): string | null {
-    const err = validateTxLike(this.draft) ?? (this.draft.date ? null : t.common.pickDate);
+    const err = validateTxLike(this.draft, this.ledger) ?? (this.draft.date ? null : t.common.pickDate);
     if (err) return err;
     if (this.draft.type !== "transfer") delete this.draft.toAccountId;
     else delete this.draft.categoryId;
@@ -511,7 +551,7 @@ export class RecurringModal extends Modal {
       contentEl,
       errorEl,
       () => {
-        const err = validateTxLike(this.draft) ?? (this.draft.nextDate ? null : t.common.pickDate);
+        const err = validateTxLike(this.draft, this.ledger) ?? (this.draft.nextDate ? null : t.common.pickDate);
         if (err) return err;
         if (this.draft.type !== "transfer") delete this.draft.toAccountId;
         else delete this.draft.categoryId;
