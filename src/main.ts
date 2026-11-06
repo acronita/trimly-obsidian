@@ -31,7 +31,8 @@ import { applyQuotes, quoteTickers } from "./quotes";
 import { applyTreasuryPrices, manualTreasuryPositions } from "./treasury";
 import type { TreasuryUpdate } from "./treasury";
 import { fetchTreasuryPrices } from "./treasury-fetch";
-import { PORTFOLIO_SOURCES } from "./feeds";
+import { ALL_SOURCES, NEWS_SOURCES, PORTFOLIO_SOURCES, newsPages } from "./feeds";
+import type { FeedSource } from "./feeds";
 import type { FeedItem } from "./feeds";
 import { fetchFeeds } from "./feeds-fetch";
 import type { Provento } from "./proventos";
@@ -121,11 +122,11 @@ export default class TrimlyPlugin extends Plugin {
   private proventoLoading = false;
   /** day a fetch of the Tesouro Direto prices was tried, whether or not it worked */
   private treasuryTriedOn = "";
-  private feedCache: { day: string; data: FeedItem[] } | null = null;
-  private feedLoading = false;
-  private feedFailedAt = 0;
-  /** sources that couldn't be read on the last fetch */
-  feedFailed: string[] = [];
+  private feedCache: Record<"portfolios" | "news", { day: string; data: FeedItem[] } | null> = { portfolios: null, news: null };
+  private feedLoading = { portfolios: false, news: false };
+  private feedFailedAt = { portfolios: 0, news: 0 };
+  /** sources that couldn't be read on the last fetch of each */
+  feedFailed: Record<"portfolios" | "news", string[]> = { portfolios: [], news: [] };
   private proventoFailedAt = 0;
   proventoError: string | null = null;
   /** set when data.json predates the language setting: the ledger's starter names are still English */
@@ -583,31 +584,40 @@ export default class TrimlyPlugin extends Plugin {
    * when missing and re-renders when it lands; null when turned off or never loaded.
    */
   portfolioFeed(): FeedItem[] | null {
+    return this.feed("portfolios", PORTFOLIO_SOURCES);
+  }
+
+  /** The latest news of the feeds, whole: whoever calls filters it by the positions, on the device. */
+  newsFeed(): FeedItem[] | null {
+    return this.feed("news", newsPages(NEWS_SOURCES));
+  }
+
+  private feed(kind: "portfolios" | "news", sources: FeedSource[]): FeedItem[] | null {
     if (!this.settings.feeds) return null;
     const today = todayISO();
-    const cached = this.feedCache;
+    const cached = this.feedCache[kind];
     if (cached && cached.day === today) return cached.data;
-    if (!this.feedLoading && Date.now() - this.feedFailedAt > BENCHMARK_RETRY_MS) void this.loadFeeds(today);
+    if (!this.feedLoading[kind] && Date.now() - this.feedFailedAt[kind] > BENCHMARK_RETRY_MS) void this.loadFeed(kind, sources, today);
     return cached?.data ?? null;
   }
 
-  private async loadFeeds(today: string) {
-    this.feedLoading = true;
+  private async loadFeed(kind: "portfolios" | "news", sources: FeedSource[], today: string) {
+    this.feedLoading[kind] = true;
     try {
-      const res = await fetchFeeds(PORTFOLIO_SOURCES.filter((source) => !this.settings.disabledFeeds.includes(source.id)));
-      this.feedCache = { day: today, data: res.items };
-      this.feedFailed = res.failed;
-      if (res.failed.length) this.feedFailedAt = Date.now();
+      const res = await fetchFeeds(sources.filter((source) => !this.settings.disabledFeeds.includes(source.id)));
+      this.feedCache[kind] = { day: today, data: res.items };
+      this.feedFailed[kind] = [...new Set(res.failed)];
+      if (res.failed.length) this.feedFailedAt[kind] = Date.now();
     } finally {
-      this.feedLoading = false;
+      this.feedLoading[kind] = false;
       this.refreshViews();
     }
   }
 
   /** The next read fetches again, after a source is switched on or off. */
   resetFeeds() {
-    this.feedCache = null;
-    this.feedFailedAt = 0;
+    this.feedCache = { portfolios: null, news: null };
+    this.feedFailedAt = { portfolios: 0, news: 0 };
   }
 
   private async loadProventos(issuers: string[], key: string, today: string) {
@@ -826,7 +836,7 @@ class TrimlySettingTab extends PluginSettingTab {
           p.refreshViews();
         })
       );
-    for (const source of PORTFOLIO_SOURCES) {
+    for (const source of ALL_SOURCES) {
       new Setting(containerEl).setName(s.feedSource(source.name)).addToggle((tg) =>
         tg.setValue(!p.settings.disabledFeeds.includes(source.id)).onChange(async (v) => {
           p.settings.disabledFeeds = v ? p.settings.disabledFeeds.filter((id) => id !== source.id) : [...p.settings.disabledFeeds, source.id];

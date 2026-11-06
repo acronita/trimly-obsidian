@@ -10,6 +10,17 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.33.0 — 2026-11-05
+
+- 2026-11-05 — The *Notícias* tab opens with *Da sua carteira*: headlines naming the tickers of the open
+  positions, any share class of the company (new `newsForTickers`). Asking a site for news on a ticker
+  would tell it what the user holds, so the latest pages of InfoMoney, Money Times and Seu Dinheiro are read
+  whole and filtered on the device, which reaches back about a day. Not there: filings. Fundos.NET lists
+  every FII's documents, but answers automated clients with a redirect loop, and CVM's data comes zipped,
+  so those are left for later rather than working around the site. Why: the roadmap's *Notícias e
+  relatórios*. Files touched: `src/feeds.ts`, `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/feeds.test.ts`, `README.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.32.0 — 2026-11-05
 
 - 2026-11-05 — New *Notícias* tab in the investments mode, opening with *Carteiras recomendadas*: public

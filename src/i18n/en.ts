@@ -217,6 +217,9 @@ export const en: Strings = {
   news: {
     off: "Turn on News and portfolios in the settings to see this tab.",
     loading: "Loading…",
+    yours: "From your portfolio",
+    yoursHint: "Headlines naming your assets' tickers: material facts, results, proventos. The sites don't know what you hold: Trimly reads the latest news whole and filters it here, so it only reaches back about a day.",
+    nothingYours: "No recent headline names your assets.",
     portfolios: "Recommended portfolios",
     portfoliosHint: "Public articles on the portfolios brokers and research houses publish. Trimly only gathers the links: it is not a recommendation, and the details are on each site.",
     nothing: "Nothing published in the last 60 days.",
