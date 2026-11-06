@@ -1506,3 +1506,46 @@ input.trimly-amount-input:focus {
 .trimly-calc-result.is-main {
   font-weight: var(--font-semibold);
 }
+.trimly-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.trimly-chat-message {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--font-ui-small);
+}
+.trimly-chat-message.is-user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+}
+.trimly-chat-message.is-notice {
+  color: var(--text-muted);
+}
+.trimly-chat-tool {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+.trimly-chat-tool pre {
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.trimly-chat-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+.trimly-chat-form textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+}

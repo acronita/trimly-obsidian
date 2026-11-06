@@ -37,11 +37,12 @@ function table(header: string[], rows: string[][]): string {
 
 const byDate = <T extends { date: string }>(list: T[]) => [...list].sort((x, y) => (x.date < y.date ? -1 : x.date > y.date ? 1 : 0));
 
-/** The whole ledger, without the bank sync credentials and the quotes token. */
+/** The whole ledger, without the bank sync credentials, the quotes token and the assistants' API key. */
 export function ledgerJson(ledger: Ledger): string {
   const copy = { ...ledger };
   delete copy.pluggy;
   delete copy.brapi;
+  delete copy.ai;
   return JSON.stringify(copy, null, 2);
 }
 

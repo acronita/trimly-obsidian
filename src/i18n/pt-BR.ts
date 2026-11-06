@@ -142,6 +142,7 @@ export const ptBR = {
     tax: "IR",
     calculators: "Calculadoras",
     news: "Notícias",
+    assistant: "Assistente",
   },
 
   overview: {
@@ -217,6 +218,26 @@ export const ptBR = {
     position: "Ativo",
     yes: "Sim",
     no: "Não",
+  },
+
+  assistant: {
+    off: "Assistente desligado. Para ligar, coloque uma chave de API da Anthropic nas configurações.",
+    hintAccounts: "Pergunte sobre seus gastos, contas e metas. As contas são feitas pelo Trimly; o Claude recebe sua pergunta e só os resultados abaixo, que você pode abrir para ver.",
+    hintInvestments: "Pergunte sobre sua carteira, alocação e aportes. As contas são feitas pelo Trimly; o Claude recebe sua pergunta e só os resultados abaixo, que você pode abrir para ver. Não é recomendação de investimento.",
+    hidden: "Os valores estão ocultos, e as respostas trazem valores. Mostre os valores para usar o assistente.",
+    empty: "Nada aqui ainda. A conversa fica só na memória e some ao travar ou fechar o Trimly.",
+    placeholder: "Sua pergunta",
+    send: "Enviar",
+    thinking: "Pensando…",
+    clear: "Limpar conversa",
+    sent: (tool: string) => `Enviado ao Claude: ${tool}`,
+    usage: (pct: number) => `${pct}% do limite desta conversa usado.`,
+    limit: "Esta conversa chegou ao limite de uso. Limpe a conversa para começar outra.",
+    refused: "O modelo não quis responder a isso. Tente perguntar de outro jeito.",
+    tooLong: "A resposta ficou longa demais e foi cortada. Tente pedir algo mais específico.",
+    badKey: "A chave de API foi recusada. Confira nas configurações.",
+    rateLimited: "Muitos pedidos em pouco tempo. Tente de novo em instantes.",
+    apiError: (status: number, detail: string) => `A API respondeu HTTP ${status}${detail ? `: ${detail}` : "."}`,
   },
 
   news: {
@@ -1079,6 +1100,15 @@ export const ptBR = {
     proventosDesc:
       "Busca no site da B3 (sistemaswebb3-listados.b3.com.br) os dividendos, JCP e rendimentos anunciados dos seus ativos com código da B3. " +
       "Só as quatro letras de cada código são enviadas (PETR para PETR4), sem quantidades nem valores.",
+    assistantTitle: "Assistente de IA",
+    assistantIntro: "Opcional e desligado por padrão. Ao ligar, suas perguntas e os resultados das contas do Trimly (saldos, totais por categoria, posições) vão para api.anthropic.com, usando sua própria chave e no seu custo. O ledger inteiro nunca é enviado, e as conversas não são salvas.",
+    assistantKey: "Chave de API da Anthropic",
+    assistantKeyDesc: "Criada em console.anthropic.com. Fica dentro do ledger criptografado.",
+    assistantModel: "Modelo",
+    assistantModelDesc: "Os mais capazes respondem melhor e custam mais.",
+    assistantSave: "Salvar",
+    assistantRemove: "Desligar e apagar a chave",
+    assistantNoKey: "Coloque a chave de API.",
     feeds: "Notícias e carteiras",
     feedsDesc: "Busca no RSS público dos sites abaixo as reportagens da aba Notícias, quando ela é aberta e no máximo uma vez por dia. Só o endereço do feed é pedido: nada sobre você ou sua carteira é enviado.",
     feedSource: (name: string) => `Fonte: ${name}`,
