@@ -10,6 +10,17 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.30.0 — 2026-11-05
+
+- 2026-11-05 — Planning gets *Dívidas*: a loan or financing with its balance on a date, interest per month
+  and monthly payment shows today's balance, when it ends, the interest still to pay, and what paying
+  extra would change (new optional `debts` on the ledger; version unchanged; new `debtPayoff`,
+  `debtBalance`). A payment that doesn't cover the interest says it never ends. Today's balance assumes
+  the payments were made, and updating the balance corrects it. Debts stay apart from accounts and net
+  worth, and the extra is only a simulation, never saved. Why: the roadmap's *Planejador de dívidas*. Files
+  touched: `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/debts.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.29.0 — 2026-11-05
 
 - 2026-11-05 — New *Exportar dados* section in the settings: the whole ledger as JSON, and transactions,

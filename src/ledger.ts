@@ -159,6 +159,20 @@ export interface Budget {
   limit: number;
 }
 
+/** A loan or financing being paid off in monthly payments. Tracked apart: it doesn't touch accounts or net worth. */
+export interface Debt {
+  id: string;
+  name: string;
+  /** owed on `asOf`, in cents, in the settings' currency */
+  balance: number;
+  /** ISO date of `balance` */
+  asOf: string;
+  /** interest, percent a month */
+  monthlyRate: number;
+  /** cents a month */
+  payment: number;
+}
+
 /** Money to have by a date (emergency fund, a trip), measured by what one account or position holds. */
 export interface SavingsGoal {
   id: string;
@@ -421,6 +435,7 @@ export interface Ledger {
   /** each month's plan ("YYYY-MM"), saved once that month is edited; a month without one uses the latest before it */
   plans?: Record<string, MonthBudget>;
   goals?: SavingsGoal[];
+  debts?: Debt[];
   /** categories learned from the user: transactions whose description has this key get this category */
   categoryRules?: CategoryRule[];
   /** set when bank sync is configured */
@@ -516,6 +531,7 @@ export function parseLedger(json: string): Ledger {
     },
     plans: raw.plans,
     goals: raw.goals,
+    debts: raw.debts,
     categoryRules: raw.categoryRules,
     pluggy: raw.pluggy,
     brapi: raw.brapi,
@@ -1010,6 +1026,58 @@ export function saveGoal(ledger: Ledger, goal: SavingsGoal) {
 export function removeGoal(ledger: Ledger, id: string) {
   const goals = (ledger.goals ?? []).filter((g) => g.id !== id);
   ledger.goals = goals.length ? goals : undefined;
+}
+
+// ---- debts ----
+
+/** Past this, a debt has no useful payoff date. */
+const MAX_DEBT_MONTHS = 1200;
+const DEBT_ROUNDING_LEFT = 1_00;
+
+export interface DebtPayoff {
+  /** payments left; null when the payment doesn't cover the interest, so it never ends */
+  months: number | null;
+  /** interest still to pay, cents; 0 when it never ends */
+  interest: number;
+}
+
+/** Paying `payment` a month on `balance`, interest charged first each month. */
+export function debtPayoff(balance: number, monthlyRate: number, payment: number): DebtPayoff {
+  const rate = monthlyRate / 100;
+  let left = balance;
+  let interest = 0;
+  for (let months = 0; months < MAX_DEBT_MONTHS; months++) {
+    // a bank's payment is rounded to the cent, which leaves cents at the end, not one more month
+    if (left < DEBT_ROUNDING_LEFT) return { months, interest: Math.round(interest) };
+    const charged = left * rate;
+    if (payment <= charged) return { months: null, interest: 0 };
+    interest += charged;
+    left = left + charged - payment;
+  }
+  return { months: null, interest: 0 };
+}
+
+/** What is owed today, assuming each month's payment since `asOf` was made. */
+export function debtBalance(debt: Debt, today: string): number {
+  const [fy, fm, fd] = debt.asOf.split("-").map(Number);
+  const [ty, tm, td] = today.split("-").map(Number);
+  const months = (ty - fy) * 12 + tm - fm - (td < fd ? 1 : 0);
+  let left = debt.balance;
+  for (let i = 0; i < Math.min(months, MAX_DEBT_MONTHS) && left > 0; i++) left = left * (1 + debt.monthlyRate / 100) - debt.payment;
+  return Math.max(0, Math.round(left));
+}
+
+export function saveDebt(ledger: Ledger, debt: Debt) {
+  const debts = ledger.debts ?? [];
+  const i = debts.findIndex((d) => d.id === debt.id);
+  if (i >= 0) debts[i] = debt;
+  else debts.push(debt);
+  ledger.debts = debts;
+}
+
+export function removeDebt(ledger: Ledger, id: string) {
+  const debts = (ledger.debts ?? []).filter((d) => d.id !== id);
+  ledger.debts = debts.length ? debts : undefined;
 }
 
 /** Aportes (buy movements) made in `month`, in cents. */

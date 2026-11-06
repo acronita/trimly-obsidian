@@ -452,6 +452,21 @@ export const ptBR = {
     },
   },
 
+  debts: {
+    title: "Dívidas",
+    hint: "Empréstimos e financiamentos: quando terminam no ritmo atual e quanto de juros ainda vão custar. Ficam à parte, sem mexer nas contas nem no patrimônio. O saldo de hoje supõe que as parcelas foram pagas; ao atualizar o saldo pelo extrato, a conta acerta.",
+    add: "Nova dívida",
+    until: (date: string, months: string) => `Termina em ${date} · ${months}`,
+    never: "A parcela não cobre os juros: não termina",
+    paid: "Quitada",
+    owed: (v: string) => `Saldo hoje: ${v}`,
+    interest: (v: string) => `Juros até o fim: ${v}`,
+    extraPlaceholder: "A mais por mês",
+    extraEffect: (months: string, saved: string) => `Pagando a mais, termina ${months} antes e economiza ${saved} de juros.`,
+    extraEnds: (date: string, saved: string) => `Pagando a mais, termina em ${date} e custa ${saved} de juros.`,
+    extraSaves: (saved: string) => `Pagando a mais, economiza ${saved} de juros.`,
+  },
+
   goals: {
     title: "Metas de poupança",
     hint: "Quanto já tem em cada meta, pelo saldo de hoje da conta ou do ativo ligado, e quanto guardar por mês até a data.",
@@ -883,6 +898,17 @@ export const ptBR = {
       icon: "Ícone",
       isDefault: "Categoria padrão",
       isDefaultDesc: "Transações deste tipo sem categoria vão para esta, inclusive as que já existem. Só uma categoria de cada tipo pode ser a padrão.",
+    },
+    debt: {
+      newTitle: "Nova dívida",
+      editTitle: "Editar dívida",
+      name: "Nome",
+      namePlaceholder: "Ex.: Financiamento do carro",
+      balance: "Saldo devedor",
+      asOf: "Saldo em",
+      rate: "Juros (% ao mês)",
+      payment: "Parcela por mês",
+      invalidRate: "Digite juros entre 0 e 100.",
     },
     goal: {
       newTitle: "Nova meta de poupança",

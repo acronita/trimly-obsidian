@@ -74,6 +74,9 @@ passphrase that never leaves your device.
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,
   not day trades, options, fixed income ETFs, FI-Infra, splits or bonus shares. It issues nothing, and
   lists the positions whose numbers need checking; confirm with the Receita or an accountant.
+- **Debts** (*Dívidas*, in Planning) — a loan's balance, monthly interest and payment give today's balance,
+  when it ends, the interest still to pay, and what paying extra would change. Kept apart from accounts and
+  net worth; today's balance assumes the payments were made.
 - **Savings goals** (*Metas de poupança*, in Planning) — an amount to have by a date (emergency fund,
   a trip), measured by today's balance of one account or position, with how much to save per month until
   then. Goals on the same account or position are flagged, since the balance counts in full in each.
