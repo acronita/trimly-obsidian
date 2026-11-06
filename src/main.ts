@@ -31,6 +31,9 @@ import { applyQuotes, quoteTickers } from "./quotes";
 import { applyTreasuryPrices, manualTreasuryPositions } from "./treasury";
 import type { TreasuryUpdate } from "./treasury";
 import { fetchTreasuryPrices } from "./treasury-fetch";
+import { PORTFOLIO_SOURCES } from "./feeds";
+import type { FeedItem } from "./feeds";
+import { fetchFeeds } from "./feeds-fetch";
 import type { Provento } from "./proventos";
 import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
@@ -52,6 +55,10 @@ export interface TrimlySettings {
   proventos: boolean;
   /** fetch Tesouro Direto prices for manual positions */
   treasuryPrices: boolean;
+  /** fetch public news feeds for the News tab */
+  feeds: boolean;
+  /** ids of the feed sources turned off */
+  disabledFeeds: string[];
   /** interface language; Brazilian Portuguese first */
   language: Language;
   /** mask money amounts on screen (eye button in the header) */
@@ -86,6 +93,8 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   benchmarks: true,
   proventos: true,
   treasuryPrices: true,
+  feeds: true,
+  disabledFeeds: [],
   language: "pt-BR",
   hideValues: false,
   reminders: "app",
@@ -112,6 +121,11 @@ export default class TrimlyPlugin extends Plugin {
   private proventoLoading = false;
   /** day a fetch of the Tesouro Direto prices was tried, whether or not it worked */
   private treasuryTriedOn = "";
+  private feedCache: { day: string; data: FeedItem[] } | null = null;
+  private feedLoading = false;
+  private feedFailedAt = 0;
+  /** sources that couldn't be read on the last fetch */
+  feedFailed: string[] = [];
   private proventoFailedAt = 0;
   proventoError: string | null = null;
   /** set when data.json predates the language setting: the ledger's starter names are still English */
@@ -564,6 +578,38 @@ export default class TrimlyPlugin extends Plugin {
     return cached?.data ?? null;
   }
 
+  /**
+   * Recommended portfolios from the public feeds, cached for the day: starts a fetch
+   * when missing and re-renders when it lands; null when turned off or never loaded.
+   */
+  portfolioFeed(): FeedItem[] | null {
+    if (!this.settings.feeds) return null;
+    const today = todayISO();
+    const cached = this.feedCache;
+    if (cached && cached.day === today) return cached.data;
+    if (!this.feedLoading && Date.now() - this.feedFailedAt > BENCHMARK_RETRY_MS) void this.loadFeeds(today);
+    return cached?.data ?? null;
+  }
+
+  private async loadFeeds(today: string) {
+    this.feedLoading = true;
+    try {
+      const res = await fetchFeeds(PORTFOLIO_SOURCES.filter((source) => !this.settings.disabledFeeds.includes(source.id)));
+      this.feedCache = { day: today, data: res.items };
+      this.feedFailed = res.failed;
+      if (res.failed.length) this.feedFailedAt = Date.now();
+    } finally {
+      this.feedLoading = false;
+      this.refreshViews();
+    }
+  }
+
+  /** The next read fetches again, after a source is switched on or off. */
+  resetFeeds() {
+    this.feedCache = null;
+    this.feedFailedAt = 0;
+  }
+
   private async loadProventos(issuers: string[], key: string, today: string) {
     this.proventoLoading = true;
     try {
@@ -768,6 +814,28 @@ class TrimlySettingTab extends PluginSettingTab {
           await p.saveSettings();
         })
       );
+
+    new Setting(containerEl)
+      .setName(s.feeds)
+      .setDesc(s.feedsDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.feeds).onChange(async (v) => {
+          p.settings.feeds = v;
+          p.resetFeeds();
+          await p.saveSettings();
+          p.refreshViews();
+        })
+      );
+    for (const source of PORTFOLIO_SOURCES) {
+      new Setting(containerEl).setName(s.feedSource(source.name)).addToggle((tg) =>
+        tg.setValue(!p.settings.disabledFeeds.includes(source.id)).onChange(async (v) => {
+          p.settings.disabledFeeds = v ? p.settings.disabledFeeds.filter((id) => id !== source.id) : [...p.settings.disabledFeeds, source.id];
+          p.resetFeeds();
+          await p.saveSettings();
+          p.refreshViews();
+        })
+      );
+    }
 
     this.displayQuotes();
     this.displayBankSync();

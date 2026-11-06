@@ -54,6 +54,8 @@ passphrase that never leaves your device.
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
   charged so far; purchases to come and installments on later bills aren't in.
+- **News** (*Notícias*, in the investments mode) — articles on the portfolios brokers publish, with date,
+  source and a link, from public RSS feeds. Trimly only gathers the links: not a recommendation.
 - **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
   everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
   go in. It is not encrypted, so never save it inside the vault; there is no import back.
@@ -177,6 +179,9 @@ passphrase that never leaves your device.
   the vault. Turn off *Agenda de proventos* to stop it. With manual Tesouro Direto positions, Trimly
   downloads the public price file (about 15 MB) from `www.tesourotransparente.gov.br`, at most once a
   day; it has every bond, so nothing about yours is sent. Turn off *Preços do Tesouro Direto* to stop it.
+  The News tab reads public RSS feeds from `www.moneytimes.com.br`, `investnews.com.br` and
+  `www.infomoney.com.br`, at most once a day, requesting only the feed's address; each source can be turned
+  off, and *Notícias e carteiras* turns them all off.
   With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's

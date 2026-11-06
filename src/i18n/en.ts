@@ -136,6 +136,7 @@ export const en: Strings = {
     targets: "Targets",
     tax: "Tax",
     calculators: "Calculators",
+    news: "News",
   },
 
   overview: {
@@ -211,6 +212,15 @@ export const en: Strings = {
     position: "Position",
     yes: "Yes",
     no: "No",
+  },
+
+  news: {
+    off: "Turn on News and portfolios in the settings to see this tab.",
+    loading: "Loading…",
+    portfolios: "Recommended portfolios",
+    portfoliosHint: "Public articles on the portfolios brokers and research houses publish. Trimly only gathers the links: it is not a recommendation, and the details are on each site.",
+    nothing: "Nothing published in the last 60 days.",
+    failed: (names: string) => `Could not read: ${names}.`,
   },
 
   portfolios: {
@@ -1059,6 +1069,9 @@ export const en: Strings = {
     proventosDesc:
       "Fetches the dividends, JCP and income announced for your positions with a B3 ticker from the B3 website (sistemaswebb3-listados.b3.com.br). " +
       "Only the four letters of each ticker are sent (PETR for PETR4), no quantities or amounts.",
+    feeds: "News and portfolios",
+    feedsDesc: "Fetches the News tab's articles from the public RSS of the sites below, when the tab opens and at most once a day. Only the feed's address is requested: nothing about you or your portfolio is sent.",
+    feedSource: (name: string) => `Source: ${name}`,
     treasuryPrices: "Tesouro Direto prices",
     treasuryPricesDesc:
       "Updates manually added Tesouro Direto bonds once a day from the public file at www.tesourotransparente.gov.br (about 15 MB). " +

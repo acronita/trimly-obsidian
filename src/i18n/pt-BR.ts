@@ -141,6 +141,7 @@ export const ptBR = {
     targets: "Metas",
     tax: "IR",
     calculators: "Calculadoras",
+    news: "Notícias",
   },
 
   overview: {
@@ -216,6 +217,15 @@ export const ptBR = {
     position: "Ativo",
     yes: "Sim",
     no: "Não",
+  },
+
+  news: {
+    off: "Ligue Notícias e carteiras nas configurações para ver esta aba.",
+    loading: "Carregando…",
+    portfolios: "Carteiras recomendadas",
+    portfoliosHint: "Reportagens públicas sobre as carteiras que corretoras e casas de análise publicam. O Trimly só reúne os links: não é recomendação, e os detalhes estão em cada site.",
+    nothing: "Nada publicado nos últimos 60 dias.",
+    failed: (names: string) => `Não foi possível ler: ${names}.`,
   },
 
   portfolios: {
@@ -1066,6 +1076,9 @@ export const ptBR = {
     proventosDesc:
       "Busca no site da B3 (sistemaswebb3-listados.b3.com.br) os dividendos, JCP e rendimentos anunciados dos seus ativos com código da B3. " +
       "Só as quatro letras de cada código são enviadas (PETR para PETR4), sem quantidades nem valores.",
+    feeds: "Notícias e carteiras",
+    feedsDesc: "Busca no RSS público dos sites abaixo as reportagens da aba Notícias, quando ela é aberta e no máximo uma vez por dia. Só o endereço do feed é pedido: nada sobre você ou sua carteira é enviado.",
+    feedSource: (name: string) => `Fonte: ${name}`,
     treasuryPrices: "Preços do Tesouro Direto",
     treasuryPricesDesc:
       "Atualiza uma vez por dia os títulos do Tesouro Direto lançados à mão, pelo arquivo público de www.tesourotransparente.gov.br (cerca de 15 MB). " +
