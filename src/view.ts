@@ -739,7 +739,7 @@ export class TrimlyView extends ItemView {
     const acc = (id?: string) => ledger.accounts.find((a) => a.id === id)?.name ?? "?";
     const parts =
       tx.type === "transfer"
-        ? [`${acc(tx.accountId)} → ${acc(tx.toAccountId)}`]
+        ? [`${acc(tx.accountId)} → ${acc(tx.toAccountId)}`, ...(tx.toAmount && tx.toAccountId ? [t.tx.received(this.money(tx.toAmount, accountCurrency(ledger, tx.toAccountId)))] : [])]
         : [cat?.name ?? t.common.uncategorized, acc(tx.accountId)];
     if (showDate) parts.unshift(this.shortDate(tx.date));
     main.createDiv({ cls: "trimly-row-sub", text: parts.join(" · ") });

@@ -149,7 +149,8 @@ passphrase that never leaves your device.
 - **Other currencies** — accounts in another currency (e.g. a dollar account) and purchases made
   abroad keep their own currency: the amount shows as it was made (US$ 10,00) with its value in your
   currency under it. Purchases abroad count what the card actually charged; totals (net worth,
-  month summary, spending, budgets) convert other currencies at the day's rate.
+  month summary, spending, budgets) convert other currencies at the day's rate. A manual transfer
+  between currencies takes both amounts, what left and what arrived; left empty, it uses the day's rate.
 
 ## Security model
 

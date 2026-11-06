@@ -115,6 +115,8 @@ export interface Transaction {
   accountId: string;
   /** destination account, transfers only */
   toAccountId?: string;
+  /** transfers between currencies: what arrived, in the destination's currency; missing = `amount` */
+  toAmount?: number;
   /** income/expense only; missing = uncategorized */
   categoryId?: string;
   description: string;
@@ -193,6 +195,8 @@ export interface Recurring {
   amount: number;
   accountId: string;
   toAccountId?: string;
+  /** transfers between currencies: what arrives, in the destination's currency */
+  toAmount?: number;
   categoryId?: string;
   frequency: Frequency;
   /** first occurrence; its day of month anchors monthly/yearly rules */
@@ -697,7 +701,7 @@ export function foreignCurrencies(ledger: Ledger, base: string): string[] {
 export function effectOn(tx: Transaction, accountId: string): number {
   let v = 0;
   if (tx.accountId === accountId) v += tx.type === "income" ? tx.amount : -tx.amount;
-  if (tx.type === "transfer" && tx.toAccountId === accountId) v += tx.amount;
+  if (tx.type === "transfer" && tx.toAccountId === accountId) v += tx.toAmount ?? tx.amount;
   return v;
 }
 
@@ -1779,6 +1783,7 @@ export function postDueRecurring(ledger: Ledger, today: string): number {
         amount: r.amount,
         accountId: r.accountId,
         toAccountId: r.type === "transfer" ? r.toAccountId : undefined,
+        ...(r.type === "transfer" && r.toAmount ? { toAmount: r.toAmount } : {}),
         categoryId: r.type === "transfer" ? undefined : r.categoryId,
         description: r.description,
         recurringId: r.id,
@@ -2045,7 +2050,7 @@ export function balanceForecast(ledger: Ledger, accountId: string, today: string
     const into = r.type === "transfer" && r.toAccountId === accountId;
     if (r.accountId !== accountId && !into) continue;
     const from = accountCurrency(ledger, r.accountId) ?? base;
-    const amount = into ? convert(ledger, r.amount, from, currency) : r.type === "income" ? r.amount : -r.amount;
+    const amount = into ? (r.toAmount ?? convert(ledger, r.amount, from, currency)) : r.type === "income" ? r.amount : -r.amount;
     const anchorDay = Number(r.startDate.slice(8, 10));
     let date = r.nextDate;
     // guard against a corrupted rule looping forever

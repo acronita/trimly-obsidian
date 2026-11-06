@@ -173,6 +173,7 @@ export const ptBR = {
 
   tx: {
     converted: (date: string) => `Convertido pela cotação de ${date}`,
+    received: (v: string) => `${v} recebidos`,
     purchasedIn: (currency: string) => `Compra feita em ${currency}; abaixo, o valor cobrado na conta`,
     recurring: "Recorrente",
     categoryApplied: (n: number) => (n === 1 ? "Categoria aplicada a mais 1 transação igual e às próximas" : `Categoria aplicada a mais ${n} transações iguais e às próximas`),
@@ -192,6 +193,7 @@ export const ptBR = {
   },
 
   exportFile: {
+    received: "Valor recebido",
     date: "Data",
     type: "Tipo",
     amount: "Valor",
@@ -788,6 +790,9 @@ export const ptBR = {
       placeholderIncome: "Ex.: Salário",
       placeholderTransfer: "Ex.: Reserva",
       placeholderExpense: "Ex.: Mercado",
+      received: (currency: string) => `Valor recebido (${currency})`,
+      receivedDesc: "Quanto chegou na conta de destino, já com câmbio e taxas. Vazio: usa a cotação do dia.",
+      enterReceived: (currency: string) => `Digite o valor recebido em ${currency}: não há cotação para calcular.`,
       account: "Conta",
       fromAccount: "Da conta",
       toAccount: "Para a conta",
