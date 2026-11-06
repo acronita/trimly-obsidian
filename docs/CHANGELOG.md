@@ -10,6 +10,18 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.25.0 — 2026-11-05
+
+- 2026-11-05 — New *Relatórios* tab: any period, by preset or free dates, optionally limited to one
+  account or category, against the period before or the same period a year earlier (whole months compare
+  with whole months). It shows income, expenses and net with their change, bars and a table over the
+  period (by year when it spans more than 24 months), expenses and income by category, and each account.
+  Same counting as the overview: transfers are out. Computed on the device and never stored; the filters
+  last until the view closes (new `src/reports.ts`). Why: the roadmap's *Relatórios*; only the overview
+  existed, with its 6 months. Files touched: `src/reports.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/reports.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 0.24.0 — 2026-11-05
 
 - 2026-11-05 — The Targets tab gets *Por ativo*: in each class with more than one position, a weight or
