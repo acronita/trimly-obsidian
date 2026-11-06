@@ -10,6 +10,18 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.29.0 — 2026-11-05
+
+- 2026-11-05 — New *Exportar dados* section in the settings: the whole ledger as JSON, and transactions,
+  positions and movements as CSV for Excel in Brazil (semicolons, decimal commas, BOM), through the system
+  download and never written to the vault (new `src/export.ts`). The Pluggy credentials and the brapi token
+  stay out, text that a spreadsheet would run as a formula stays text, and a confirmation warns the file
+  isn't encrypted. Desktop only, since the download isn't reliable on mobile. No import back. Trimly can't
+  stop the user from picking a folder inside the vault in the save dialog, so the warning asks them not to.
+  Why: the roadmap's *Exportar dados*. Files touched: `src/export.ts`, `src/main.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/export.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.28.0 — 2026-11-05
 
 - 2026-11-05 — Positions can be set apart in portfolios by objective (retirement, emergency fund), each
