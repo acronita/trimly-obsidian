@@ -415,6 +415,8 @@ export interface Ledger {
   pluggy?: PluggyConfig;
   /** set when quotes are configured */
   brapi?: BrapiConfig;
+  /** day the Tesouro Direto prices were last fetched; the file is big, so once a day */
+  treasuryCheckedOn?: string;
   /** exchange rates, set when some account or transaction is in another currency */
   fx?: FxRates;
 }
@@ -504,6 +506,7 @@ export function parseLedger(json: string): Ledger {
     categoryRules: raw.categoryRules,
     pluggy: raw.pluggy,
     brapi: raw.brapi,
+    treasuryCheckedOn: raw.treasuryCheckedOn,
     fx: raw.fx,
   };
 }

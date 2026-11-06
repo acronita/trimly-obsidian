@@ -27,6 +27,9 @@ import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
 import { applyQuotes, quoteTickers } from "./quotes";
+import { applyTreasuryPrices, manualTreasuryPositions } from "./treasury";
+import type { TreasuryUpdate } from "./treasury";
+import { fetchTreasuryPrices } from "./treasury-fetch";
 import type { Provento } from "./proventos";
 import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
@@ -46,6 +49,8 @@ export interface TrimlySettings {
   benchmarks: boolean;
   /** fetch announced proventos of the positions' issuers from B3 */
   proventos: boolean;
+  /** fetch Tesouro Direto prices for manual positions */
+  treasuryPrices: boolean;
   /** interface language; Brazilian Portuguese first */
   language: Language;
   /** mask money amounts on screen (eye button in the header) */
@@ -71,6 +76,7 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   rememberPassphrase: true,
   benchmarks: true,
   proventos: true,
+  treasuryPrices: true,
   language: "pt-BR",
   hideValues: false,
   reminders: "app",
@@ -95,6 +101,8 @@ export default class TrimlyPlugin extends Plugin {
   /** announced proventos, kept in memory only (never in the vault) for the day */
   private proventoCache: { key: string; day: string; data: Provento[] } | null = null;
   private proventoLoading = false;
+  /** day a fetch of the Tesouro Direto prices was tried, whether or not it worked */
+  private treasuryTriedOn = "";
   private proventoFailedAt = 0;
   proventoError: string | null = null;
   /** set when data.json predates the language setting: the ledger's starter names are still English */
@@ -395,6 +403,33 @@ export default class TrimlyPlugin extends Plugin {
     const bankDue = !!l.pluggy && (l.investments.snapshots.length === 0 || olderThan(l.pluggy.lastSync, AUTO_SYNC_INTERVAL_MS));
     const quotesDue = !!l.brapi && olderThan(l.brapi.lastUpdate, QUOTES_INTERVAL_MS);
     if (bankDue || quotesDue) void this.sync(true, bankDue);
+    void (this.syncing ?? Promise.resolve()).then(() => this.refreshTreasury());
+  }
+
+  /**
+   * Tesouro Direto prices for manual positions, at most once a day: the open data
+   * is one big file. A failed day isn't retried until the next, so it warns only once.
+   */
+  private async refreshTreasury() {
+    const today = todayISO();
+    const l = this.ledger;
+    if (!l || !this.settings.treasuryPrices || l.treasuryCheckedOn === today || this.treasuryTriedOn === today) return;
+    if (manualTreasuryPositions(l).length === 0) return;
+    this.treasuryTriedOn = today;
+    let data;
+    try {
+      data = await fetchTreasuryPrices();
+    } catch (e) {
+      new Notice(t.notices.treasuryFailed((e as Error).message));
+      return;
+    }
+    let result: TreasuryUpdate = { updated: 0, missing: [] };
+    await this.mutate((ledger) => {
+      result = applyTreasuryPrices(ledger, data, today);
+      ledger.treasuryCheckedOn = today;
+    });
+    if (result.updated) new Notice(t.notices.treasuryUpdated(result.updated));
+    if (result.missing.length) new Notice(t.notices.treasuryMissing(result.missing.join(", ")));
   }
 
   /**
@@ -713,6 +748,15 @@ class TrimlySettingTab extends PluginSettingTab {
           p.settings.proventos = v;
           await p.saveSettings();
           p.refreshViews();
+        })
+      );
+    new Setting(containerEl)
+      .setName(s.treasuryPrices)
+      .setDesc(s.treasuryPricesDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.treasuryPrices).onChange(async (v) => {
+          p.settings.treasuryPrices = v;
+          await p.saveSettings();
         })
       );
 

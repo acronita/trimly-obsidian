@@ -939,6 +939,9 @@ export const ptBR = {
     investmentErrors: (e: string) => `Trimly: alguns dados de investimentos não puderam ser carregados: ${e}`,
     quotesFailed: (e: string) => `Trimly: as cotações não foram atualizadas: ${e}`,
     quotesUpdated: (n: number) => `Cotações: ${n} ${s(n, "ativo atualizado", "ativos atualizados")}.`,
+    treasuryUpdated: (n: number) => `Tesouro Direto: ${n} ${s(n, "título atualizado", "títulos atualizados")}.`,
+    treasuryMissing: (names: string) => `Tesouro Direto sem preço: ${names}. Confira a quantidade e se o nome traz o tipo e o ano (Tesouro IPCA+ 2035), ou preencha o vencimento (Renda+ e Educa+ precisam do vencimento exato).`,
+    treasuryFailed: (message: string) => `Preços do Tesouro Direto falharam: ${message}`,
     unlockFirst: "Desbloqueie o Trimly primeiro.",
     detailsFailed: (e: string) => `Trimly: não foi possível abrir os detalhes do ativo: ${e}`,
     lockedWhileChanging: "O Trimly foi bloqueado.",
@@ -996,6 +999,10 @@ export const ptBR = {
     proventosDesc:
       "Busca no site da B3 (sistemaswebb3-listados.b3.com.br) os dividendos, JCP e rendimentos anunciados dos seus ativos com código da B3. " +
       "Só as quatro letras de cada código são enviadas (PETR para PETR4), sem quantidades nem valores.",
+    treasuryPrices: "Preços do Tesouro Direto",
+    treasuryPricesDesc:
+      "Atualiza uma vez por dia os títulos do Tesouro Direto lançados à mão, pelo arquivo público de www.tesourotransparente.gov.br (cerca de 15 MB). " +
+      "O arquivo traz todos os títulos, então nada sobre os seus é enviado. Vale o preço de venda antes do IR, e o arquivo pode vir com alguns dias de atraso.",
     quotes: "Cotações (brapi, opcional)",
     quotesIntro:
       "Atualiza ações, FIIs, ETFs e BDRs pela brapi.dev: preço, variação do dia e nome da empresa. " +
@@ -1051,6 +1058,8 @@ export const ptBR = {
     bcbSeriesBody: (code: number, detail: string) => `Série ${code} do Banco Central falhou: ${detail}`,
     b3Index: (index: string, status: number) => `${index} da B3 falhou (HTTP ${status})`,
     b3Proventos: (issuer: string, status: number) => `Proventos de ${issuer} na B3 falharam (HTTP ${status})`,
+    treasuryPrices: (status: number) => `O Tesouro Transparente respondeu HTTP ${status}`,
+    treasuryFormat: "O arquivo do Tesouro Transparente veio em um formato inesperado",
     brapiRejected: "A brapi recusou o token",
     brapiQuote: (ticker: string) => `Cotação de ${ticker}`,
     brapiLimit: "limite de requisições da brapi atingido; tente mais tarde",
