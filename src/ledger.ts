@@ -1812,6 +1812,110 @@ export function dueObligations(ledger: Ledger, until: string, today: string): Du
   ].sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.obligation.name.localeCompare(b.obligation.name)));
 }
 
+// ---- balance forecast ----
+
+/** How far ahead an account's balance is forecast. */
+export const FORECAST_DAYS = 60;
+
+export interface ForecastEvent {
+  /** overdue bills and rules still waiting for their bank charge count today */
+  date: string;
+  description: string;
+  /** signed, in the account's currency */
+  amount: number;
+  /** the balance after this event */
+  balance: number;
+  /** a card bill not closed yet: what was charged so far */
+  projected?: boolean;
+}
+
+export interface BalanceForecast {
+  today: string;
+  until: string;
+  /** balance today */
+  start: number;
+  /** soonest first; on one day money comes in before it goes out */
+  events: ForecastEvent[];
+  end: number;
+  /** lowest balance reached, and the first day it gets there */
+  lowest: { date: string; balance: number };
+  /** first day below zero */
+  negativeOn?: string;
+  /** open bills in the period with no amount known, left out of the sums */
+  unpriced: string[];
+}
+
+/** The account a forecast opens on: the checking account with the most transactions, else any other that holds money. */
+export function mainAccount(ledger: Ledger): Account | undefined {
+  const used = (a: Account) => ledger.transactions.filter((tx) => tx.accountId === a.id || tx.toAccountId === a.id).length;
+  const open = ledger.accounts.filter((a) => a.type !== "credit" && !a.archived);
+  const pick = open.filter((a) => a.type === "checking");
+  return (pick.length ? pick : open).reduce<Account | undefined>((best, a) => (!best || used(a) > used(best) ? a : best), undefined);
+}
+
+/**
+ * An account's balance over the next days: today's, plus future transactions and
+ * recurring occurrences on it. Bills and card bills say nothing about which account
+ * pays them, so they all go out of the account being forecast. A card bill counts
+ * as it is now, so later purchases and installments on later bills aren't in.
+ */
+export function balanceForecast(ledger: Ledger, accountId: string, today: string, days = FORECAST_DAYS): BalanceForecast {
+  // no currency on an account or a bill means the settings' one
+  const base = ledger.fx?.base ?? "";
+  const currency = accountCurrency(ledger, accountId) ?? base;
+  const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + days * 86_400_000));
+  const events: Omit<ForecastEvent, "balance">[] = [];
+  const unpriced: string[] = [];
+
+  for (const tx of ledger.transactions) {
+    const amount = effectOn(tx, accountId);
+    if (amount !== 0 && tx.date > today && tx.date <= until) events.push({ date: tx.date, description: tx.description, amount });
+  }
+
+  // a rule on a synced account waits for the bank's charge, which stops being linked after LINK_DAYS
+  const linkableFrom = toISODate(new Date(Date.parse(`${today}T12:00:00`) - LINK_DAYS * 86_400_000));
+  for (const r of ledger.recurring) {
+    const into = r.type === "transfer" && r.toAccountId === accountId;
+    if (r.accountId !== accountId && !into) continue;
+    const from = accountCurrency(ledger, r.accountId) ?? base;
+    const amount = into ? convert(ledger, r.amount, from, currency) : r.type === "income" ? r.amount : -r.amount;
+    const anchorDay = Number(r.startDate.slice(8, 10));
+    let date = r.nextDate;
+    // guard against a corrupted rule looping forever
+    for (let i = 0; i < 1000 && date <= until; i++) {
+      if (r.endDate && date > r.endDate) break;
+      if (date >= linkableFrom) events.push({ date: date < today ? today : date, description: r.description, amount });
+      date = nextOccurrence(date, r.frequency, anchorDay);
+    }
+  }
+
+  const cardsPaidByRule = new Set(ledger.recurring.filter((r) => r.type === "transfer" && r.accountId === accountId).map((r) => r.toAccountId));
+  const paidByRule = (o: Obligation) => o.settled.some((s) => ledger.transactions.find((tx) => tx.id === s.transactionId)?.recurringId);
+  for (const d of dueObligations(ledger, until, today)) {
+    if (d.obligation.kind !== "payment" || (d.cardId ? cardsPaidByRule.has(d.cardId) : paidByRule(d.obligation))) continue;
+    const cost = dueAmount(ledger, d);
+    if (cost <= 0) {
+      unpriced.push(d.obligation.name);
+      continue;
+    }
+    const event = { date: d.due < today ? today : d.due, description: d.obligation.name, amount: -convert(ledger, cost, base, currency) };
+    events.push(d.projected ? { ...event, projected: true } : event);
+  }
+
+  events.sort((x, y) => (x.date === y.date ? y.amount - x.amount : x.date < y.date ? -1 : 1));
+  const start = accountBalance(ledger, accountId, today);
+  let balance = start;
+  let lowest = { date: today, balance: start };
+  let negativeOn = start < 0 ? today : undefined;
+  const out = events.map((e): ForecastEvent => {
+    balance += e.amount;
+    if (balance < lowest.balance) lowest = { date: e.date, balance };
+    if (balance < 0 && !negativeOn) negativeOn = e.date;
+    return { ...e, balance };
+  });
+  return { today, until, start, events: out, end: balance, lowest, negativeOn, unpriced };
+}
+
 /** Open occurrences inside their reminder window on `today`, overdue ones included. */
 export function obligationReminders(ledger: Ledger, today: string): DueObligation[] {
   const horizon = Math.max(CARD_BILL_REMIND_DAYS, ...ledger.obligations.map((o) => o.remindDays));

@@ -47,6 +47,10 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
+- **Balance forecast** (*Projeção de saldo*, in Accounts) — one account's balance over the next 60 days,
+  with its lowest point and the first day below zero: future transactions and recurring rules on the
+  account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
+  charged so far; purchases to come and installments on later bills aren't in.
 - **Income tax** (*IR*, in the investments mode) — an estimate from your movements: average price per
   asset, each month's result and DARF with its due date, the R$ 20.000 stock exemption meter, losses
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,

@@ -189,6 +189,19 @@ export const ptBR = {
     deleteConfirm: (d: string) => `Excluir "${d}"?`,
   },
 
+  forecast: {
+    title: "Projeção de saldo",
+    account: "Conta da projeção",
+    endIn: (days: number, v: string) => `Em ${days} dias: ${v}`,
+    lowest: (v: string, date: string) => `Menor saldo: ${v} em ${date}`,
+    negative: (date: string) => `Fica negativo em ${date}`,
+    balance: "Saldo",
+    none: "Nada previsto para esta conta no período.",
+    openBill: "fatura aberta, até agora",
+    unpriced: (names: string) => `Sem valor conhecido, fora da conta: ${names}.`,
+    hint: "Soma ao saldo de hoje as transações futuras e as recorrentes desta conta, mais as contas a pagar e as faturas, que saem da conta escolhida. A fatura aberta conta o que foi gasto até agora; compras futuras e parcelas de faturas seguintes não entram.",
+  },
+
   accounts: {
     includesInvestments: (v: string) => `Inclui ${v} em investimentos`,
     archived: "Arquivada",
