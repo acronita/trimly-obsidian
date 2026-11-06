@@ -255,6 +255,8 @@ export interface Asset {
   /** broker or bank holding it */
   institution?: string;
   quantity?: number;
+  /** the user's weight or score inside its class, any scale; with any set in a class, contributions split by them */
+  weight?: number;
   /** current net value (after taxes and fees) */
   value: number;
   /** current gross value, when known */
@@ -1095,13 +1097,54 @@ export function rebalance(ledger: Ledger, contribution: number): RebalanceLine[]
     const target = ((targets.find((t) => t.assetClass === c)?.pct ?? 0) / sum) * 100;
     return { assetClass: c, value, pct: total > 0 ? (value / total) * 100 : 0, target, gap: Math.round((total * target) / 100) - value, contribute: 0 };
   });
-  const deficits = lines.map((l) => Math.max(0, Math.round((after * l.target) / 100) - l.value));
-  const behind = deficits.reduce((s, d) => s + d, 0);
-  const c = Math.max(0, contribution);
-  const first = splitCents(Math.min(c, behind), deficits);
-  const rest = splitCents(c - Math.min(c, behind), lines.map((l) => l.target));
-  lines.forEach((l, i) => (l.contribute = first[i] + rest[i]));
+  const split = splitContribution(Math.max(0, contribution), after, lines);
+  lines.forEach((l, i) => (l.contribute = split[i]));
   return lines.sort((a, b) => b.target - a.target || b.value - a.value);
+}
+
+/** Split `cents` among parts with a current value and a target percent of `after`: furthest behind first, then any rest by target. */
+function splitContribution(cents: number, after: number, parts: { value: number; target: number }[]): number[] {
+  const deficits = parts.map((p) => Math.max(0, Math.round((after * p.target) / 100) - p.value));
+  const behind = deficits.reduce((s, d) => s + d, 0);
+  const first = splitCents(Math.min(cents, behind), deficits);
+  const rest = splitCents(cents - Math.min(cents, behind), parts.map((p) => p.target));
+  return parts.map((_, i) => first[i] + rest[i]);
+}
+
+export interface AssetTargetLine {
+  asset: Asset;
+  /** share of its class today, percent */
+  pct: number;
+  /** share of its class by weight, percent */
+  target: number;
+  /** cents of the class's contribution to put here */
+  contribute: number;
+}
+
+/** A class's open positions: what the weights apply to. */
+export function classAssets(ledger: Ledger, assetClass: AssetClass): Asset[] {
+  return openAssets(ledger).filter((a) => a.assetClass === assetClass);
+}
+
+/**
+ * How a class's share of a contribution splits among its positions, by the weights
+ * the user gave them; a position without one counts as 0. Largest target first.
+ * Empty until some position in the class has a weight, so the plan stops at the class.
+ */
+export function assetTargets(ledger: Ledger, assetClass: AssetClass, contribute: number): AssetTargetLine[] {
+  const assets = classAssets(ledger, assetClass);
+  const sum = assets.reduce((s, a) => s + (a.weight ?? 0), 0);
+  if (sum <= 0) return [];
+  const total = assets.reduce((s, a) => s + a.value, 0);
+  const lines: AssetTargetLine[] = assets.map((asset) => ({
+    asset,
+    pct: total > 0 ? (asset.value / total) * 100 : 0,
+    target: ((asset.weight ?? 0) / sum) * 100,
+    contribute: 0,
+  }));
+  const split = splitContribution(contribute, total + contribute, lines.map((l) => ({ value: l.asset.value, target: l.target })));
+  lines.forEach((l, i) => (l.contribute = split[i]));
+  return lines.sort((a, b) => b.target - a.target || b.asset.value - a.asset.value);
 }
 
 // ---- manual investments ----

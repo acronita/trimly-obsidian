@@ -10,6 +10,18 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.24.0 — 2026-11-05
+
+- 2026-11-05 — The Targets tab gets *Por ativo*: in each class with more than one position, a weight or
+  score per asset, on any scale (new optional `weight` on positions; version unchanged). *Planejar um
+  aporte* then splits the class's share among its positions, furthest behind their weight first and
+  never asking to sell (new `assetTargets`); a position with no weight gets nothing, and a class with no
+  weights stops at the class as before. Trimly's own weight, not the method of any other tool. Why: the
+  roadmap's *Meta por ativo*; the suggestion stopped at the class. `rebalance` now shares
+  `splitContribution` with it. Files touched: `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`,
+  `styles.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`, `test/investment-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.23.0 — 2026-11-05
 
 - 2026-11-05 — The Accounts tab gets *Projeção de saldo*: one account's balance over the next 60 days,

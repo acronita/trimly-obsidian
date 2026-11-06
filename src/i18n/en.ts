@@ -600,6 +600,12 @@ export const en: Strings = {
     typeAmount: "Type how much you are about to invest to see how to split it without selling anything.",
     after: (now: string, after: string, target: string) => `${now} now → ${after} after · target ${target}`,
     invalidPct: "Enter a percentage between 0 and 100.",
+    byAsset: "By asset",
+    byAssetHint: "Give the assets of a class a weight or a score, on any scale. The class's contribution splits by them, furthest behind first; an asset with no weight gets nothing. With no weights, the suggestion stops at the class.",
+    position: "Asset",
+    weight: "Weight",
+    invalidWeight: "Enter a number of zero or more.",
+    inClass: (now: string, after: string, target: string) => `${now} of the class now → ${after} after · target ${target}`,
   },
 
   modals: {
