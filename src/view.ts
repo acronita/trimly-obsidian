@@ -111,14 +111,14 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
-import { PORTFOLIO_MAX_DAYS, recentItems } from "./feeds";
+import { NEWS_MAX_DAYS, PORTFOLIO_MAX_DAYS, newsForTickers, recentItems } from "./feeds";
 import type { FeedItem } from "./feeds";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
 import type { ReportFilter, ReportPreset } from "./reports";
 import { estimatedPayouts, lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
 import type { EstimatedPayout } from "./proventos";
-import { averagePrice, institutionOf, tickerOf } from "./quotes";
+import { averagePrice, institutionOf, quoteTickers, tickerOf } from "./quotes";
 import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
@@ -317,7 +317,7 @@ export class TrimlyView extends ItemView {
         this.renderCalculators(body, ledger);
         break;
       case "news":
-        this.renderNews(body);
+        this.renderNews(body, ledger);
         break;
     }
     root.scrollTop = scroll;
@@ -2875,8 +2875,21 @@ export class TrimlyView extends ItemView {
     main.createDiv({ cls: "trimly-row-sub", text: `${this.longDate(item.date)} · ${item.source}` });
   }
 
-  private renderNews(body: HTMLElement) {
+  private renderNews(body: HTMLElement, ledger: Ledger) {
     if (!this.plugin.settings.feeds) return this.empty(body, "newspaper", t.news.off);
+    const tickers = quoteTickers(ledger);
+    if (tickers.length) {
+      const held = this.card(body, t.news.yours);
+      held.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.news.yoursHint });
+      const news = this.plugin.newsFeed();
+      if (news === null) held.createDiv({ cls: "trimly-muted", text: t.news.loading });
+      else {
+        const found = newsForTickers(recentItems(news, todayISO(), NEWS_MAX_DAYS), tickers);
+        if (found.length === 0) held.createDiv({ cls: "trimly-muted", text: t.news.nothingYours });
+        for (const item of found) this.feedRow(held, { ...item, source: `${item.ticker} · ${item.source}` });
+      }
+      if (this.plugin.feedFailed.news.length) held.createDiv({ cls: "trimly-muted is-expense trimly-card-foot", text: t.news.failed(this.plugin.feedFailed.news.join(", ")) });
+    }
     const card = this.card(body, t.news.portfolios);
     card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.news.portfoliosHint });
     const items = this.plugin.portfolioFeed();
@@ -2886,7 +2899,7 @@ export class TrimlyView extends ItemView {
       if (recent.length === 0) card.createDiv({ cls: "trimly-muted", text: t.news.nothing });
       for (const item of recent) this.feedRow(card, item);
     }
-    if (this.plugin.feedFailed.length) card.createDiv({ cls: "trimly-muted is-expense trimly-card-foot", text: t.news.failed(this.plugin.feedFailed.join(", ")) });
+    if (this.plugin.feedFailed.portfolios.length) card.createDiv({ cls: "trimly-muted is-expense trimly-card-foot", text: t.news.failed(this.plugin.feedFailed.portfolios.join(", ")) });
   }
 
   // ---- calculators ----

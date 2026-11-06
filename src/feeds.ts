@@ -30,6 +30,29 @@ export const PORTFOLIO_SOURCES: FeedSource[] = [
   { id: "infomoney", name: "InfoMoney", url: "https://www.infomoney.com.br/?s=carteira+recomendada&feed=rss2", titleMatch: /carteira|recomend/i },
 ];
 
+/**
+ * Whole news feeds, filtered here by the positions' tickers. Asking the sites for
+ * news on a ticker would tell them what the user holds, so all of it is read instead.
+ * Each page is ten or so items, so this reaches back about a day.
+ */
+export const NEWS_SOURCES: FeedSource[] = [
+  { id: "infomoney", name: "InfoMoney", url: "https://www.infomoney.com.br/feed/" },
+  { id: "moneytimes", name: "Money Times", url: "https://www.moneytimes.com.br/feed/" },
+  { id: "seudinheiro", name: "Seu Dinheiro", url: "https://www.seudinheiro.com/feed/" },
+];
+const NEWS_PAGES = 5;
+
+/** Every source with its own switch in the settings, once each. */
+export const ALL_SOURCES: FeedSource[] = [...new Map([...PORTFOLIO_SOURCES, ...NEWS_SOURCES].map((s) => [s.id, s])).values()];
+
+/** The pages to read of each news feed. */
+export function newsPages(sources: FeedSource[]): FeedSource[] {
+  return sources.flatMap((s) => Array.from({ length: NEWS_PAGES }, (_, i) => ({ ...s, url: `${s.url}?paged=${i + 1}` })));
+}
+
+/** How far back news and filings are worth listing. */
+export const NEWS_MAX_DAYS = 30;
+
 /** How far back a recommendation is still worth listing. */
 export const PORTFOLIO_MAX_DAYS = 60;
 
@@ -69,4 +92,16 @@ export function recentItems(items: FeedItem[], today: string, maxDays: number): 
   return items
     .filter((i) => i.date >= oldest && !seen.has(i.link) && seen.add(i.link))
     .sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0));
+}
+
+const tickerRoot = (ticker: string) => ticker.slice(0, 4);
+
+/** Items naming one of `tickers` in the title: any share class of the company counts (PETR3 for PETR4). */
+export function newsForTickers(items: FeedItem[], tickers: string[]): (FeedItem & { ticker: string })[] {
+  const out: (FeedItem & { ticker: string })[] = [];
+  for (const item of items) {
+    const ticker = tickers.find((t) => new RegExp(`\\b${tickerRoot(t)}\\d{1,2}F?\\b`).test(item.title));
+    if (ticker) out.push({ ...item, ticker });
+  }
+  return out;
 }

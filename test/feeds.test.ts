@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { parseRss, recentItems } from "../src/feeds.ts";
+import { ALL_SOURCES, NEWS_SOURCES, newsForTickers, newsPages, parseRss, recentItems } from "../src/feeds.ts";
 import type { FeedSource } from "../src/feeds.ts";
 
 const SOURCE: FeedSource = { id: "s", name: "Site", url: "https://site/feed" };
@@ -44,4 +44,23 @@ test("the list is newest first, without repeats or what is too old", () => {
   const at = (date: string, link: string) => ({ title: link, link, date, source: "Site" });
   const out = recentItems([at("2026-10-01", "old-enough"), at("2026-11-05", "new"), at("2026-11-05", "new"), at("2026-01-01", "too-old")], "2026-11-06", 60);
   assert.deepEqual(out.map((i) => i.link), ["new", "old-enough"]);
+});
+
+const news = (title: string) => ({ title, link: `https://site/${title}`, date: "2026-11-05", source: "Site" });
+
+test("news counts only with a held ticker in the title, any share class of the company", () => {
+  const items = [news("Petrobras (PETR4) anuncia dividendos"), news("Petrobras: PETR3 sobe"), news("HGLG11 compra galpão"), news("VALE3 cai"), news("PETROBRAS sem ticker")];
+  const found = newsForTickers(items, ["PETR4", "HGLG11"]);
+  assert.deepEqual(found.map((i) => [i.ticker, i.title.slice(0, 9)]), [["PETR4", "Petrobras"], ["PETR4", "Petrobras"], ["HGLG11", "HGLG11 co"]]);
+});
+
+test("part of a word is not a ticker", () => {
+  assert.deepEqual(newsForTickers([news("XPETR4 não é ticker"), news("PETR é só o começo")], ["PETR4"]), []);
+});
+
+test("every news page is read in turn, with the switches shared between a site's feeds", () => {
+  const pages = newsPages(NEWS_SOURCES);
+  assert.equal(pages.length, NEWS_SOURCES.length * 5);
+  assert.ok(pages[1].url.endsWith("?paged=2"));
+  assert.equal(new Set(ALL_SOURCES.map((s) => s.id)).size, ALL_SOURCES.length);
 });

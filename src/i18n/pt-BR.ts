@@ -222,6 +222,9 @@ export const ptBR = {
   news: {
     off: "Ligue Notícias e carteiras nas configurações para ver esta aba.",
     loading: "Carregando…",
+    yours: "Da sua carteira",
+    yoursHint: "Manchetes que citam o ticker dos seus ativos: fatos relevantes, resultados, proventos. Os sites não sabem o que você tem: o Trimly lê as notícias mais recentes inteiras e filtra aqui, então só alcança cerca de um dia.",
+    nothingYours: "Nenhuma manchete recente cita seus ativos.",
     portfolios: "Carteiras recomendadas",
     portfoliosHint: "Reportagens públicas sobre as carteiras que corretoras e casas de análise publicam. O Trimly só reúne os links: não é recomendação, e os detalhes estão em cada site.",
     nothing: "Nada publicado nos últimos 60 dias.",
