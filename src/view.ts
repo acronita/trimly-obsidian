@@ -101,6 +101,8 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
+import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
+import type { ReportFilter, ReportPreset } from "./reports";
 import { estimatedPayouts, lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
 import type { EstimatedPayout } from "./proventos";
 import { averagePrice, institutionOf, tickerOf } from "./quotes";
@@ -117,7 +119,7 @@ function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   });
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "reports";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -135,6 +137,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "budgets", label: "budgets", icon: "target" },
     { id: "recurring", label: "recurring", icon: "repeat" },
     { id: "obligations", label: "obligations", icon: "clipboard-check" },
+    { id: "reports", label: "reports", icon: "bar-chart-2" },
     { id: "categories", label: "categories", icon: "tags" },
   ],
   investments: [
@@ -200,6 +203,14 @@ export class TrimlyView extends ItemView {
   private contribution = 0;
   /** account picked in the balance forecast; null opens on the main one */
   private forecastAccount: string | null = null;
+  /** what the reports tab is showing; kept while the view is open */
+  private report: ReportFilter & { preset: ReportPreset | "custom"; accountId: string; categoryId: string; compare: "previous" | "year" } = {
+    ...presetRange("thisYear", todayISO()),
+    preset: "thisYear",
+    accountId: "",
+    categoryId: "all",
+    compare: "previous",
+  };
   /** month picked in the income tab's bars; null shows the current one */
   private incomeMonth: string | null = null;
 
@@ -253,6 +264,9 @@ export class TrimlyView extends ItemView {
         break;
       case "obligations":
         this.renderObligations(body, ledger);
+        break;
+      case "reports":
+        this.renderReports(body, ledger);
         break;
       case "categories":
         this.renderCategories(body, ledger);
@@ -446,7 +460,9 @@ export class TrimlyView extends ItemView {
       if (m.id === this.mode) b.addClass("is-active");
       b.addEventListener("click", () => this.setMode(m.id));
     }
-    if (this.mode === "accounts" || this.tabs[this.mode] === "tax") this.renderMonthNav(left);
+    // reports pick their own period
+    const tab = this.tabs[this.mode];
+    if ((this.mode === "accounts" && tab !== "reports") || tab === "tax") this.renderMonthNav(left);
 
     const actions = top.createDiv("trimly-top-actions");
     const hidden = this.plugin.settings.hideValues;
@@ -938,6 +954,143 @@ export class TrimlyView extends ItemView {
     main.createDiv({ cls: "trimly-row-sub", text: `${this.shortDate(p.date)} · ${t.tx.installmentOf(p.number, p.total)}` });
     row.createDiv({ cls: "trimly-amount is-expense", text: this.signedMoney(p.amount, "expense", card.currency) });
     row.addEventListener("click", () => this.plugin.openTransactionModal(p.last));
+  }
+
+  // ---- reports ----
+
+  private renderReports(body: HTMLElement, ledger: Ledger) {
+    const state = this.report;
+    const bar = body.createDiv("trimly-filters");
+    const select = (options: Record<string, string>, value: string, onChange: (v: string) => void) => {
+      const s = bar.createEl("select", { cls: "dropdown" });
+      for (const [k, v] of Object.entries(options)) s.createEl("option", { value: k, text: v });
+      s.value = value;
+      s.addEventListener("change", () => {
+        onChange(s.value);
+        this.render();
+      });
+    };
+    const presets: Record<string, string> = {};
+    for (const p of REPORT_PRESETS) presets[p] = t.reports.presets[p];
+    presets.custom = t.reports.presets.custom;
+    select(presets, state.preset, (v) => {
+      state.preset = v as ReportPreset | "custom";
+      if (v !== "custom") Object.assign(state, presetRange(v as ReportPreset, todayISO()));
+    });
+    const dateInput = (label: string, value: string, set: (v: string) => void) => {
+      const input = bar.createEl("input", { type: "date", attr: { "aria-label": label } });
+      input.value = value;
+      input.addEventListener("change", () => {
+        if (!input.value) return;
+        set(input.value);
+        // dates typed in the wrong order still mean a period
+        if (state.from > state.to) [state.from, state.to] = [state.to, state.from];
+        state.preset = "custom";
+        this.render();
+      });
+    };
+    dateInput(t.reports.from, state.from, (v) => (state.from = v));
+    dateInput(t.reports.to, state.to, (v) => (state.to = v));
+    const accounts: Record<string, string> = { "": t.reports.allAccounts };
+    for (const a of ledger.accounts) accounts[a.id] = a.name;
+    select(accounts, state.accountId, (v) => (state.accountId = v));
+    const categories: Record<string, string> = { all: t.reports.allCategories, "": t.common.uncategorized };
+    for (const c of ledger.categories) categories[c.id] = c.name;
+    select(categories, state.categoryId, (v) => (state.categoryId = v));
+    select({ previous: t.reports.comparePrevious, year: t.reports.compareYear }, state.compare, (v) => (state.compare = v as "previous" | "year"));
+
+    const range = state.compare === "year" ? lastYearRange(state) : previousRange(state);
+    const now = buildReport(ledger, state);
+    const before = buildReport(ledger, { ...state, ...range });
+    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.reports.comparing(this.longDate(range.from), this.longDate(range.to)) });
+
+    /** Signed difference and percent; `good` says which direction is good news, for the color. */
+    const change = (el: HTMLElement, cls: string, nowCents: number, beforeCents: number, good: "up" | "down") => {
+      const diff = nowCents - beforeCents;
+      const pct = changePct(nowCents, beforeCents);
+      const sign = diff < 0 ? "−" : "+";
+      const color = diff === 0 ? "" : (diff > 0) === (good === "up") ? "is-income" : "is-expense";
+      el.createDiv({
+        cls: `${cls} ${color}`,
+        text: diff === 0 ? "—" : `${sign}${this.money(Math.abs(diff))}${pct === null ? "" : ` (${sign}${this.pct(Math.abs(pct), 0)})`}`,
+      });
+    };
+
+    const summary = body.createDiv("trimly-summary-chips");
+    const chip = (label: string, value: number, previous: number, cls: string, good: "up" | "down") => {
+      const c = summary.createDiv(`trimly-summary-chip ${cls}`);
+      c.createDiv({ cls: "trimly-eyebrow", text: label });
+      c.createDiv({ cls: "trimly-summary-value", text: `${value < 0 ? "−" : ""}${this.money(Math.abs(value))}` });
+      change(c, "trimly-muted", value, previous, good);
+    };
+    chip(t.common.income, now.income, before.income, "is-income", "up");
+    chip(t.common.expenses, now.expense, before.expense, "is-expense", "down");
+    const net = now.income - now.expense;
+    chip(t.reports.net, net, before.income - before.expense, net >= 0 ? "is-income" : "is-expense", "up");
+
+    if (now.income === 0 && now.expense === 0) {
+      this.empty(body, "bar-chart-2", t.reports.empty);
+      if (before.income === 0 && before.expense === 0) return;
+    }
+
+    const label = (key: string) => (key.length === 4 ? key : this.shortMonth(key));
+    const keys = seriesKeys(state);
+    const totals = (key: string) => now.series.get(key) ?? { income: 0, expense: 0 };
+    const time = this.card(body, t.reports.overTime);
+    const legend = time.createDiv("trimly-legend-inline");
+    legend.createSpan("trimly-key is-income").createSpan({ text: t.common.income });
+    legend.createSpan("trimly-key is-expense").createSpan({ text: t.common.expenses });
+    cashFlowBars(
+      time,
+      keys.map((key) => ({ label: label(key), ...totals(key) })),
+      (g) => `${g.label}: +${this.money(g.income)} / −${this.money(g.expense)}`
+    );
+    const table = (card: HTMLElement, labels: string[]) => {
+      const el = card.createDiv("trimly-perf-table");
+      const row = el.createDiv("trimly-perf-row is-head");
+      labels.forEach((text, i) => row.createDiv({ cls: i ? "trimly-perf-cell" : "trimly-perf-label", text }));
+      return el;
+    };
+    const months = table(time, [t.reports.period, t.common.income, t.common.expenses, t.reports.net]);
+    for (const key of keys) {
+      const { income, expense } = totals(key);
+      const row = months.createDiv("trimly-perf-row");
+      row.createDiv({ cls: "trimly-perf-label", text: label(key) });
+      row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(income) });
+      row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(expense) });
+      row.createDiv({ cls: `trimly-perf-cell trimly-amount ${income < expense ? "is-expense" : ""}`, text: `${income < expense ? "−" : ""}${this.money(Math.abs(income - expense))}` });
+    }
+
+    const byCategory = (title: string, current: Map<string, number>, previous: Map<string, number>, good: "up" | "down") => {
+      const ids = [...new Set([...current.keys(), ...previous.keys()])].sort((x, y) => (current.get(y) ?? 0) - (current.get(x) ?? 0));
+      if (ids.length === 0) return;
+      const el = table(this.card(body, title), [t.reports.category, t.reports.now, t.reports.before, t.reports.change]);
+      for (const id of ids) {
+        const cat = this.category(ledger, id);
+        const row = el.createDiv("trimly-perf-row");
+        const name = row.createDiv("trimly-perf-label trimly-target-label");
+        name.createSpan("trimly-dot").setCssProps({ "--trimly-color": cat?.color ?? NEUTRAL });
+        name.createSpan({ text: cat?.name ?? t.common.uncategorized });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(current.get(id) ?? 0) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(previous.get(id) ?? 0) });
+        change(row, "trimly-perf-cell trimly-amount", current.get(id) ?? 0, previous.get(id) ?? 0, good);
+      }
+    };
+    byCategory(t.reports.expensesByCategory, now.expenseByCategory, before.expenseByCategory, "down");
+    byCategory(t.reports.incomeByCategory, now.incomeByCategory, before.incomeByCategory, "up");
+
+    const accountIds = [...new Set([...now.byAccount.keys(), ...before.byAccount.keys()])].sort((x, y) => (now.byAccount.get(y)?.expense ?? 0) - (now.byAccount.get(x)?.expense ?? 0));
+    if (accountIds.length) {
+      const el = table(this.card(body, t.reports.byAccount), [t.reports.account, t.common.income, t.common.expenses, t.reports.expenseChange]);
+      for (const id of accountIds) {
+        const row = el.createDiv("trimly-perf-row");
+        row.createDiv({ cls: "trimly-perf-label trimly-target-asset-label", text: ledger.accounts.find((a) => a.id === id)?.name ?? t.common.unknown });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(now.byAccount.get(id)?.income ?? 0) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(now.byAccount.get(id)?.expense ?? 0) });
+        change(row, "trimly-perf-cell trimly-amount", now.byAccount.get(id)?.expense ?? 0, before.byAccount.get(id)?.expense ?? 0, "down");
+      }
+    }
+    body.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.reports.note });
   }
 
   // ---- accounts ----

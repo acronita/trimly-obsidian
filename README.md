@@ -47,6 +47,9 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
+- **Reports** (*Relatórios*) — any period, by preset or free dates, for all accounts or one account or
+  category, compared with the period before or a year earlier: income, expenses and net, over time, by
+  category and by account. Transfers are left out, so paying a card bill doesn't count twice.
 - **Balance forecast** (*Projeção de saldo*, in Accounts) — one account's balance over the next 60 days,
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
