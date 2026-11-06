@@ -418,6 +418,12 @@ export interface FxRates {
 }
 
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
+/** The optional AI assistants, with the user's own key. Kept inside the encrypted ledger, never in data.json. */
+export interface AiConfig {
+  apiKey: string;
+  model: string;
+}
+
 export interface PluggyConfig {
   clientId: string;
   clientSecret: string;
@@ -448,6 +454,8 @@ export interface Ledger {
   brapi?: BrapiConfig;
   /** day the Tesouro Direto prices were last fetched; the file is big, so once a day */
   treasuryCheckedOn?: string;
+  /** set when the AI assistants are turned on */
+  ai?: AiConfig;
   /** exchange rates, set when some account or transaction is in another currency */
   fx?: FxRates;
 }
@@ -540,6 +548,7 @@ export function parseLedger(json: string): Ledger {
     pluggy: raw.pluggy,
     brapi: raw.brapi,
     treasuryCheckedOn: raw.treasuryCheckedOn,
+    ai: raw.ai,
     fx: raw.fx,
   };
 }

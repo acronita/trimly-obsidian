@@ -14,6 +14,20 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.34.0 — 2026-11-06
+
+- 2026-11-06 — Optional AI assistants: an *Assistente* tab in each mode, one for accounts and one for investments,
+  off until the user adds their own Anthropic API key in the settings (new optional `ai` on the ledger, encrypted,
+  left out of exports; version unchanged). The model never gets the ledger: it calls read-only tools (new
+  `src/assistant.ts`, `src/assistant-fetch.ts`) that answer with Trimly's own math, and each result can be opened
+  in the chat. Descriptions of past transactions aren't sent; recurring, bill and future transaction names are, as data the
+  prompt says not to obey. Conversations stay in memory, are gone on lock, stop at 150 thousand tokens, and don't show while values
+  are hidden. Claude only for now, through `requestUrl` with no new dependency. Tested with a fake transport,
+  never against the real API. Why: the roadmap's *Assistente de IA*; see `docs/AI-ASSISTANT.md`. Files touched:
+  `src/assistant.ts`, `src/assistant-fetch.ts`, `src/ledger.ts`, `src/export.ts`, `src/main.ts`, `src/view.ts`,
+  `src/styles/index.css`, `styles.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/assistant.test.ts`,
+  `README.md`, `docs/AI-ASSISTANT.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.33.0 — 2026-11-05
 
 - 2026-11-05 — The *Notícias* tab opens with *Da sua carteira*: headlines naming the tickers of the open

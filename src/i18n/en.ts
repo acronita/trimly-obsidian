@@ -137,6 +137,7 @@ export const en: Strings = {
     tax: "Tax",
     calculators: "Calculators",
     news: "News",
+    assistant: "Assistant",
   },
 
   overview: {
@@ -212,6 +213,26 @@ export const en: Strings = {
     position: "Position",
     yes: "Yes",
     no: "No",
+  },
+
+  assistant: {
+    off: "The assistant is off. To turn it on, add an Anthropic API key in the settings.",
+    hintAccounts: "Ask about your spending, bills and goals. Trimly does the math; Claude gets your question and only the results below, which you can open to see.",
+    hintInvestments: "Ask about your portfolio, allocation and contributions. Trimly does the math; Claude gets your question and only the results below, which you can open to see. Not investment advice.",
+    hidden: "Values are hidden, and answers contain values. Show values to use the assistant.",
+    empty: "Nothing here yet. The conversation stays in memory only and is gone when Trimly locks or closes.",
+    placeholder: "Your question",
+    send: "Send",
+    thinking: "Thinking…",
+    clear: "Clear conversation",
+    sent: (tool: string) => `Sent to Claude: ${tool}`,
+    usage: (pct: number) => `${pct}% of this conversation's limit used.`,
+    limit: "This conversation reached its usage limit. Clear it to start another.",
+    refused: "The model declined to answer that. Try asking another way.",
+    tooLong: "The answer got too long and was cut off. Try asking for something more specific.",
+    badKey: "The API key was refused. Check it in the settings.",
+    rateLimited: "Too many requests in a short time. Try again in a moment.",
+    apiError: (status: number, detail: string) => `The API answered HTTP ${status}${detail ? `: ${detail}` : "."}`,
   },
 
   news: {
@@ -1072,6 +1093,15 @@ export const en: Strings = {
     proventosDesc:
       "Fetches the dividends, JCP and income announced for your positions with a B3 ticker from the B3 website (sistemaswebb3-listados.b3.com.br). " +
       "Only the four letters of each ticker are sent (PETR for PETR4), no quantities or amounts.",
+    assistantTitle: "AI assistant",
+    assistantIntro: "Optional and off by default. When on, your questions and the results of Trimly's math (balances, totals by category, positions) go to api.anthropic.com, with your own key and at your cost. The whole ledger is never sent, and conversations aren't saved.",
+    assistantKey: "Anthropic API key",
+    assistantKeyDesc: "Created at console.anthropic.com. Kept inside the encrypted ledger.",
+    assistantModel: "Model",
+    assistantModelDesc: "The more capable ones answer better and cost more.",
+    assistantSave: "Save",
+    assistantRemove: "Turn off and delete the key",
+    assistantNoKey: "Enter the API key.",
     feeds: "News and portfolios",
     feedsDesc: "Fetches the News tab's articles from the public RSS of the sites below, when the tab opens and at most once a day. Only the feed's address is requested: nothing about you or your portfolio is sent.",
     feedSource: (name: string) => `Source: ${name}`,

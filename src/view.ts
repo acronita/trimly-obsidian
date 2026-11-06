@@ -113,6 +113,9 @@ import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
 import { NEWS_MAX_DAYS, PORTFOLIO_MAX_DAYS, newsForTickers, recentItems } from "./feeds";
 import type { FeedItem } from "./feeds";
+import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
+import type { AssistantKind, ChatMessage, ToolCall } from "./assistant";
+import { sendToClaude } from "./assistant-fetch";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
 import type { ReportFilter, ReportPreset } from "./reports";
@@ -124,6 +127,18 @@ import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, mont
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
 type Mode = "accounts" | "investments";
+
+interface Chat {
+  /** what goes to the API */
+  messages: ChatMessage[];
+  /** what the user sees */
+  log: ({ role: "user" | "assistant" | "notice"; text: string } | { role: "tool"; calls: ToolCall[] })[];
+  tokens: number;
+  busy: boolean;
+}
+
+const newChat = (): Chat => ({ messages: [], log: [], tokens: 0, busy: false });
+
 /** Set (or, at 0, clear) a category's limit in `month`'s plan. */
 function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   editBudget(l, month, (b) => {
@@ -132,7 +147,7 @@ function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   });
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "news" | "reports";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "news" | "reports" | "assistant-accounts" | "assistant-investments";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -152,6 +167,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "obligations", label: "obligations", icon: "clipboard-check" },
     { id: "reports", label: "reports", icon: "bar-chart-2" },
     { id: "categories", label: "categories", icon: "tags" },
+    { id: "assistant-accounts", label: "assistant", icon: "message-circle" },
   ],
   investments: [
     { id: "inv-overview", label: "overview", icon: "layout-dashboard" },
@@ -163,6 +179,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "tax", label: "tax", icon: "landmark" },
     { id: "calculators", label: "calculators", icon: "calculator" },
     { id: "news", label: "news", icon: "newspaper" },
+    { id: "assistant-investments", label: "assistant", icon: "message-circle" },
   ],
 };
 
@@ -218,6 +235,8 @@ export class TrimlyView extends ItemView {
   private contribution = 0;
   /** account picked in the balance forecast; null opens on the main one */
   private forecastAccount: string | null = null;
+  /** the assistants' conversations: in memory only, gone when locked or closed */
+  private chats: Record<AssistantKind, Chat> = { accounts: newChat(), investments: newChat() };
   /** what-if extra per month typed on each debt; kept while the view is open, never saved */
   private debtExtra = new Map<string, number>();
   /** portfolio the Targets tab is on; "" = the main one */
@@ -262,7 +281,11 @@ export class TrimlyView extends ItemView {
     root.empty();
     root.addClass("trimly-view");
     const ledger = this.plugin.ledger;
-    if (!ledger) return this.renderLocked(root);
+    if (!ledger) {
+      // a conversation holds financial data: it doesn't outlive the lock
+      this.chats = { accounts: newChat(), investments: newChat() };
+      return this.renderLocked(root);
+    }
 
     const page = root.createDiv("trimly-page");
     this.renderHeader(page);
@@ -318,6 +341,12 @@ export class TrimlyView extends ItemView {
         break;
       case "news":
         this.renderNews(body, ledger);
+        break;
+      case "assistant-accounts":
+        this.renderAssistant(body, ledger, "accounts");
+        break;
+      case "assistant-investments":
+        this.renderAssistant(body, ledger, "investments");
         break;
     }
     root.scrollTop = scroll;
@@ -489,7 +518,7 @@ export class TrimlyView extends ItemView {
     }
     // reports pick their own period
     const tab = this.tabs[this.mode];
-    if ((this.mode === "accounts" && tab !== "reports") || tab === "tax") this.renderMonthNav(left);
+    if ((this.mode === "accounts" && tab !== "reports" && tab !== "assistant-accounts") || tab === "tax") this.renderMonthNav(left);
 
     const actions = top.createDiv("trimly-top-actions");
     const hidden = this.plugin.settings.hideValues;
@@ -2863,6 +2892,91 @@ export class TrimlyView extends ItemView {
       });
     }
     if (this.plugin.proventoError) foot(t.income.upcomingError(this.plugin.proventoError));
+  }
+
+  // ---- assistant ----
+
+  private renderAssistant(body: HTMLElement, ledger: Ledger, kind: AssistantKind) {
+    const a = t.assistant;
+    if (!ledger.ai) return this.empty(body, "message-circle", a.off);
+    const chat = this.chats[kind];
+    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: kind === "accounts" ? a.hintAccounts : a.hintInvestments });
+    if (this.plugin.settings.hideValues) {
+      // answers are full of amounts that can't be masked one by one
+      body.createDiv({ cls: "trimly-muted", text: a.hidden });
+      return;
+    }
+    const card = body.createDiv("trimly-card trimly-chat");
+    if (chat.log.length === 0) card.createDiv({ cls: "trimly-muted", text: a.empty });
+    for (const entry of chat.log) {
+      if (entry.role === "tool") {
+        for (const call of entry.calls) {
+          const details = card.createEl("details", { cls: "trimly-chat-tool" });
+          details.createEl("summary", { text: a.sent(call.name) });
+          details.createEl("pre", { text: call.result });
+        }
+      } else {
+        // plain text: what comes back is shown, never run as markup
+        card.createDiv({ cls: `trimly-chat-message is-${entry.role}`, text: entry.text });
+      }
+    }
+    if (chat.busy) card.createDiv({ cls: "trimly-muted", text: a.thinking });
+
+    const form = body.createDiv("trimly-chat-form");
+    const input = form.createEl("textarea", { attr: { placeholder: a.placeholder, rows: "2", "aria-label": a.placeholder } });
+    const send = form.createEl("button", { cls: "mod-cta", text: a.send });
+    send.disabled = chat.busy;
+    const submit = () => {
+      const question = input.value.trim();
+      if (question && !chat.busy) void this.askChat(kind, question);
+    };
+    send.addEventListener("click", submit);
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) {
+        e.preventDefault();
+        submit();
+      }
+    });
+    const foot = body.createDiv("trimly-section-bar");
+    foot.createDiv({ cls: "trimly-muted", text: a.usage(Math.round((chat.tokens / MAX_CONVERSATION_TOKENS) * 100)) });
+    if (chat.log.length) {
+      foot.createEl("button", { text: a.clear }).addEventListener("click", () => {
+        this.chats[kind] = newChat();
+        this.render();
+      });
+    }
+  }
+
+  private async askChat(kind: AssistantKind, question: string) {
+    const ledger = this.plugin.ledger;
+    if (!ledger?.ai) return;
+    const chat = this.chats[kind];
+    chat.log.push({ role: "user", text: question });
+    chat.busy = true;
+    this.render();
+    try {
+      const turn = await askAssistant({
+        send: sendToClaude,
+        config: ledger.ai,
+        kind,
+        ledger,
+        today: todayISO(),
+        language: this.plugin.settings.language,
+        history: chat.messages,
+        tokensUsed: chat.tokens,
+        question,
+      });
+      chat.messages = turn.messages;
+      chat.tokens += turn.tokens;
+      if (turn.toolCalls.length) chat.log.push({ role: "tool", calls: turn.toolCalls });
+      if (turn.status === "done") chat.log.push({ role: "assistant", text: turn.answer });
+      else chat.log.push({ role: "notice", text: turn.status === "limit" ? t.assistant.limit : turn.status === "refused" ? t.assistant.refused : t.assistant.tooLong });
+    } catch (e) {
+      chat.log.push({ role: "notice", text: (e as Error).message });
+    } finally {
+      chat.busy = false;
+      this.render();
+    }
   }
 
   // ---- news ----

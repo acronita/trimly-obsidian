@@ -54,6 +54,10 @@ passphrase that never leaves your device.
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
   charged so far; purchases to come and installments on later bills aren't in.
+- **AI assistants (optional, off by default)** (*Assistente*, in each mode) — ask about your spending or your
+  portfolio, with your own Anthropic API key and at your cost. Trimly does the math and sends only your question and
+  the results asked for, which you can open in the chat; the whole ledger is never sent. Conversations aren't saved.
+  Answers can be wrong, and they aren't investment advice.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
   articles on the portfolios brokers publish, from public RSS feeds. Trimly only gathers the links: not a
   recommendation. It reaches back about a day for your tickers, and has no filings.
@@ -183,6 +187,8 @@ passphrase that never leaves your device.
   The News tab reads public RSS feeds from `www.moneytimes.com.br`, `investnews.com.br`,
   `www.infomoney.com.br` and `www.seudinheiro.com`, at most once a day, requesting only the feed's address:
   your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.
+  With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
+  category, bill, recurring and future transaction names, positions) go to `api.anthropic.com` with your key, only when you ask something.
   With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
@@ -210,8 +216,8 @@ Everything still works fully manually if you skip this.
 1. Sign up at [meu.pluggy.ai](https://meu.pluggy.ai) and connect your banks there.
 2. Create an account in the [Pluggy dashboard](https://dashboard.pluggy.ai), add the **MeuPluggy**
    connector, and create an application to get a **client ID** and **client secret**. The developer
-   account starts with a 15-day trial: link Meu Pluggy during it (see
-   [meu-pluggy](https://github.com/pluggyai/meu-pluggy)).
+   account starts with a 15-day trial: link Meu Pluggy during it. Pluggy says you can still pull your data after it
+   expires (see [meu-pluggy](https://github.com/pluggyai/meu-pluggy)).
 3. In the application's demo, connect your Meu Pluggy account once per bank and copy each
    **Item ID**.
 4. In *Settings → Trimly → Bank sync*, enter the client ID, secret and item IDs, then **Connect**.
@@ -234,9 +240,10 @@ first sync. A position the item stops reporting is shown as closed.
 1. Create an account at [brapi.dev](https://brapi.dev) and copy your token.
 2. In *Settings → Trimly → Quotes*, paste the token.
 
-The free plan covers quotes of B3 tickers. Proventos and IBOV/IFIX history come from B3's website, with no
-token, and Tesouro Direto prices from the Tesouro Transparente open data, so brapi's paid plans aren't needed
-for them. Check [brapi's plans](https://brapi.dev/pricing) for current limits.
+The free plan needs no card and covers quotes of B3 tickers, one ticker per request and 15,000 requests a month
+(as of November 2026; see [brapi's plans](https://brapi.dev/pricing)). Proventos and IBOV/IFIX history come from
+B3's website, with no token, and Tesouro Direto prices from the Tesouro Transparente open data, so Trimly doesn't
+need brapi's paid plans for them.
 
 ## Development
 

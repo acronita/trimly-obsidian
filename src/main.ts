@@ -2,6 +2,7 @@ import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile } from 
 import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
+import { AI_DEFAULT_MODEL, AI_MODELS } from "./assistant";
 import { fetchProventos } from "./b3";
 import { ledgerJson, movementsCsv, positionsCsv, transactionsCsv } from "./export";
 import { fetchBenchmarks } from "./bcb";
@@ -850,6 +851,62 @@ class TrimlySettingTab extends PluginSettingTab {
     this.displayQuotes();
     this.displayBankSync();
     this.displayExport();
+    this.displayAssistant();
+  }
+
+  /** Off until the user gives a key of their own; removing it turns the assistants off. */
+  private displayAssistant() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    const s = t.settings;
+    new Setting(containerEl).setName(s.assistantTitle).setHeading();
+    containerEl.createEl("p", { cls: "setting-item-description", text: s.assistantIntro });
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc(s.unlockForSync);
+      return;
+    }
+    const config = p.ledger.ai;
+    let apiKey = config?.apiKey ?? "";
+    let model = config?.model ?? AI_DEFAULT_MODEL;
+    new Setting(containerEl)
+      .setName(s.assistantKey)
+      .setDesc(s.assistantKeyDesc)
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.setValue(apiKey).onChange((v) => (apiKey = v.trim()));
+      });
+    const models: Record<string, string> = {};
+    for (const m of AI_MODELS) models[m] = m;
+    new Setting(containerEl)
+      .setName(s.assistantModel)
+      .setDesc(s.assistantModelDesc)
+      .addDropdown((d) => d.addOptions(models).setValue(model).onChange((v) => (model = v)));
+    const actions = new Setting(containerEl);
+    actions.addButton((b) =>
+      b
+        .setButtonText(s.assistantSave)
+        .setCta()
+        .onClick(async () => {
+          if (!apiKey) return void new Notice(s.assistantNoKey);
+          await p.mutate((l) => {
+            l.ai = { apiKey, model };
+          });
+          this.display();
+        })
+    );
+    if (config) {
+      actions.addButton((b) =>
+        b
+          .setButtonText(s.assistantRemove)
+          .setWarning()
+          .onClick(async () => {
+            await p.mutate((l) => {
+              delete l.ai;
+            });
+            this.display();
+          })
+      );
+    }
   }
 
   /** Readable copies go through the system download, the only way out that is not the vault. */

@@ -1,8 +1,8 @@
 # AI assistant: research and proposed design
 
-Status: **not built.** This is the research the roadmap asks for before building its optional AI
-assistant (2026-11-05), and the decisions needed to start. Nothing here ships, and Trimly sends nothing to
-any AI provider.
+Status: **built in 0.34.0, never run against the real API.** This is the research the roadmap asks for before
+building its optional AI assistant (2026-11-05), the design that shipped, and what is still open. It is off by
+default: nothing goes to any AI provider until the user adds a key.
 
 ## What other apps do
 
@@ -29,7 +29,7 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
 [why not to use GenAI for budget math](https://dev.to/ericrodriguez10/day-91-why-i-stopped-using-genai-for-budgeting-math-1d4k),
 [ToolMinimize (preprint, results not verified)](https://arxiv.org/pdf/2608.24957).
 
-## Proposed design
+## Design
 
 - **Off by default.** Turning it on asks for the user's own API key, kept in the encrypted ledger like the
   Pluggy credentials, and the README says what leaves the device and to where.
@@ -42,10 +42,9 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
   | Investments | allocation against targets, returns, contribution plan, proventos, income tax estimate | `allocationByClass`, `rebalance`, `assetTargets`, `taxMonths` |
 
 - **Two assistants, two prompts**, each with only its own tools, in its own mode of the panel.
-- **Show what is sent.** Each tool result can be opened in the chat before and after it goes out, and tool calls
-  can be set to ask first.
-- **Nothing in plaintext in the vault.** Conversations stay in memory by default. If kept, they go in the
-  encrypted ledger, under the encryption rule.
+- **Show what is sent.** Each tool result can be opened in the chat. It is shown as it goes, with no step to
+  approve each one first.
+- **Nothing in plaintext in the vault.** Conversations stay in memory and are gone when Trimly locks or closes.
 - **Text from outside is data.** Transaction descriptions come from banks and stores, so a description could
   carry instructions to the model. Tools return them as data, the prompt says so, and no tool writes to the
   ledger or moves money.
@@ -58,11 +57,15 @@ Questions with known answers over a fictitious ledger, graded by code: the figur
 what the pure function returns. Include questions that must be refused or answered with "I don't know", such as
 "which stock should I buy?". Running it spends API credits, so it needs the user's key and their go-ahead.
 
-## Decisions needed before building
+## Choices made, and still open
 
-1. **Provider.** The roadmap says the user picks one. Supporting one first (Claude, through Anthropic's API) is
-   far less code and testing than several; each extra provider has its own tool format.
-2. **New dependency.** Anthropic's official SDK (`@anthropic-ai/sdk`) is the recommended way to call Claude, and
-   [the dependency policy](DEPENDENCIES.md) requires approval for a new package. It adds to the bundle, and
-   Obsidian's `requestUrl` would need to replace the SDK's `fetch`, since plugins can't count on CORS.
-3. **Testing.** Nothing can be checked against the real model without an API key.
+1. **Claude only, for now.** The roadmap says the user picks a provider. Each extra one has its own tool format
+   and its own testing, so the others wait until this one has been used.
+2. **No new dependency.** Requests are plain HTTP through Obsidian's `requestUrl`, since [the dependency
+   policy](DEPENDENCIES.md) asks for approval before a new package and plugins can't count on CORS. Anthropic's
+   official SDK is the usual way to call Claude; moving to it is a decision for the user.
+3. **The model is a setting**, with Claude Opus 5.5 by default. It isn't chosen per task, as the roadmap's research
+   item suggests. The request asks for the server-side fallback on Opus and Sonnet, so a declined request is
+   retried on another model.
+4. **Not run against the real API.** The tests use a fake transport, and the evaluation above hasn't been run: it
+   needs a key and spends credits.
