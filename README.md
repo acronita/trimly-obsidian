@@ -54,6 +54,11 @@ passphrase that never leaves your device.
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
   charged so far; purchases to come and installments on later bills aren't in.
+- **Tesouro Direto prices** — manual Tesouro Direto positions are revalued once a day from the Tesouro
+  Transparente open data, with no token: price (what selling pays, before tax) × quantity. Name the
+  position with its type and year, like *Tesouro IPCA+ 2035*, or fill in the maturity; Renda+ and Educa+
+  need the exact maturity, since the year in their names is when payments start. The file can lag
+  a few days behind, and the position's details show the date of the price.
 - **Calculators** (*Calculadoras*, in the investments mode) — financial independence, compound interest,
   how much to contribute to a goal, emergency fund, and CDB against LCI/LCA after tax. They run on the
   device, start from your own numbers when possible and save nothing. Simulations at a constant rate, not
@@ -159,7 +164,10 @@ passphrase that never leaves your device.
   *Comparar com índices* in settings to stop both. With positions that have a B3 ticker, the income
   tab fetches their announced proventos from the same B3 website, sending only each ticker's
   four-letter issuer code (PETR for PETR4), at most once a day; the result stays in memory, never in
-  the vault. Turn off *Agenda de proventos* to stop it. With a brapi token, Trimly sends the
+  the vault. Turn off *Agenda de proventos* to stop it. With manual Tesouro Direto positions, Trimly
+  downloads the public price file (about 15 MB) from `www.tesourotransparente.gov.br`, at most once a
+  day; it has every bond, so nothing about yours is sent. Turn off *Preços do Tesouro Direto* to stop it.
+  With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
   reference rates (European Central Bank data) from `api.frankfurter.dev`, at most once a day; only

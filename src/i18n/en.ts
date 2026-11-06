@@ -932,6 +932,9 @@ export const en: Strings = {
     investmentErrors: (e: string) => `Trimly: some investment data could not be loaded: ${e}`,
     quotesFailed: (e: string) => `Trimly: quotes not updated: ${e}`,
     quotesUpdated: (n: number) => `Quotes: ${n} ${s(n, "position", "positions")} updated.`,
+    treasuryUpdated: (n: number) => `Tesouro Direto: ${n} ${s(n, "bond", "bonds")} updated.`,
+    treasuryMissing: (names: string) => `Tesouro Direto with no price: ${names}. Check the quantity and that the name has the type and year (Tesouro IPCA+ 2035), or fill in the maturity (Renda+ and Educa+ need the exact one).`,
+    treasuryFailed: (message: string) => `Tesouro Direto prices failed: ${message}`,
     unlockFirst: "Unlock Trimly first.",
     detailsFailed: (e: string) => `Trimly: could not open the position details: ${e}`,
     lockedWhileChanging: "Trimly was locked.",
@@ -989,6 +992,10 @@ export const en: Strings = {
     proventosDesc:
       "Fetches the dividends, JCP and income announced for your positions with a B3 ticker from the B3 website (sistemaswebb3-listados.b3.com.br). " +
       "Only the four letters of each ticker are sent (PETR for PETR4), no quantities or amounts.",
+    treasuryPrices: "Tesouro Direto prices",
+    treasuryPricesDesc:
+      "Updates manually added Tesouro Direto bonds once a day from the public file at www.tesourotransparente.gov.br (about 15 MB). " +
+      "The file has every bond, so nothing about yours is sent. It uses the selling price before tax, and the file can lag a few days.",
     quotes: "Quotes (brapi, optional)",
     quotesIntro:
       "Updates stocks, real estate funds, ETFs and BDRs from brapi.dev: price, daily change and company name. " +
@@ -1044,6 +1051,8 @@ export const en: Strings = {
     bcbSeriesBody: (code: number, detail: string) => `Central Bank series ${code} failed: ${detail}`,
     b3Index: (index: string, status: number) => `B3's ${index} failed (HTTP ${status})`,
     b3Proventos: (issuer: string, status: number) => `B3 proventos of ${issuer} failed (HTTP ${status})`,
+    treasuryPrices: (status: number) => `Tesouro Transparente answered HTTP ${status}`,
+    treasuryFormat: "The Tesouro Transparente file came in an unexpected format",
     brapiRejected: "brapi rejected the token",
     brapiQuote: (ticker: string) => `Quote for ${ticker}`,
     brapiLimit: "brapi request limit reached; try again later",

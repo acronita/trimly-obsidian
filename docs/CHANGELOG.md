@@ -10,6 +10,21 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.27.0 — 2026-11-05
+
+- 2026-11-05 — Manual Tesouro Direto positions are revalued from the Tesouro Transparente open data: the
+  newest day's selling price × quantity, a market move like a brapi quote, at most once a day (new
+  `src/treasury.ts`, `src/treasury-fetch.ts`, new optional `treasuryCheckedOn` on the ledger; version
+  unchanged). A position is matched by the type in its name and its maturity or year; when that isn't
+  certain it keeps its value and a notice names it (Renda+ and Educa+ need the exact maturity: Renda+ 2065
+  matures in 2084). New setting *Preços do Tesouro Direto* (on by default;
+  new `treasuryPrices` key in `data.json`). The file is about 15 MB, ignores byte ranges and lagged several days
+  business days when checked, so it is fetched only with such a position, and it holds every bond, so nothing about
+  the user's is sent. Why: the roadmap's *Cotação do Tesouro Direto*, which brapi only has on its Pro plan.
+  Files touched: `src/treasury.ts`, `src/treasury-fetch.ts`, `src/ledger.ts`, `src/main.ts`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/treasury.test.ts`, `test/encryption-rule.test.ts`,
+  `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.26.0 — 2026-11-05
 
 - 2026-11-05 — New *Calculadoras* tab in the investments mode: financial independence (wealth needed for
