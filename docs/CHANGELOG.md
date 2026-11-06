@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-11-05 — New `docs/AI-ASSISTANT.md`: the research and proposed design for the roadmap's optional AI
+  assistant, which is not built, and the decisions needed first. README gets a *Quotes* section on the brapi
+  token. Why: the roadmap asks for research first and for setup steps in the README. Files touched:
+  `docs/AI-ASSISTANT.md`, `README.md`.
 - 2026-11-01 — README gets a *Screenshots* section with eight screens (overview, accounts, obrigações,
   recurring, investments, returns, allocation targets, proventos), flagged as fictitious values.
   Why: the screenshots taken on 2026-10-27 never made it into the README, and their test ledger uses

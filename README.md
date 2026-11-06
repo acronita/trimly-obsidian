@@ -229,6 +229,15 @@ Each sync overwrites their values, imports their movements, and records the day'
 with the money moved and the income paid since the day before, so the history starts with your
 first sync. A position the item stops reporting is shown as closed.
 
+## Quotes (optional)
+
+1. Create an account at [brapi.dev](https://brapi.dev) and copy your token.
+2. In *Settings → Trimly → Quotes*, paste the token.
+
+The free plan covers quotes of B3 tickers. Proventos and IBOV/IFIX history come from B3's website, with no
+token, and Tesouro Direto prices from the Tesouro Transparente open data, so brapi's paid plans aren't needed
+for them. Check [brapi's plans](https://brapi.dev/pricing) for current limits.
+
 ## Development
 
 See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) and [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
