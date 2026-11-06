@@ -54,6 +54,10 @@ passphrase that never leaves your device.
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
   charged so far; purchases to come and installments on later bills aren't in.
+- **Calculators** (*Calculadoras*, in the investments mode) — financial independence, compound interest,
+  how much to contribute to a goal, emergency fund, and CDB against LCI/LCA after tax. They run on the
+  device, start from your own numbers when possible and save nothing. Simulations at a constant rate, not
+  a forecast or a recommendation.
 - **Income tax** (*IR*, in the investments mode) — an estimate from your movements: average price per
   asset, each month's result and DARF with its due date, the R$ 20.000 stock exemption meter, losses
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,

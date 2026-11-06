@@ -10,6 +10,19 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.26.0 — 2026-11-05
+
+- 2026-11-05 — New *Calculadoras* tab in the investments mode: financial independence (wealth needed for
+  an income and the time to reach it), compound interest with contributions, how much to contribute to a
+  goal, emergency fund, and CDB against a tax-free LCI/LCA after income tax. Fields start from real
+  data when possible: wealth, average aporte of the last 12 closed months, income movements of the same
+  months, average expenses of the last 6 and the balance of the accounts (new `calculatorDefaults`). Rates
+  start empty, since the device doesn't fetch them. Everything runs on the device; what is typed lasts
+  until the view closes and is never saved, and money fields are masked while values are hidden. Why: the
+  roadmap's *Calculadoras*. Files touched: `src/calculators.ts`, `src/view.ts`, `src/styles/index.css`,
+  `styles.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/calculators.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.25.0 — 2026-11-05
 
 - 2026-11-05 — New *Relatórios* tab: any period, by preset or free dates, optionally limited to one
