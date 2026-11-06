@@ -257,6 +257,8 @@ export interface Asset {
   quantity?: number;
   /** the user's weight or score inside its class, any scale; with any set in a class, contributions split by them */
   weight?: number;
+  /** portfolio it belongs to; missing = the main one */
+  portfolioId?: string;
   /** current net value (after taxes and fees) */
   value: number;
   /** current gross value, when known */
@@ -366,6 +368,16 @@ export interface Investments {
   /** oldest first, at most one per day */
   snapshots: PortfolioSnapshot[];
   movements: Movement[];
+  /** the main portfolio's: positions in no other portfolio */
+  targets: AllocationTarget[];
+  /** other portfolios, by objective; without any, there is just the main one */
+  portfolios?: Portfolio[];
+}
+
+/** Positions set apart for an objective (retirement, emergency fund), with allocation targets of their own. */
+export interface Portfolio {
+  id: string;
+  name: string;
   targets: AllocationTarget[];
 }
 
@@ -500,6 +512,7 @@ export function parseLedger(json: string): Ledger {
       snapshots: raw.investments?.snapshots ?? [],
       movements: raw.investments?.movements ?? [],
       targets: raw.investments?.targets ?? [],
+      ...(raw.investments?.portfolios ? { portfolios: raw.investments.portfolios } : {}),
     },
     plans: raw.plans,
     goals: raw.goals,
@@ -1052,6 +1065,46 @@ export function recordSnapshot(ledger: Ledger, today: string, untracked = 0) {
   }
   if (last?.date === today) snaps[snaps.length - 1] = snap;
   else snaps.push(snap);
+}
+
+// ---- portfolios ----
+
+/**
+ * The ledger as seen from one portfolio ("" = the main one): only its positions and
+ * its targets, so allocation and rebalancing work on it unchanged. For reading: it
+ * shares its objects with the real ledger, and history stays that of the whole.
+ */
+export function portfolioLedger(ledger: Ledger, portfolioId: string): Ledger {
+  const portfolios = ledger.investments.portfolios ?? [];
+  const portfolio = portfolios.find((p) => p.id === portfolioId);
+  // a position whose portfolio is gone falls back to the main one, so it never disappears
+  const inPortfolio = (a: Asset) => (portfolios.some((p) => p.id === a.portfolioId) ? a.portfolioId : "") === (portfolio?.id ?? "");
+  return {
+    ...ledger,
+    investments: { ...ledger.investments, assets: ledger.investments.assets.filter(inPortfolio), targets: portfolio?.targets ?? ledger.investments.targets },
+  };
+}
+
+export function savePortfolio(ledger: Ledger, portfolio: Portfolio) {
+  const portfolios = ledger.investments.portfolios ?? [];
+  const i = portfolios.findIndex((p) => p.id === portfolio.id);
+  if (i >= 0) portfolios[i] = portfolio;
+  else portfolios.push(portfolio);
+  ledger.investments.portfolios = portfolios;
+}
+
+/** Remove a portfolio; its positions go back to the main one, and its targets go with it. */
+export function removePortfolio(ledger: Ledger, id: string) {
+  const portfolios = (ledger.investments.portfolios ?? []).filter((p) => p.id !== id);
+  ledger.investments.portfolios = portfolios.length ? portfolios : undefined;
+  for (const a of ledger.investments.assets) if (a.portfolioId === id) delete a.portfolioId;
+}
+
+/** Set (or, at 0, clear) a class's target in one portfolio ("" = the main one). */
+export function setPortfolioTarget(ledger: Ledger, portfolioId: string, assetClass: AssetClass, pct: number) {
+  const owner = ledger.investments.portfolios?.find((p) => p.id === portfolioId) ?? ledger.investments;
+  owner.targets = owner.targets.filter((x) => x.assetClass !== assetClass);
+  if (pct > 0) owner.targets.push({ assetClass, pct });
 }
 
 // ---- allocation targets ----

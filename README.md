@@ -54,6 +54,9 @@ passphrase that never leaves your device.
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
   charged so far; purchases to come and installments on later bills aren't in.
+- **Portfolios** (*Carteiras*, in the Targets tab) — set positions apart by objective, each with its own
+  allocation targets and contribution plan. Net worth adds them up; returns, proventos and income tax
+  stay those of the whole.
 - **Tesouro Direto prices** — manual Tesouro Direto positions are revalued once a day from the Tesouro
   Transparente open data, with no token: price (what selling pays, before tax) × quantity. Name the
   position with its type and year, like *Tesouro IPCA+ 2035*, or fill in the maturity; Renda+ and Educa+

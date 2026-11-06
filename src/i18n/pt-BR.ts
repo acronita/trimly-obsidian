@@ -191,6 +191,17 @@ export const ptBR = {
     deleteConfirm: (d: string) => `Excluir "${d}"?`,
   },
 
+  portfolios: {
+    main: "Principal",
+    pick: "Carteira",
+    add: "Nova carteira",
+    edit: "Editar carteira",
+    title: "Carteiras",
+    empty: "Nenhuma posição nesta carteira. Escolha a carteira ao editar uma posição.",
+    hint: "Separe posições por objetivo, cada carteira com as metas dela. O patrimônio soma todas; rentabilidade, proventos e IR continuam sendo do conjunto.",
+    deleteConfirm: (name: string) => `Excluir a carteira "${name}"? As posições dela voltam para a Principal, e as metas dela são apagadas.`,
+  },
+
   calc: {
     disclaimer: "Simulações com taxa constante, para ter uma ideia: não são previsão nem recomendação. Os campos já vêm com seus dados quando dá; nada aqui é salvo nem sai do aparelho.",
     fill: "Preencha os campos para ver o resultado.",

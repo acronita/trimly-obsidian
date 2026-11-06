@@ -1,7 +1,7 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, GoalModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, GoalModal, MovementModal, ObligationModal, PortfolioModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
@@ -20,6 +20,7 @@ import {
   MovementType,
   Obligation,
   ObligationKind,
+  Portfolio,
   Recurring,
   SavingsGoal,
   Transaction,
@@ -82,8 +83,12 @@ import {
   settleObligation,
   unsettleObligation,
   windowStart,
+  portfolioLedger,
   removeCategory,
   removeGoal,
+  removePortfolio,
+  savePortfolio,
+  setPortfolioTarget,
   removeRecurring,
   removeManualAsset,
   removeManualMovement,
@@ -205,6 +210,8 @@ export class TrimlyView extends ItemView {
   private contribution = 0;
   /** account picked in the balance forecast; null opens on the main one */
   private forecastAccount: string | null = null;
+  /** portfolio the Targets tab is on; "" = the main one */
+  private portfolioId = "";
   /** what was typed in the calculators, by field; kept while the view is open, never saved */
   private calcValues = new Map<string, string>();
   /** what the reports tab is showing; kept while the view is open */
@@ -2020,6 +2027,7 @@ export class TrimlyView extends ItemView {
     new AssetModal(
       this.app,
       existing,
+      ledger.investments.portfolios ?? [],
       (asset, toConnection) =>
         void this.plugin.mutate((l) => {
           saveAsset(l, asset, todayISO());
@@ -3051,8 +3059,50 @@ export class TrimlyView extends ItemView {
     }
   }
 
-  private renderTargets(body: HTMLElement, ledger: Ledger) {
-    if (ledger.investments.assets.length === 0) return this.emptyInvestments(body);
+  /** Which portfolio the Targets tab is on, and the way to add or edit them. */
+  private portfolioBar(body: HTMLElement, full: Ledger) {
+    const portfolios = full.investments.portfolios ?? [];
+    const bar = body.createDiv("trimly-filters");
+    if (portfolios.length) {
+      const select = bar.createEl("select", { cls: "dropdown", attr: { "aria-label": t.portfolios.pick } });
+      select.createEl("option", { value: "", text: t.portfolios.main });
+      for (const p of portfolios) select.createEl("option", { value: p.id, text: p.name });
+      select.value = this.portfolioId;
+      select.addEventListener("change", () => {
+        this.portfolioId = select.value;
+        this.render();
+      });
+      const current = portfolios.find((p) => p.id === this.portfolioId);
+      if (current) bar.createEl("button", { text: t.portfolios.edit }).addEventListener("click", () => this.editPortfolio(current));
+    }
+    bar.createEl("button", { text: t.portfolios.add }).addEventListener("click", () => this.editPortfolio(null));
+  }
+
+  private editPortfolio(existing: Portfolio | null) {
+    new PortfolioModal(
+      this.app,
+      existing,
+      (name) => {
+        const portfolio: Portfolio = existing ? { ...existing, name } : { id: newId(), name, targets: [] };
+        this.portfolioId = portfolio.id;
+        void this.plugin.mutate((l) => savePortfolio(l, portfolio));
+      },
+      existing
+        ? () =>
+            new ConfirmModal(this.app, t.portfolios.deleteConfirm(existing.name), t.common.delete, () => {
+              this.portfolioId = "";
+              void this.plugin.mutate((l) => removePortfolio(l, existing.id));
+            }).open()
+        : null
+    ).open();
+  }
+
+  private renderTargets(body: HTMLElement, full: Ledger) {
+    if (full.investments.assets.length === 0) return this.emptyInvestments(body);
+    if (!full.investments.portfolios?.some((p) => p.id === this.portfolioId)) this.portfolioId = "";
+    this.portfolioBar(body, full);
+    const ledger = portfolioLedger(full, this.portfolioId);
+    if (openAssets(ledger).length === 0) body.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.portfolios.empty });
     const targets = ledger.investments.targets;
     const sum = targets.reduce((s, t) => s + t.pct, 0);
     const lines = rebalance(ledger, this.contribution);
@@ -3210,10 +3260,7 @@ export class TrimlyView extends ItemView {
       new Notice(t.targets.invalidPct);
       return;
     }
-    void this.plugin.mutate((l) => {
-      l.investments.targets = l.investments.targets.filter((x) => x.assetClass !== c);
-      if (v > 0) l.investments.targets.push({ assetClass: c, pct: v });
-    });
+    void this.plugin.mutate((l) => setPortfolioTarget(l, this.portfolioId, c, v));
   }
 
   private openMovements(type: MovementType) {
@@ -3255,6 +3302,22 @@ export class TrimlyView extends ItemView {
     const h = head.createDiv();
     h.createDiv({ cls: "trimly-eyebrow", text: t.inv.portfolio });
     h.createDiv({ cls: "trimly-page-value", text: this.money(total) });
+
+    const portfolios = ledger.investments.portfolios ?? [];
+    if (portfolios.length) {
+      const card = this.card(body, t.portfolios.title);
+      card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.portfolios.hint });
+      for (const { id, name } of [{ id: "", name: t.portfolios.main }, ...portfolios]) {
+        const value = portfolioValue(portfolioLedger(ledger, id));
+        const row = card.createDiv("trimly-row is-clickable");
+        row.createDiv("trimly-row-main").createDiv({ cls: "trimly-row-title", text: name });
+        row.createDiv({ cls: "trimly-amount", text: `${this.money(value)}${total > 0 ? ` · ${this.pct((value / total) * 100, 0)}` : ""}` });
+        row.addEventListener("click", () => {
+          this.portfolioId = id;
+          this.goTab("targets");
+        });
+      }
+    }
 
     const byClass = new Map<AssetClass, Asset[]>();
     for (const a of assets) byClass.set(a.assetClass, [...(byClass.get(a.assetClass) ?? []), a]);

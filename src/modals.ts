@@ -16,6 +16,7 @@ import {
   Obligation,
   ObligationFrequency,
   ObligationKind,
+  Portfolio,
   Recurring,
   SavingsGoal,
   Settlement,
@@ -698,6 +699,7 @@ export class AssetModal extends Modal {
   constructor(
     app: App,
     existing: Asset | null,
+    private portfolios: Portfolio[],
     private onSave: (a: Asset, toConnection: boolean) => void,
     private onDelete: ((a: Asset) => void) | null
   ) {
@@ -729,6 +731,19 @@ export class AssetModal extends Modal {
         .setValue(d.assetClass)
         .onChange((v) => (d.assetClass = v as AssetClass))
     );
+    if (this.portfolios.length) {
+      const options: Record<string, string> = { "": t.portfolios.main };
+      for (const p of this.portfolios) options[p.id] = p.name;
+      new Setting(contentEl).setName(t.portfolios.pick).addDropdown((dd) =>
+        dd
+          .addOptions(options)
+          .setValue(d.portfolioId && d.portfolioId in options ? d.portfolioId : "")
+          .onChange((v) => {
+            if (v) d.portfolioId = v;
+            else delete d.portfolioId;
+          })
+      );
+    }
     const institution = () =>
       new Setting(contentEl)
         .setName(a.institution)
@@ -966,6 +981,43 @@ export class CategoryModal extends Modal {
         return null;
       },
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class PortfolioModal extends Modal {
+  private name: string;
+
+  constructor(
+    app: App,
+    private existing: Portfolio | null,
+    private onSave: (name: string) => void,
+    private onDelete: (() => void) | null
+  ) {
+    super(app);
+    this.name = existing?.name ?? "";
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    this.setTitle(this.existing ? t.portfolios.edit : t.portfolios.add);
+    new Setting(contentEl).setName(t.modals.goal.name).addText((text) => text.setValue(this.name).onChange((v) => (this.name = v)));
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!this.name.trim()) return t.common.addName;
+        this.onSave(this.name.trim());
+        return null;
+      },
+      this.onDelete,
       () => this.close()
     );
   }
