@@ -38,7 +38,9 @@ import {
   allocationByClass,
   applyInstitutionToConnection,
   applyCategory,
+  assetTargets,
   budgetFor,
+  classAssets,
   defaultCategory,
   dropBudgets,
   setDefaultCategory,
@@ -2763,6 +2765,8 @@ export class TrimlyView extends ItemView {
       text: t.targets.toTargetNote,
     });
 
+    this.renderAssetTargets(body, ledger, [...shown]);
+
     const plan = this.card(body, t.targets.plan);
     const bar = plan.createDiv("trimly-filters");
     const amount = bar.createEl("input", { cls: "trimly-limit-input", type: "text", placeholder: t.targets.amount });
@@ -2799,7 +2803,63 @@ export class TrimlyView extends ItemView {
         text: t.targets.after(this.pct(l.pct), after > 0 ? this.pct(((l.value + l.contribute) / after) * 100) : "—", this.pct(l.target)),
       });
       row.createDiv({ cls: "trimly-amount is-income", text: `+${this.money(l.contribute)}` });
+      const classAfter = l.value + l.contribute;
+      for (const a of assetTargets(ledger, l.assetClass, l.contribute).filter((x) => x.contribute > 0)) {
+        const sub = plan.createDiv("trimly-row trimly-target-asset");
+        const subMain = sub.createDiv("trimly-row-main");
+        subMain.createDiv({ cls: "trimly-row-title", text: a.asset.name });
+        subMain.createDiv({
+          cls: "trimly-row-sub",
+          text: t.targets.inClass(this.pct(a.pct), this.pct(((a.asset.value + a.contribute) / classAfter) * 100), this.pct(a.target)),
+        });
+        sub.createDiv({ cls: "trimly-amount is-income", text: `+${this.money(a.contribute)}` });
+      }
     }
+  }
+
+  /** A weight per position inside each class holding more than one: one alone has nothing to split with. */
+  private renderAssetTargets(body: HTMLElement, ledger: Ledger, classes: AssetClass[]) {
+    const held = classes.filter((c) => classAssets(ledger, c).length > 1);
+    if (held.length === 0) return;
+    const card = this.card(body, t.targets.byAsset);
+    card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.targets.byAssetHint });
+    for (const c of held) {
+      card.createDiv({ cls: "trimly-eyebrow trimly-plan-section", text: t.labels.assetClass[c] });
+      const table = card.createDiv("trimly-perf-table trimly-target-table");
+      const head = table.createDiv("trimly-perf-row is-head");
+      for (const label of [t.targets.position, t.targets.now, t.targets.weight, t.targets.target]) head.createDiv({ cls: label === t.targets.position ? "trimly-perf-label" : "trimly-perf-cell", text: label });
+      const assets = classAssets(ledger, c).sort((x, y) => y.value - x.value);
+      const total = assets.reduce((s, a) => s + a.value, 0);
+      const lines = assetTargets(ledger, c, 0);
+      for (const a of assets) {
+        const row = table.createDiv("trimly-perf-row");
+        row.createDiv({ cls: "trimly-perf-label trimly-target-asset-label", text: a.name });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: total > 0 ? this.pct((a.value / total) * 100) : "—" });
+        const input = row.createDiv("trimly-perf-cell").createEl("input", { cls: "trimly-limit-input trimly-target-input", type: "text", placeholder: "0" });
+        input.inputMode = "decimal";
+        if (a.weight) input.value = String(a.weight);
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") input.blur();
+        });
+        input.addEventListener("change", () => this.setWeight(a.id, input.value));
+        const target = lines.find((l) => l.asset.id === a.id)?.target;
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: target === undefined ? "—" : this.pct(target) });
+      }
+    }
+  }
+
+  private setWeight(assetId: string, text: string) {
+    const v = text.trim() ? Number(text.trim().replace(",", ".")) : 0;
+    if (!Number.isFinite(v) || v < 0) {
+      new Notice(t.targets.invalidWeight);
+      return;
+    }
+    void this.plugin.mutate((l) => {
+      const a = l.investments.assets.find((x) => x.id === assetId);
+      if (!a) return;
+      if (v > 0) a.weight = v;
+      else delete a.weight;
+    });
   }
 
   private setTarget(c: AssetClass, text: string) {

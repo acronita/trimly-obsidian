@@ -1612,6 +1612,10 @@ input.trimly-amount-input:focus {
   align-items: center;
 }
 
+.trimly-target-asset-label { text-transform: none; }
+
+.trimly-row.trimly-target-asset { padding-left: 44px; }
+
 .trimly-view select.trimly-target-add {
   margin-top: 10px;
 }

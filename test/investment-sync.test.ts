@@ -326,3 +326,12 @@ test("an institution set on one position can fill the others of the same connect
   applyInvestments(l, [inv("fund-b", { type: "MUTUAL_FUND", institution: null, issuer: null })], ["item-1"], TODAY);
   assert.equal(asset(l, "fund-b").institution, "Banco do Brasil");
 });
+
+test("a weight the user gave a synced position survives the next sync", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("cdb")], ["item-1"], "2026-10-24");
+  asset(l, "cdb").weight = 3;
+  applyInvestments(l, [inv("cdb", { balance: 1010 })], ["item-1"], TODAY);
+  assert.equal(asset(l, "cdb").weight, 3);
+  assert.equal(asset(l, "cdb").value, 1010_00);
+});

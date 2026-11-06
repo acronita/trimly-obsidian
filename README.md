@@ -113,7 +113,8 @@ passphrase that never leaves your device.
   bank sends no income get it estimated from B3's proventos. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
-  class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.
+  class to see how far you are from it and how to split your next contribution; a weight or score per
+  asset takes that split down to each position inside the class. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Hide values** — the eye button in the header masks every amount on screen; click again to show
   them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks

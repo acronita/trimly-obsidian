@@ -606,6 +606,12 @@ export const ptBR = {
     typeAmount: "Digite quanto você vai investir para ver como dividir sem vender nada.",
     after: (now: string, after: string, target: string) => `${now} hoje → ${after} depois · meta ${target}`,
     invalidPct: "Digite uma porcentagem entre 0 e 100.",
+    byAsset: "Por ativo",
+    byAssetHint: "Dê um peso ou uma nota aos ativos de uma classe, na escala que preferir. O aporte da classe é dividido por eles, começando pelos mais atrás; ativo sem peso não recebe. Sem nenhum peso, a sugestão para na classe.",
+    position: "Ativo",
+    weight: "Peso",
+    invalidWeight: "Digite um número maior ou igual a zero.",
+    inClass: (now: string, after: string, target: string) => `${now} da classe hoje → ${after} depois · meta ${target}`,
   },
 
   modals: {
