@@ -186,6 +186,31 @@ export const en: Strings = {
     deleteConfirm: (d: string) => `Delete "${d}"?`,
   },
 
+  exportFile: {
+    date: "Date",
+    type: "Type",
+    amount: "Amount",
+    currency: "Currency",
+    account: "Account",
+    toAccount: "To account",
+    category: "Category",
+    description: "Description",
+    notes: "Notes",
+    name: "Name",
+    code: "Code",
+    assetClass: "Class",
+    portfolio: "Portfolio",
+    institution: "Institution",
+    quantity: "Quantity",
+    invested: "Invested",
+    value: "Current value",
+    dueDate: "Maturity",
+    closed: "Closed",
+    position: "Position",
+    yes: "Yes",
+    no: "No",
+  },
+
   portfolios: {
     main: "Main",
     pick: "Portfolio",
@@ -1007,6 +1032,15 @@ export const en: Strings = {
     treasuryPricesDesc:
       "Updates manually added Tesouro Direto bonds once a day from the public file at www.tesourotransparente.gov.br (about 15 MB). " +
       "The file has every bond, so nothing about yours is sent. It uses the selling price before tax, and the file can lag a few days.",
+    exportTitle: "Export data",
+    exportIntro: "A readable copy to keep outside the vault, without the Pluggy credentials and the brapi token. Trimly does not import these files back: your real backup is still the encrypted ledger.",
+    exportMobile: "Only available on desktop.",
+    exportJson: "Everything (JSON)",
+    exportTransactions: "Transactions (CSV)",
+    exportPositions: "Positions (CSV)",
+    exportMovements: "Movements (CSV)",
+    exportButton: "Export",
+    exportConfirm: "The file is not encrypted: anyone with access to it can read your data. Save it outside the vault, never inside it or in a folder synced to GitHub.",
     quotes: "Quotes (brapi, optional)",
     quotesIntro:
       "Updates stocks, real estate funds, ETFs and BDRs from brapi.dev: price, daily change and company name. " +

@@ -1,8 +1,9 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
+import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { fetchProventos } from "./b3";
+import { ledgerJson, movementsCsv, positionsCsv, transactionsCsv } from "./export";
 import { fetchBenchmarks } from "./bcb";
 import { fetchRates } from "./fx";
 import { LANGUAGES, LANGUAGE_NAMES, Language, setLanguage, t } from "./i18n";
@@ -69,6 +70,14 @@ const REMINDER_INTERVAL_MS = 60 * 60 * 1000;
 const BENCHMARK_RETRY_MS = 60 * 60 * 1000;
 /** The daily CDI series accepts at most 10 years per request. */
 const BENCHMARK_MAX_DAYS = 3650;
+
+/** Hand a file to the system download, which asks where to save it; nothing touches the vault. */
+function downloadFile(name: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content]));
+  const link = createEl("a", { href: url, attr: { download: name } });
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
 
 const DEFAULT_SETTINGS: TrimlySettings = {
   folder: "Trimly",
@@ -762,6 +771,36 @@ class TrimlySettingTab extends PluginSettingTab {
 
     this.displayQuotes();
     this.displayBankSync();
+    this.displayExport();
+  }
+
+  /** Readable copies go through the system download, the only way out that is not the vault. */
+  private displayExport() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    const s = t.settings;
+    new Setting(containerEl).setName(s.exportTitle).setHeading();
+    containerEl.createEl("p", { cls: "setting-item-description", text: s.exportIntro });
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc(s.unlockForSync);
+      return;
+    }
+    if (!Platform.isDesktopApp) {
+      new Setting(containerEl).setDesc(s.exportMobile);
+      return;
+    }
+    const item = (name: string, file: string, extension: string, build: (l: Ledger) => string) =>
+      new Setting(containerEl).setName(name).addButton((b) =>
+        b.setButtonText(s.exportButton).onClick(() =>
+          new ConfirmModal(this.app, s.exportConfirm, s.exportButton, () => {
+            if (p.ledger) downloadFile(`trimly-${file}-${todayISO()}.${extension}`, build(p.ledger));
+          }).open()
+        )
+      );
+    item(s.exportJson, "backup", "json", ledgerJson);
+    item(s.exportTransactions, "transacoes", "csv", (l) => transactionsCsv(l, p.settings.currency));
+    item(s.exportPositions, "posicoes", "csv", positionsCsv);
+    item(s.exportMovements, "movimentacoes", "csv", movementsCsv);
   }
 
   private displayQuotes() {

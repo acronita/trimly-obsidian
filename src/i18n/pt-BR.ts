@@ -191,6 +191,31 @@ export const ptBR = {
     deleteConfirm: (d: string) => `Excluir "${d}"?`,
   },
 
+  exportFile: {
+    date: "Data",
+    type: "Tipo",
+    amount: "Valor",
+    currency: "Moeda",
+    account: "Conta",
+    toAccount: "Conta de destino",
+    category: "Categoria",
+    description: "Descrição",
+    notes: "Observações",
+    name: "Nome",
+    code: "Código",
+    assetClass: "Classe",
+    portfolio: "Carteira",
+    institution: "Instituição",
+    quantity: "Quantidade",
+    invested: "Investido",
+    value: "Valor atual",
+    dueDate: "Vencimento",
+    closed: "Encerrada",
+    position: "Ativo",
+    yes: "Sim",
+    no: "Não",
+  },
+
   portfolios: {
     main: "Principal",
     pick: "Carteira",
@@ -1014,6 +1039,15 @@ export const ptBR = {
     treasuryPricesDesc:
       "Atualiza uma vez por dia os títulos do Tesouro Direto lançados à mão, pelo arquivo público de www.tesourotransparente.gov.br (cerca de 15 MB). " +
       "O arquivo traz todos os títulos, então nada sobre os seus é enviado. Vale o preço de venda antes do IR, e o arquivo pode vir com alguns dias de atraso.",
+    exportTitle: "Exportar dados",
+    exportIntro: "Cópia legível para guardar fora do cofre, sem as credenciais do Pluggy e o token do brapi. O Trimly não importa esses arquivos de volta: seu backup de verdade continua sendo o ledger criptografado.",
+    exportMobile: "Disponível só no computador.",
+    exportJson: "Tudo (JSON)",
+    exportTransactions: "Transações (CSV)",
+    exportPositions: "Posições (CSV)",
+    exportMovements: "Movimentações (CSV)",
+    exportButton: "Exportar",
+    exportConfirm: "O arquivo não é criptografado: qualquer pessoa com acesso a ele lê seus dados. Salve fora do cofre, nunca dentro dele nem em pasta sincronizada com o GitHub.",
     quotes: "Cotações (brapi, opcional)",
     quotesIntro:
       "Atualiza ações, FIIs, ETFs e BDRs pela brapi.dev: preço, variação do dia e nome da empresa. " +

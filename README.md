@@ -54,6 +54,9 @@ passphrase that never leaves your device.
   with its lowest point and the first day below zero: future transactions and recurring rules on the
   account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
   charged so far; purchases to come and installments on later bills aren't in.
+- **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
+  everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
+  go in. It is not encrypted, so never save it inside the vault; there is no import back.
 - **Portfolios** (*Carteiras*, in the Targets tab) — set positions apart by objective, each with its own
   allocation targets and contribution plan. Net worth adds them up; returns, proventos and income tax
   stay those of the whole.
