@@ -10,6 +10,20 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.32.0 — 2026-11-05
+
+- 2026-11-05 — New *Notícias* tab in the investments mode, opening with *Carteiras recomendadas*: public
+  articles on the portfolios brokers publish, with date, source and a link, from the RSS of Money Times,
+  InvestNews and InfoMoney (new `src/feeds.ts`, `src/feeds-fetch.ts`), fetched when the tab opens and at most
+  once a day, kept in memory. New settings: *Notícias e carteiras* and a switch per source (new `feeds` and
+  `disabledFeeds` keys in `data.json`). Only each feed's address is requested. Titles are plain text and
+  only https links are kept. RSS instead of scraping pages, so a site's change doesn't break it and no paid
+  report is reproduced; that also means *what changed since the last one* isn't there, only what the
+  headline says. Why: the roadmap's *Feed de carteiras recomendadas*. Files touched: `src/feeds.ts`,
+  `src/feeds-fetch.ts`, `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/feeds.test.ts`, `test/encryption-rule.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 0.31.0 — 2026-11-05
 
 - 2026-11-05 — A manual transfer between accounts in different currencies takes both amounts: the new

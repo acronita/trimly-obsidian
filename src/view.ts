@@ -111,6 +111,8 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
+import { PORTFOLIO_MAX_DAYS, recentItems } from "./feeds";
+import type { FeedItem } from "./feeds";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
 import type { ReportFilter, ReportPreset } from "./reports";
@@ -130,7 +132,7 @@ function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   });
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "reports";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "news" | "reports";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -160,6 +162,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "targets", label: "targets", icon: "target" },
     { id: "tax", label: "tax", icon: "landmark" },
     { id: "calculators", label: "calculators", icon: "calculator" },
+    { id: "news", label: "news", icon: "newspaper" },
   ],
 };
 
@@ -312,6 +315,9 @@ export class TrimlyView extends ItemView {
         break;
       case "calculators":
         this.renderCalculators(body, ledger);
+        break;
+      case "news":
+        this.renderNews(body);
         break;
     }
     root.scrollTop = scroll;
@@ -2857,6 +2863,30 @@ export class TrimlyView extends ItemView {
       });
     }
     if (this.plugin.proventoError) foot(t.income.upcomingError(this.plugin.proventoError));
+  }
+
+  // ---- news ----
+
+  /** Headlines from other sites: plain text, opening at the source. */
+  private feedRow(parent: HTMLElement, item: FeedItem) {
+    const row = parent.createDiv("trimly-row");
+    const main = row.createDiv("trimly-row-main");
+    main.createEl("a", { cls: "trimly-row-title", text: item.title, href: item.link });
+    main.createDiv({ cls: "trimly-row-sub", text: `${this.longDate(item.date)} · ${item.source}` });
+  }
+
+  private renderNews(body: HTMLElement) {
+    if (!this.plugin.settings.feeds) return this.empty(body, "newspaper", t.news.off);
+    const card = this.card(body, t.news.portfolios);
+    card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.news.portfoliosHint });
+    const items = this.plugin.portfolioFeed();
+    if (items === null) card.createDiv({ cls: "trimly-muted", text: t.news.loading });
+    else {
+      const recent = recentItems(items, todayISO(), PORTFOLIO_MAX_DAYS);
+      if (recent.length === 0) card.createDiv({ cls: "trimly-muted", text: t.news.nothing });
+      for (const item of recent) this.feedRow(card, item);
+    }
+    if (this.plugin.feedFailed.length) card.createDiv({ cls: "trimly-muted is-expense trimly-card-foot", text: t.news.failed(this.plugin.feedFailed.join(", ")) });
   }
 
   // ---- calculators ----
