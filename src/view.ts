@@ -1,7 +1,7 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, GoalModal, MovementModal, ObligationModal, PortfolioModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, MovementModal, ObligationModal, PortfolioModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
@@ -12,6 +12,7 @@ import {
   CardBill,
   Category,
   CategoryKind,
+  Debt,
   FORECAST_DAYS,
   Ledger,
   PlannedInstallment,
@@ -33,6 +34,8 @@ import {
   cardBill,
   cardBills,
   chargeBillMonth,
+  debtBalance,
+  debtPayoff,
   futureInstallments,
   installmentFromDescription,
   isCardPayment,
@@ -85,8 +88,10 @@ import {
   windowStart,
   portfolioLedger,
   removeCategory,
+  removeDebt,
   removeGoal,
   removePortfolio,
+  saveDebt,
   savePortfolio,
   setPortfolioTarget,
   removeRecurring,
@@ -210,6 +215,8 @@ export class TrimlyView extends ItemView {
   private contribution = 0;
   /** account picked in the balance forecast; null opens on the main one */
   private forecastAccount: string | null = null;
+  /** what-if extra per month typed on each debt; kept while the view is open, never saved */
+  private debtExtra = new Map<string, number>();
   /** portfolio the Targets tab is on; "" = the main one */
   private portfolioId = "";
   /** what was typed in the calculators, by field; kept while the view is open, never saved */
@@ -1480,6 +1487,7 @@ export class TrimlyView extends ItemView {
     }
 
     this.renderGoals(body, ledger);
+    this.renderDebts(body, ledger);
 
     const unplanned = expenseCats.filter((c) => !shown.includes(c));
     if (unplanned.length) {
@@ -1522,6 +1530,84 @@ export class TrimlyView extends ItemView {
       tile.addEventListener("click", () => this.editGoal(g));
     }
     this.addTile(grid, t.goals.add, () => this.editGoal(null));
+  }
+
+  /** Each debt's payoff at today's balance, and what paying extra would change; the extra is only a simulation. */
+  private renderDebts(body: HTMLElement, ledger: Ledger) {
+    body.createDiv({ cls: "trimly-section-title", text: t.debts.title });
+    body.createDiv("trimly-section-bar").createDiv({ cls: "trimly-muted", text: t.debts.hint });
+    const grid = body.createDiv("trimly-tiles trimly-tiles-3");
+    const today = todayISO();
+    const months = (n: number) => t.calc.duration(Math.floor(n / 12), n % 12);
+    const endDate = (n: number) => this.fmt({ month: "short", year: "numeric" }, this.parseDate(`${shiftMonth(monthOf(today), n)}-01`));
+    for (const d of ledger.debts ?? []) {
+      const owed = debtBalance(d, today);
+      const payoff = debtPayoff(owed, d.monthlyRate, d.payment);
+      const paidOff = owed <= 0;
+      const stuck = payoff.months === null;
+      const color = stuck ? "var(--trimly-expense)" : "var(--interactive-accent)";
+      const tile = grid.createDiv("trimly-tile is-clickable");
+      const top = tile.createDiv("trimly-tile-top");
+      this.iconTile(top, "landmark", color);
+      // a payment below the interest makes the debt grow: nothing paid off yet
+      const paid = Math.max(0, d.balance - owed);
+      top.createDiv({ cls: "trimly-tile-tag", text: `${Math.floor((paid / d.balance) * 100)}%` });
+      tile.createDiv({ cls: "trimly-tile-name", text: d.name });
+      tile.createDiv({
+        cls: `trimly-tile-value ${stuck ? "is-expense" : ""}`,
+        text: paidOff ? t.debts.paid : payoff.months === null ? t.debts.never : t.debts.until(endDate(payoff.months), months(payoff.months)),
+      });
+      this.progress(tile, paid, d.balance, color, false);
+      tile.createDiv({ cls: "trimly-muted", text: t.debts.owed(this.money(owed)) });
+      if (!paidOff && !stuck) tile.createDiv({ cls: "trimly-muted", text: t.debts.interest(this.money(payoff.interest)) });
+      if (!paidOff) {
+        const input = tile.createEl("input", { cls: "trimly-limit-input", type: "text", placeholder: t.debts.extraPlaceholder });
+        input.inputMode = "decimal";
+        const extra = this.debtExtra.get(d.id) ?? 0;
+        if (extra) input.value = centsToInput(extra);
+        input.addEventListener("click", (e) => e.stopPropagation());
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") input.blur();
+        });
+        input.addEventListener("change", () => {
+          const cents = input.value.trim() ? parseAmount(input.value) : 0;
+          if (cents === null) {
+            new Notice(t.common.notValidAmount);
+            return;
+          }
+          this.debtExtra.set(d.id, Math.abs(cents));
+          this.render();
+        });
+        const faster = extra ? debtPayoff(owed, d.monthlyRate, d.payment + extra) : null;
+        if (faster && faster.months !== null) {
+          const sooner = payoff.months === null ? 0 : payoff.months - faster.months;
+          const saved = this.money(payoff.interest - faster.interest);
+          const text =
+            payoff.months === null
+              ? t.debts.extraEnds(endDate(faster.months), this.money(faster.interest))
+              : sooner > 0
+                ? t.debts.extraEffect(months(sooner), saved)
+                : t.debts.extraSaves(saved);
+          tile.createDiv({ cls: "trimly-muted is-income", text });
+        }
+      }
+      tile.addEventListener("click", () => this.editDebt(d));
+    }
+    this.addTile(grid, t.debts.add, () => this.editDebt(null));
+  }
+
+  private editDebt(existing: Debt | null) {
+    new DebtModal(
+      this.app,
+      existing,
+      (debt) => void this.plugin.mutate((l) => saveDebt(l, debt)),
+      existing
+        ? (debt) =>
+            new ConfirmModal(this.app, t.common.deleteQuoted(debt.name), t.common.delete, () =>
+              void this.plugin.mutate((l) => removeDebt(l, debt.id))
+            ).open()
+        : null
+    ).open();
   }
 
   private editGoal(existing: SavingsGoal | null) {

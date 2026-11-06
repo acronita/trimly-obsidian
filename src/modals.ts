@@ -8,6 +8,7 @@ import {
   AccountType,
   Category,
   CategoryKind,
+  Debt,
   DueObligation,
   Frequency,
   Ledger,
@@ -981,6 +982,62 @@ export class CategoryModal extends Modal {
         return null;
       },
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class DebtModal extends Modal {
+  constructor(
+    app: App,
+    private existing: Debt | null,
+    private onSave: (d: Debt) => void,
+    private onDelete: ((d: Debt) => void) | null
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const e = this.existing;
+    const m = t.modals.debt;
+    this.setTitle(e ? m.editTitle : m.newTitle);
+    let name = e?.name ?? "";
+    let balance = e ? centsToInput(e.balance) : "";
+    let asOf = e?.asOf ?? todayISO();
+    let rate = e ? String(e.monthlyRate) : "";
+    let payment = e ? centsToInput(e.payment) : "";
+    new Setting(contentEl).setName(m.name).addText((text) => text.setPlaceholder(m.namePlaceholder).setValue(name).onChange((v) => (name = v)));
+    const amount = (label: string, value: string, set: (v: string) => void) =>
+      new Setting(contentEl).setName(label).addText((text) => {
+        text.inputEl.inputMode = "decimal";
+        text.setValue(value).onChange(set);
+      });
+    amount(m.balance, balance, (v) => (balance = v));
+    dateSetting(contentEl, m.asOf, asOf, (v) => (asOf = v));
+    amount(m.rate, rate, (v) => (rate = v));
+    amount(m.payment, payment, (v) => (payment = v));
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!name.trim()) return t.common.addName;
+        const owed = parseAmount(balance);
+        const monthly = parseAmount(payment);
+        const pct = Number(rate.trim().replace(",", ".").replace("%", ""));
+        if (owed === null || owed <= 0 || monthly === null || monthly <= 0) return t.common.amountPositive;
+        if (!asOf) return t.common.pickDate;
+        if (!rate.trim() || !Number.isFinite(pct) || pct < 0 || pct > 100) return m.invalidRate;
+        this.onSave({ id: e?.id ?? newId(), name: name.trim(), balance: owed, asOf, monthlyRate: pct, payment: monthly });
+        return null;
+      },
+      e && this.onDelete ? () => this.onDelete?.(e) : null,
       () => this.close()
     );
   }

@@ -447,6 +447,21 @@ export const en: Strings = {
     },
   },
 
+  debts: {
+    title: "Debts",
+    hint: "Loans and financing: when they end at the current pace and how much interest they still cost. Kept apart, without touching accounts or net worth. Today's balance assumes the payments were made; updating the balance from the statement corrects it.",
+    add: "New debt",
+    until: (date: string, months: string) => `Ends in ${date} · ${months}`,
+    never: "The payment doesn't cover the interest: it never ends",
+    paid: "Paid off",
+    owed: (v: string) => `Balance today: ${v}`,
+    interest: (v: string) => `Interest to the end: ${v}`,
+    extraPlaceholder: "Extra per month",
+    extraEffect: (months: string, saved: string) => `Paying extra, it ends ${months} sooner and saves ${saved} in interest.`,
+    extraEnds: (date: string, saved: string) => `Paying extra, it ends in ${date} and costs ${saved} in interest.`,
+    extraSaves: (saved: string) => `Paying extra, it saves ${saved} in interest.`,
+  },
+
   goals: {
     title: "Savings goals",
     hint: "How much each goal has, from today's balance of the linked account or position, and how much to save per month until the date.",
@@ -876,6 +891,17 @@ export const en: Strings = {
       icon: "Icon",
       isDefault: "Default category",
       isDefaultDesc: "Uncategorized transactions of this kind go here, existing ones included. Only one category of each kind can be the default.",
+    },
+    debt: {
+      newTitle: "New debt",
+      editTitle: "Edit debt",
+      name: "Name",
+      namePlaceholder: "E.g. Car loan",
+      balance: "Balance owed",
+      asOf: "Balance on",
+      rate: "Interest (% a month)",
+      payment: "Payment per month",
+      invalidRate: "Enter interest between 0 and 100.",
     },
     goal: {
       newTitle: "New savings goal",
