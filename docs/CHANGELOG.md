@@ -7,6 +7,12 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.4.0 — 2026-11-08
+
+- 2026-11-08 — A position's details have clipboard buttons to copy its name and, when it has one, its code. Why: asked
+  for while looking up positions elsewhere. Files touched: `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.3.0 — 2026-11-08
 
 - 2026-11-08 — Allocation targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto. Fundos,
