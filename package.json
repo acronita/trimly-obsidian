@@ -1,6 +1,6 @@
 {
   "name": "trimly",
-  "version": "0.39.0",
+  "version": "1.0.0",
   "description": "Personal finance manager for Obsidian with encrypted storage",
   "main": "main.js",
   "type": "module",
