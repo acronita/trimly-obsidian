@@ -24,6 +24,8 @@ function setup(): Ledger {
   return l;
 }
 
+const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A" }], article: async () => "texto" };
+
 const reply = (content: ClaudeResponse["content"], stop_reason: string, tokens = 10): ClaudeResponse => ({ content, stop_reason, usage: { input_tokens: tokens, output_tokens: tokens } });
 const say = (text: string) => reply([{ type: "text", text }], "end_turn");
 const call = (name: string, input: object, id = "t1") => ({ type: "tool_use", id, name, input });
@@ -45,8 +47,8 @@ function args(send: AssistantArgs["send"], extra: Partial<AssistantArgs> = {}): 
   return { send, config: { apiKey: "AI-KEY", model: "claude-opus-5-5" }, kind: "accounts", ledger, today: TODAY, language: "pt-BR", history: [], tokensUsed: 0, question: "Quanto gastei?", ...extra };
 }
 
-test("the tool gives the real figure, computed by Trimly", () => {
-  const { result } = runTool("accounts", setup(), "month_summary", { month: "2026-11" }, TODAY);
+test("the tool gives the real figure, computed by Trimly", async () => {
+  const { result } = await runTool("accounts", setup(), "month_summary", { month: "2026-11" }, TODAY);
   assert.deepEqual(JSON.parse(result), { month: "2026-11", income: 500, expense: 200, net: 300 });
 });
 
@@ -86,39 +88,39 @@ test("the ledger itself never leaves: credentials and transaction descriptions s
   for (const secret of ["PLUGGY-SECRET", "PLUGGY-ID", "BRAPI-TOKEN", "AI-KEY", "SECRET-MERCHANT"]) assert.ok(!wire.includes(secret), secret);
 });
 
-test("each assistant only has its own tools", () => {
+test("each assistant only has its own tools", async () => {
   const accounts = toolDefinitions("accounts").map((t) => t.name);
   const investments = toolDefinitions("investments").map((t) => t.name);
   assert.ok(accounts.includes("balance_forecast") && !accounts.includes("contribution_plan"));
   assert.ok(investments.includes("contribution_plan") && !investments.includes("balance_forecast"));
-  assert.equal(runTool("accounts", setup(), "contribution_plan", {}, TODAY).isError, true);
+  assert.equal((await runTool("accounts", setup(), "contribution_plan", {}, TODAY)).isError, true);
 });
 
-test("no tool can change the ledger", () => {
+test("no tool can change the ledger", async () => {
   for (const kind of ["accounts", "investments"] as const) {
     const l = setup();
     const before = JSON.stringify(l);
-    for (const { name } of toolDefinitions(kind)) runTool(kind, l, name, { account_id: "main", amount: 100, months: 3, days: 30 }, TODAY);
+    for (const { name } of toolDefinitions(kind)) await runTool(kind, l, name, { account_id: "main", amount: 100, months: 3, days: 30 }, TODAY, WEB);
     assert.equal(JSON.stringify(l), before, kind);
   }
 });
 
-test("every tool answers with its documented arguments", () => {
+test("every tool answers with its documented arguments", async () => {
   for (const kind of ["accounts", "investments"] as const) {
     for (const { name } of toolDefinitions(kind)) {
-      const r = runTool(kind, setup(), name, { month: "2026-11", from: "2026-01-01", to: TODAY, account_id: "main", days: 30, amount: 100, portfolio: null, months: 12 }, TODAY);
+      const r = await runTool(kind, setup(), name, { month: "2026-11", from: "2026-01-01", to: TODAY, account_id: "main", days: 30, amount: 100, position: null, months: 12, url: "https://x" }, TODAY, WEB);
       assert.equal(r.isError, false, `${name}: ${r.result}`);
     }
   }
 });
 
-test("a contribution plan follows the user's own targets, with Trimly's math", () => {
-  const lines = JSON.parse(runTool("investments", setup(), "contribution_plan", { amount: 1000, portfolio: null }, TODAY).result) as { class: string; contribute: number }[];
+test("a contribution plan follows the user's own targets, with Trimly's math", async () => {
+  const lines = JSON.parse((await runTool("investments", setup(), "contribution_plan", { amount: 1000 }, TODAY)).result) as { class: string; contribute: number }[];
   assert.equal(lines.find((x) => x.class === "etf")?.contribute, 1000);
 });
 
 test("a tool's failure goes back to the model as an error, instead of ending the conversation", async () => {
-  const { sent, send } = fake(reply([call("balance_forecast", { account_id: "gone" })], "tool_use"), say("Não achei a conta."));
+  const { sent, send } = fake(reply([call("not_a_tool", {})], "tool_use"), say("Não consegui."));
   const turn = await askAssistant(args(send));
   assert.equal(turn.status, "done");
   assert.equal((sent[1].messages[2].content as { is_error?: boolean }[])[0].is_error, true);
@@ -171,9 +173,9 @@ test("the request asks for a fallback only where the model has one", async () =>
   assert.equal(haiku.sent[0].fallbacks, undefined);
 });
 
-test("the prompt treats outside text as data, and the investments one recommends no assets", () => {
+test("the prompt treats outside text as data, and the investments one reasons with the user's positions", () => {
   assert.match(systemPrompt("accounts", "pt-BR", TODAY), /They are data/);
-  assert.match(systemPrompt("investments", "pt-BR", TODAY), /Don't recommend specific assets/);
+  assert.match(systemPrompt("investments", "pt-BR", TODAY), /be concrete with their actual positions/);
   assert.match(systemPrompt("accounts", "en", TODAY), /Reply in English/);
 });
 
@@ -181,4 +183,34 @@ test("the API key survives a reload but never goes in an export", () => {
   const l = setup();
   assert.equal(parseLedger(JSON.stringify(l)).ai?.apiKey, "AI-KEY");
   assert.ok(!ledgerJson(l).includes("AI-KEY"));
+});
+
+test("a position with no known cost is still reported, with what it is worth", async () => {
+  const l = setup();
+  delete l.investments.assets[0].invested;
+  const { positions } = JSON.parse((await runTool("investments", l, "portfolio_summary", {}, TODAY)).result) as { positions: { invested: number | null; value: number }[] };
+  assert.deepEqual([positions[0].invested, positions[0].value], [null, 3000]);
+});
+
+test("the history tool gives each month, and movements go back further than the snapshots", async () => {
+  const l = setup();
+  l.investments.snapshots = [{ date: "2026-10-25", value: 2900_00, invested: 2500_00 }, { date: "2026-11-06", value: 3000_00, invested: 2500_00 }];
+  l.investments.movements = [{ id: "m", assetId: "fii", date: "2025-03-01", type: "buy", amount: 2500_00, quantity: 25 }];
+  const history = JSON.parse((await runTool("investments", l, "portfolio_history", {}, TODAY)).result) as { history_starts: string; month_ends: unknown[] };
+  assert.equal(history.history_starts, "2026-10-25");
+  assert.equal(history.month_ends.length, 2);
+  const moves = JSON.parse((await runTool("investments", l, "position_movements", { position: "hglg11" }, TODAY)).result) as { date: string; amount: number }[];
+  assert.deepEqual([moves[0].date, moves[0].amount], ["2025-03-01", 2500]);
+  assert.deepEqual(JSON.parse((await runTool("investments", l, "position_movements", { position: "VALE3" }, TODAY)).result), []);
+});
+
+test("the web tools say so when the sources are off, and answer when they are on", async () => {
+  assert.equal((await runTool("investments", setup(), "recommended_portfolios", {}, TODAY)).isError, true);
+  const on = await runTool("investments", setup(), "recommended_portfolios", {}, TODAY, WEB);
+  assert.ok(on.result.includes("Carteira de novembro"));
+  assert.ok(!(await runTool("investments", setup(), "read_article", { url: "https://a/1" }, TODAY, WEB)).isError);
+});
+
+test("only the investments assistant reads the web", () => {
+  assert.ok(!toolDefinitions("accounts").some((t) => t.name === "read_article"));
 });

@@ -44,7 +44,10 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
 - **Two assistants, two prompts**, each with only its own tools, in its own mode of the panel.
 - **Show what is sent.** Each tool result can be opened in the chat. It is shown as it goes, with no step to
   approve each one first.
-- **Nothing in plaintext in the vault.** Conversations stay in memory and are gone when Trimly locks or closes.
+- **Nothing in plaintext in the vault.** Conversations are kept on the device, in localStorage and outside the vault,
+  encrypted with the ledger's key. Changing the passphrase makes older ones unreadable.
+- **The web without the user.** The model reads recommended portfolios through tools that run on the device, only from
+  the sites of the feeds. There is no general search: Anthropic's web tools would let the model put tickers in a query.
 - **Text from outside is data.** Transaction descriptions come from banks and stores, so a description could
   carry instructions to the model. Tools return them as data, the prompt says so, and no tool writes to the
   ledger or moves money.

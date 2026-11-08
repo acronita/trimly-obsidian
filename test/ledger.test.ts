@@ -1,3 +1,4 @@
+import { defaultLedger } from "../src/ledger.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
@@ -392,4 +393,14 @@ test("category spending splits by category, so the bars show which categories gr
   // the split adds up to the category spending line
   const sum = [...p.spendingByCategory.values()].reduce((s, x) => s + x.projected, 0);
   assert.equal(sum, p.spending.projected);
+});
+
+test("portfolios from before they were removed are dropped when the ledger opens", () => {
+  const l = defaultLedger();
+  const raw = JSON.parse(JSON.stringify(l)) as { investments: Record<string, unknown> };
+  raw.investments.portfolios = [{ id: "p", name: "x", targets: [] }];
+  raw.investments.assets = [{ id: "a", name: "A", assetClass: "stock", value: 1, updatedAt: "2026-01-01", portfolioId: "p" }];
+  const back = parseLedger(JSON.stringify(raw));
+  assert.ok(!("portfolios" in back.investments));
+  assert.ok(!("portfolioId" in back.investments.assets[0]));
 });

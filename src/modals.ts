@@ -17,7 +17,6 @@ import {
   Obligation,
   ObligationFrequency,
   ObligationKind,
-  Portfolio,
   Recurring,
   SavingsGoal,
   Settlement,
@@ -740,7 +739,6 @@ export class AssetModal extends Modal {
   constructor(
     app: App,
     existing: Asset | null,
-    private portfolios: Portfolio[],
     private onSave: (a: Asset, toConnection: boolean) => void,
     private onDelete: ((a: Asset) => void) | null
   ) {
@@ -772,19 +770,6 @@ export class AssetModal extends Modal {
         .setValue(d.assetClass)
         .onChange((v) => (d.assetClass = v as AssetClass))
     );
-    if (this.portfolios.length) {
-      const options: Record<string, string> = { "": t.portfolios.main };
-      for (const p of this.portfolios) options[p.id] = p.name;
-      new Setting(contentEl).setName(t.portfolios.pick).addDropdown((dd) =>
-        dd
-          .addOptions(options)
-          .setValue(d.portfolioId && d.portfolioId in options ? d.portfolioId : "")
-          .onChange((v) => {
-            if (v) d.portfolioId = v;
-            else delete d.portfolioId;
-          })
-      );
-    }
     const institution = () =>
       new Setting(contentEl)
         .setName(a.institution)
@@ -1087,43 +1072,6 @@ export class DebtModal extends Modal {
   }
 }
 
-export class PortfolioModal extends Modal {
-  private name: string;
-
-  constructor(
-    app: App,
-    private existing: Portfolio | null,
-    private onSave: (name: string) => void,
-    private onDelete: (() => void) | null
-  ) {
-    super(app);
-    this.name = existing?.name ?? "";
-  }
-
-  onOpen() {
-    const { contentEl } = this;
-    contentEl.addClass("trimly-modal");
-    this.setTitle(this.existing ? t.portfolios.edit : t.portfolios.add);
-    new Setting(contentEl).setName(t.modals.goal.name).addText((text) => text.setValue(this.name).onChange((v) => (this.name = v)));
-    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
-    footer(
-      contentEl,
-      errorEl,
-      () => {
-        if (!this.name.trim()) return t.common.addName;
-        this.onSave(this.name.trim());
-        return null;
-      },
-      this.onDelete,
-      () => this.close()
-    );
-  }
-
-  onClose() {
-    this.contentEl.empty();
-  }
-}
-
 export class GoalModal extends Modal {
   private draft: SavingsGoal;
 
@@ -1135,7 +1083,7 @@ export class GoalModal extends Modal {
     private onDelete: ((g: SavingsGoal) => void) | null
   ) {
     super(app);
-    this.draft = existing ? { ...existing } : { id: newId(), name: "", target: 0, date: "" };
+    this.draft = existing ? { ...existing, accountIds: [...existing.accountIds], assetIds: [...existing.assetIds] } : { id: newId(), name: "", target: 0, accountIds: [], assetIds: [] };
   }
 
   onOpen() {
@@ -1150,20 +1098,29 @@ export class GoalModal extends Modal {
       text.inputEl.inputMode = "decimal";
       text.setValue(target).onChange((v) => (target = v));
     });
-    dateSetting(contentEl, g.date, d.date, (v) => (d.date = v));
-
-    // a card's balance is debt, so it can't hold savings; a link that is gone falls back to the first option
-    const links: Record<string, string> = {};
-    for (const a of this.ledger.accounts) {
-      if (a.type !== "credit" && (!a.archived || a.id === d.accountId)) links[`account:${a.id}`] = a.name;
-    }
-    for (const a of openAssets(this.ledger)) links[`asset:${a.id}`] = g.assetOption(a.name);
-    const current = d.accountId ? `account:${d.accountId}` : `asset:${d.assetId}`;
-    let link = current in links ? current : (Object.keys(links)[0] ?? "");
     new Setting(contentEl)
-      .setName(g.link)
-      .setDesc(g.linkDesc)
-      .addDropdown((dd) => dd.addOptions(links).setValue(link).onChange((v) => (link = v)));
+      .setName(g.date)
+      .setDesc(g.dateDesc)
+      .addText((text) => {
+        text.inputEl.type = "date";
+        text.setValue(d.date ?? "").onChange((v) => {
+          if (v) d.date = v;
+          else delete d.date;
+        });
+      });
+
+    new Setting(contentEl).setName(g.link).setDesc(g.linkDesc).setHeading();
+    const pick = (name: string, list: string[], id: string) =>
+      new Setting(contentEl).setName(name).addToggle((tg) =>
+        tg.setValue(list.includes(id)).onChange((on) => {
+          const i = list.indexOf(id);
+          if (on && i < 0) list.push(id);
+          else if (!on && i >= 0) list.splice(i, 1);
+        })
+      );
+    // a card's balance is debt, so it can't hold savings
+    for (const a of this.ledger.accounts) if (a.type !== "credit" && (!a.archived || d.accountIds.includes(a.id))) pick(a.name, d.accountIds, a.id);
+    for (const a of openAssets(this.ledger)) pick(g.assetOption(a.name), d.assetIds, a.id);
 
     const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
     footer(
@@ -1173,16 +1130,11 @@ export class GoalModal extends Modal {
         if (!d.name.trim()) return t.common.addName;
         const cents = parseAmount(target);
         if (cents === null || cents <= 0) return t.common.amountPositive;
-        if (!d.date) return t.common.pickDate;
-        if (!link) return g.noLink;
-        const linkedId = link.slice(link.indexOf(":") + 1);
-        this.onSave({
-          id: d.id,
-          name: d.name.trim(),
-          target: cents,
-          date: d.date,
-          ...(link.startsWith("account:") ? { accountId: linkedId } : { assetId: linkedId }),
-        });
+        // what was deleted or closed since can't be picked again, so it doesn't stay in the list
+        const accountIds = d.accountIds.filter((id) => this.ledger.accounts.some((a) => a.id === id));
+        const assetIds = d.assetIds.filter((id) => openAssets(this.ledger).some((a) => a.id === id));
+        if (accountIds.length + assetIds.length === 0) return g.noLink;
+        this.onSave({ ...d, name: d.name.trim(), target: cents, accountIds, assetIds });
         return null;
       },
       this.onDelete ? () => this.onDelete?.(d) : null,

@@ -175,17 +175,17 @@ export interface Debt {
   payment: number;
 }
 
-/** Money to have by a date (emergency fund, a trip), measured by what one account or position holds. */
+/** Money to have (emergency fund, a trip), measured by what a list of accounts and positions hold together. */
 export interface SavingsGoal {
   id: string;
   name: string;
   /** in cents, in the settings' currency */
   target: number;
-  /** ISO date to reach it by */
-  date: string;
-  /** what it is measured by: an account, or else a position */
-  accountId?: string;
-  assetId?: string;
+  /** ISO date to reach it by; none, or once it passes, it is a level to keep */
+  date?: string;
+  /** where the money is */
+  accountIds: string[];
+  assetIds: string[];
 }
 
 export interface Recurring {
@@ -275,14 +275,14 @@ export interface Asset {
   quantity?: number;
   /** the user's weight or score inside its class, any scale; with any set in a class, contributions split by them */
   weight?: number;
-  /** portfolio it belongs to; missing = the main one */
-  portfolioId?: string;
   /** current net value (after taxes and fees) */
   value: number;
   /** current gross value, when known */
   grossValue?: number;
   /** amount originally invested, when known */
   invested?: number;
+  /** the user typed the cost because the bank doesn't report it, so sync keeps it */
+  costEdited?: boolean;
   /** percentage of the index, e.g. 110 for "110% CDI" */
   rate?: number;
   /** benchmark index, e.g. "CDI", "IPCA" */
@@ -386,16 +386,6 @@ export interface Investments {
   /** oldest first, at most one per day */
   snapshots: PortfolioSnapshot[];
   movements: Movement[];
-  /** the main portfolio's: positions in no other portfolio */
-  targets: AllocationTarget[];
-  /** other portfolios, by objective; without any, there is just the main one */
-  portfolios?: Portfolio[];
-}
-
-/** Positions set apart for an objective (retirement, emergency fund), with allocation targets of their own. */
-export interface Portfolio {
-  id: string;
-  name: string;
   targets: AllocationTarget[];
 }
 
@@ -535,14 +525,14 @@ export function parseLedger(json: string): Ledger {
     recurring: raw.recurring ?? [],
     obligations: (raw.obligations ?? []).map(migrateObligation),
     investments: {
-      assets: raw.investments?.assets ?? [],
+      // positions could belong to a portfolio until 0.34.0
+      assets: (raw.investments?.assets ?? []).map(({ portfolioId: _dropped, ...a }: Asset & { portfolioId?: string }) => a),
       snapshots: raw.investments?.snapshots ?? [],
       movements: raw.investments?.movements ?? [],
       targets: raw.investments?.targets ?? [],
-      ...(raw.investments?.portfolios ? { portfolios: raw.investments.portfolios } : {}),
     },
     plans: raw.plans,
-    goals: raw.goals,
+    goals: raw.goals?.map(migrateGoal),
     debts: raw.debts,
     categoryRules: raw.categoryRules,
     pluggy: raw.pluggy,
@@ -551,6 +541,14 @@ export function parseLedger(json: string): Ledger {
     ai: raw.ai,
     fx: raw.fx,
   };
+}
+
+/** A goal as saved up to 0.34.0, with one account or position. */
+type LegacyGoal = Partial<SavingsGoal> & { accountId?: string; assetId?: string };
+
+function migrateGoal(g: LegacyGoal): SavingsGoal {
+  const { accountId, assetId, ...rest } = g;
+  return { ...rest, accountIds: g.accountIds ?? (accountId ? [accountId] : []), assetIds: g.assetIds ?? (assetId ? [assetId] : []) } as SavingsGoal;
 }
 
 /** An obligation as saved up to 0.9.0, with full first and last due dates instead of days. */
@@ -993,38 +991,40 @@ export function movementFlow(m: Movement): number {
 // ---- savings goals ----
 
 export interface GoalProgress {
-  /** what the linked account or position holds now, in the settings' currency; never negative */
+  /** what the accounts and positions hold now together, in the settings' currency; none counts below zero */
   saved: number;
   left: number;
-  /** to save per month to reach the target by the date; 0 once done or late */
+  /** to save per month to reach the target by the date; 0 with no date ahead */
   monthly: number;
-  status: "active" | "done" | "late";
-  /** false when the account was deleted or the position closed */
+  /** "below": under the target with no date ahead, a level to get back to */
+  status: "active" | "done" | "below";
+  /** false when an account was deleted or a position closed */
   linked: boolean;
-  /** another goal counts the same account or position, so the balance counts in full in both */
+  /** another goal counts one of the same accounts or positions, so that balance counts in full in both */
   shared: boolean;
 }
 
 export function goalProgress(ledger: Ledger, goal: SavingsGoal, today: string): GoalProgress {
-  const account = goal.accountId ? ledger.accounts.find((a) => a.id === goal.accountId) : undefined;
-  const asset = goal.assetId ? openAssets(ledger).find((a) => a.id === goal.assetId) : undefined;
-  const balance = account ? toBase(ledger, accountBalance(ledger, account.id), account.currency) : (asset?.value ?? 0);
-  const saved = Math.max(0, Math.round(balance));
+  const accounts = goal.accountIds.flatMap((id) => ledger.accounts.filter((a) => a.id === id));
+  const assets = goal.assetIds.flatMap((id) => openAssets(ledger).filter((a) => a.id === id));
+  const balances = [...accounts.map((a) => toBase(ledger, accountBalance(ledger, a.id), a.currency)), ...assets.map((a) => a.value)];
+  const saved = Math.round(balances.reduce((sum, b) => sum + Math.max(0, b), 0));
   const left = Math.max(0, goal.target - saved);
-  const status = left === 0 ? "done" : goal.date < today ? "late" : "active";
-  const [fromYear, fromMonth] = today.split("-").map(Number);
-  const [toYear, toMonth] = goal.date.split("-").map(Number);
-  // a goal due this month still has this month to save in
-  const months = Math.max(1, (toYear - fromYear) * 12 + toMonth - fromMonth);
+  const status = left === 0 ? "done" : goal.date && goal.date >= today ? "active" : "below";
+  let months = 1;
+  if (status === "active" && goal.date) {
+    const [fromYear, fromMonth] = today.split("-").map(Number);
+    const [toYear, toMonth] = goal.date.split("-").map(Number);
+    // a goal due this month still has this month to save in
+    months = Math.max(1, (toYear - fromYear) * 12 + toMonth - fromMonth);
+  }
   return {
     saved,
     left,
     monthly: status === "active" ? Math.ceil(left / months) : 0,
     status,
-    linked: !!account || !!asset,
-    shared: (ledger.goals ?? []).some(
-      (g) => g.id !== goal.id && (goal.accountId ? g.accountId === goal.accountId : !!goal.assetId && g.assetId === goal.assetId)
-    ),
+    linked: accounts.length === goal.accountIds.length && assets.length === goal.assetIds.length,
+    shared: (ledger.goals ?? []).some((g) => g.id !== goal.id && (g.accountIds.some((id) => goal.accountIds.includes(id)) || g.assetIds.some((id) => goal.assetIds.includes(id)))),
   };
 }
 
@@ -1146,46 +1146,6 @@ export function recordSnapshot(ledger: Ledger, today: string, untracked = 0) {
   }
   if (last?.date === today) snaps[snaps.length - 1] = snap;
   else snaps.push(snap);
-}
-
-// ---- portfolios ----
-
-/**
- * The ledger as seen from one portfolio ("" = the main one): only its positions and
- * its targets, so allocation and rebalancing work on it unchanged. For reading: it
- * shares its objects with the real ledger, and history stays that of the whole.
- */
-export function portfolioLedger(ledger: Ledger, portfolioId: string): Ledger {
-  const portfolios = ledger.investments.portfolios ?? [];
-  const portfolio = portfolios.find((p) => p.id === portfolioId);
-  // a position whose portfolio is gone falls back to the main one, so it never disappears
-  const inPortfolio = (a: Asset) => (portfolios.some((p) => p.id === a.portfolioId) ? a.portfolioId : "") === (portfolio?.id ?? "");
-  return {
-    ...ledger,
-    investments: { ...ledger.investments, assets: ledger.investments.assets.filter(inPortfolio), targets: portfolio?.targets ?? ledger.investments.targets },
-  };
-}
-
-export function savePortfolio(ledger: Ledger, portfolio: Portfolio) {
-  const portfolios = ledger.investments.portfolios ?? [];
-  const i = portfolios.findIndex((p) => p.id === portfolio.id);
-  if (i >= 0) portfolios[i] = portfolio;
-  else portfolios.push(portfolio);
-  ledger.investments.portfolios = portfolios;
-}
-
-/** Remove a portfolio; its positions go back to the main one, and its targets go with it. */
-export function removePortfolio(ledger: Ledger, id: string) {
-  const portfolios = (ledger.investments.portfolios ?? []).filter((p) => p.id !== id);
-  ledger.investments.portfolios = portfolios.length ? portfolios : undefined;
-  for (const a of ledger.investments.assets) if (a.portfolioId === id) delete a.portfolioId;
-}
-
-/** Set (or, at 0, clear) a class's target in one portfolio ("" = the main one). */
-export function setPortfolioTarget(ledger: Ledger, portfolioId: string, assetClass: AssetClass, pct: number) {
-  const owner = ledger.investments.portfolios?.find((p) => p.id === portfolioId) ?? ledger.investments;
-  owner.targets = owner.targets.filter((x) => x.assetClass !== assetClass);
-  if (pct > 0) owner.targets.push({ assetClass, pct });
 }
 
 // ---- allocation targets ----
@@ -2002,7 +1962,7 @@ export interface ForecastEvent {
   /** overdue bills and rules still waiting for their bank charge count today */
   date: string;
   description: string;
-  /** signed, in the account's currency */
+  /** signed, in the settings' currency */
   amount: number;
   /** the balance after this event */
   balance: number;
@@ -2026,40 +1986,34 @@ export interface BalanceForecast {
   unpriced: string[];
 }
 
-/** The account a forecast opens on: the checking account with the most transactions, else any other that holds money. */
-export function mainAccount(ledger: Ledger): Account | undefined {
-  const used = (a: Account) => ledger.transactions.filter((tx) => tx.accountId === a.id || tx.toAccountId === a.id).length;
-  const open = ledger.accounts.filter((a) => a.type !== "credit" && !a.archived);
-  const pick = open.filter((a) => a.type === "checking");
-  return (pick.length ? pick : open).reduce<Account | undefined>((best, a) => (!best || used(a) > used(best) ? a : best), undefined);
-}
-
 /**
- * An account's balance over the next days: today's, plus future transactions and
- * recurring occurrences on it. Bills and card bills say nothing about which account
- * pays them, so they all go out of the account being forecast. A card bill counts
- * as it is now, so later purchases and installments on later bills aren't in.
+ * The balance of all accounts together over the next days, in the settings' currency:
+ * today's, plus future transactions and recurring occurrences. Bills and card bills say
+ * nothing about which account pays them, so they only make sense against the total.
+ * Moving money between own accounts changes nothing here; paying a card does. A card bill
+ * counts as it is now, so later purchases and installments on later bills aren't in.
  */
-export function balanceForecast(ledger: Ledger, accountId: string, today: string, days = FORECAST_DAYS): BalanceForecast {
-  // no currency on an account or a bill means the settings' one
-  const base = ledger.fx?.base ?? "";
-  const currency = accountCurrency(ledger, accountId) ?? base;
+export function balanceForecast(ledger: Ledger, today: string, days = FORECAST_DAYS): BalanceForecast {
+  const held = ledger.accounts.filter((a) => a.type !== "credit" && !a.archived);
+  const isHeld = (id?: string) => held.some((a) => a.id === id);
+  const inBase = (cents: number, accountId: string) => toBase(ledger, cents, accountCurrency(ledger, accountId));
   const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + days * 86_400_000));
   const events: Omit<ForecastEvent, "balance">[] = [];
   const unpriced: string[] = [];
 
   for (const tx of ledger.transactions) {
-    const amount = effectOn(tx, accountId);
-    if (amount !== 0 && tx.date > today && tx.date <= until) events.push({ date: tx.date, description: tx.description, amount });
+    if (tx.date <= today || tx.date > until || (isHeld(tx.accountId) && isHeld(tx.toAccountId))) continue;
+    const amount = held.reduce((sum, a) => sum + inBase(effectOn(tx, a.id), a.id), 0);
+    if (amount !== 0) events.push({ date: tx.date, description: tx.description, amount });
   }
 
   // a rule on a synced account waits for the bank's charge, which stops being linked after LINK_DAYS
   const linkableFrom = toISODate(new Date(Date.parse(`${today}T12:00:00`) - LINK_DAYS * 86_400_000));
   for (const r of ledger.recurring) {
-    const into = r.type === "transfer" && r.toAccountId === accountId;
-    if (r.accountId !== accountId && !into) continue;
-    const from = accountCurrency(ledger, r.accountId) ?? base;
-    const amount = into ? (r.toAmount ?? convert(ledger, r.amount, from, currency)) : r.type === "income" ? r.amount : -r.amount;
+    const from = isHeld(r.accountId);
+    const into = r.type === "transfer" && isHeld(r.toAccountId);
+    if (from === into) continue;
+    const amount = into ? (r.toAmount && r.toAccountId ? inBase(r.toAmount, r.toAccountId) : inBase(r.amount, r.accountId)) : r.type === "income" ? inBase(r.amount, r.accountId) : -inBase(r.amount, r.accountId);
     const anchorDay = Number(r.startDate.slice(8, 10));
     let date = r.nextDate;
     // guard against a corrupted rule looping forever
@@ -2070,7 +2024,7 @@ export function balanceForecast(ledger: Ledger, accountId: string, today: string
     }
   }
 
-  const cardsPaidByRule = new Set(ledger.recurring.filter((r) => r.type === "transfer" && r.accountId === accountId).map((r) => r.toAccountId));
+  const cardsPaidByRule = new Set(ledger.recurring.filter((r) => r.type === "transfer" && isHeld(r.accountId)).map((r) => r.toAccountId));
   const paidByRule = (o: Obligation) => o.settled.some((s) => ledger.transactions.find((tx) => tx.id === s.transactionId)?.recurringId);
   for (const d of dueObligations(ledger, until, today)) {
     if (d.obligation.kind !== "payment" || (d.cardId ? cardsPaidByRule.has(d.cardId) : paidByRule(d.obligation))) continue;
@@ -2079,12 +2033,12 @@ export function balanceForecast(ledger: Ledger, accountId: string, today: string
       unpriced.push(d.obligation.name);
       continue;
     }
-    const event = { date: d.due < today ? today : d.due, description: d.obligation.name, amount: -convert(ledger, cost, base, currency) };
+    const event = { date: d.due < today ? today : d.due, description: d.obligation.name, amount: -cost };
     events.push(d.projected ? { ...event, projected: true } : event);
   }
 
   events.sort((x, y) => (x.date === y.date ? y.amount - x.amount : x.date < y.date ? -1 : 1));
-  const start = accountBalance(ledger, accountId, today);
+  const start = held.reduce((sum, a) => sum + inBase(accountBalance(ledger, a.id, today), a.id), 0);
   let balance = start;
   let lowest = { date: today, balance: start };
   let negativeOn = start < 0 ? today : undefined;

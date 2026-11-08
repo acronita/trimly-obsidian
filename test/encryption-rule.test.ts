@@ -15,6 +15,8 @@ const ALLOWED: Record<string, RegExp> = {
   "store.ts": /\bvault\s*\.\s*(create|modify)\s*\(/,
   // the passphrase lives in device localStorage, outside the vault, by design
   "passphrase.ts": /\bsaveLocalStorage\s*\(/,
+  // the assistants' conversations: on the device, outside the vault, and sealed first
+  "chat-store.ts": /\bsaveLocalStorage\s*\(STORAGE_KEY, sealed\)/,
 };
 
 function sources(dir: string): string[] {
@@ -36,6 +38,11 @@ test("only the encrypted store writes to the vault", () => {
       });
   }
   assert.deepEqual(offenders, [], "unencrypted write paths found");
+});
+
+test("conversations are sealed before they reach the device's storage", () => {
+  const src = readFileSync("src/chat-store.ts", "utf8");
+  assert.match(src, /const sealed = await this\.store\.seal\(/);
 });
 
 test("store.ts only writes text produced by encryptText", () => {

@@ -14,6 +14,27 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.35.0 — 2026-11-08
+
+- 2026-11-08 — First test round. *IR*: the bank reports no cost for FIIs, so what isn't known shows "—" instead of
+  R$ 0,00, and the average price can be typed in the table (new optional `costEdited` on positions, which sync
+  respects), counting there, in the portfolio and in the assistant. Funds with no institution show the manager in
+  their own name. *Projeção de saldo* adds up all accounts, since bills have no account and came out of each one.
+  *Metas de poupança* take a list of accounts and positions (`accountIds`, `assetIds`; old goals open as a list of
+  one) and an optional date: with none, or after it, a goal is a level to keep. *Várias carteiras* was removed: synced
+  positions left nothing to organize, and its `portfolios` and `portfolioId` are dropped when the ledger opens. The
+  independence calculator explains its two rates and shows the time at 3% and 7%. News links go through
+  `window.open`, so Surfing opens them in a tab. The periods table no longer cuts its date. The assistant's tab is its
+  icon. Conversations are several and kept, encrypted with the ledger's key, in this device's localStorage and outside
+  the vault (new `src/chat-store.ts`). Its box grows with the text and answers can be selected. New tools:
+  `portfolio_history`, `position_movements`, `recommended_portfolios` and `read_article`, the last two reading public
+  pages on the device, only from the feed sites. The investments prompt now reasons with the user's actual positions
+  instead of refusing. Why: the user's test notes. Files touched: `src/ledger.ts`, `src/investment-sync.ts`,
+  `src/income-tax.ts`, `src/quotes.ts`, `src/assistant.ts`, `src/chat-store.ts`, `src/store.ts`, `src/feeds.ts`,
+  `src/feeds-fetch.ts`, `src/export.ts`, `src/modals.ts`, `src/view.ts`, `src/main.ts`, `src/styles/index.css`, `styles.css`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/*`, `README.md`, `docs/ARCHITECTURE.md`, `docs/AI-ASSISTANT.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.34.0 — 2026-11-06
 
 - 2026-11-06 — Optional AI assistants: an *Assistente* tab in each mode, one for accounts and one for investments,

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_SOURCES, NEWS_SOURCES, newsForTickers, newsPages, parseRss, recentItems } from "../src/feeds.ts";
+import { ALL_SOURCES, NEWS_SOURCES, articleText, isFeedSite, newsForTickers, newsPages, parseRss, recentItems } from "../src/feeds.ts";
 import type { FeedSource } from "../src/feeds.ts";
 
 const SOURCE: FeedSource = { id: "s", name: "Site", url: "https://site/feed" };
@@ -63,4 +63,16 @@ test("every news page is read in turn, with the switches shared between a site's
   assert.equal(pages.length, NEWS_SOURCES.length * 5);
   assert.ok(pages[1].url.endsWith("?paged=2"));
   assert.equal(new Set(ALL_SOURCES.map((s) => s.id)).size, ALL_SOURCES.length);
+});
+
+test("an article can only come from a site Trimly already reads, over https", () => {
+  assert.ok(isFeedSite("https://www.moneytimes.com.br/carteira/"));
+  assert.ok(!isFeedSite("http://www.moneytimes.com.br/carteira/"));
+  assert.ok(!isFeedSite("https://evil.example/www.moneytimes.com.br"));
+  assert.ok(!isFeedSite("not a url"));
+});
+
+test("an article reads as its text, without scripts or page furniture", () => {
+  const text = articleText("<html><head><style>x{}</style><script>steal()</script></head><body><nav>Menu</nav><p>Itaú &amp; BTG</p><p>trocam</p></body></html>");
+  assert.equal(text, "Itaú & BTG trocam");
 });
