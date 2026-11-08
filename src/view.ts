@@ -113,7 +113,7 @@ import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
 import type { AssistantKind } from "./assistant";
 import { sendToClaude } from "./assistant-fetch";
 import type { SavedChat } from "./chat-store";
-import { applyImport, previewImport } from "./investment-import";
+import { applyImport, dismissMovement, previewImport } from "./investment-import";
 import { readSpreadsheet } from "./spreadsheet";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
@@ -2278,7 +2278,12 @@ export class TrimlyView extends ItemView {
     el.createDiv({ cls: "trimly-section-title", text: t.details.movements(moves.length) });
     const list = el.createDiv("trimly-card");
     if (moves.length === 0) this.empty(list, "arrow-left-right", a.pluggyId ? t.details.noSyncedMovements : t.details.noMovements);
-    for (const m of moves.slice(0, 6)) this.movementRow(list, ledger, m, true, false);
+    for (const m of moves.slice(0, 6)) {
+      this.movementRow(list, ledger, m, true, false, () => {
+        modal.close();
+        this.showAsset(a.id);
+      });
+    }
 
     const actions = new Setting(el);
     if (moves.length > 6) {
@@ -2622,7 +2627,7 @@ export class TrimlyView extends ItemView {
   }
 
   /** `linkAsset`: a synced movement opens its position (off inside that position's own details). */
-  private movementRow(parent: HTMLElement, ledger: Ledger, m: Movement, showDate: boolean, linkAsset = true) {
+  private movementRow(parent: HTMLElement, ledger: Ledger, m: Movement, showDate: boolean, linkAsset = true, onDismissed?: () => void) {
     const row = parent.createDiv("trimly-row");
     const asset = ledger.investments.assets.find((a) => a.id === m.assetId);
     // synced movements mirror Pluggy; only manual ones are edited here
@@ -2653,6 +2658,15 @@ export class TrimlyView extends ItemView {
     const signed = m.type === "income" ? m.amount : m.type === "tax" ? -m.amount : movementFlow(m);
     const cls = m.type === "income" ? "is-income" : m.type === "tax" ? "is-expense" : "";
     row.createDiv({ cls: `trimly-amount ${cls}`, text: `${signed >= 0 ? "+" : "−"}${this.money(Math.abs(signed))}` });
+    if (!m.pluggyId) return;
+    const remove = row.createEl("button", { cls: "clickable-icon", attr: { "aria-label": t.common.delete } });
+    setIcon(remove, "trash-2");
+    remove.addEventListener("click", (e) => {
+      e.stopPropagation();
+      new ConfirmModal(this.app, t.inv.dismissMovementConfirm, t.common.delete, () =>
+        void this.plugin.mutate((l) => dismissMovement(l, m.id, todayISO())).then(onDismissed)
+      ).open();
+    });
   }
 
   private yearAgo() {

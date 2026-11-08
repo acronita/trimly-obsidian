@@ -639,6 +639,7 @@ export const en: Strings = {
     deleteConfirm: (name: string) => `Delete "${name}" and its movements?`,
     manualFirst: "Add a manual position first. Movements of synced positions come from bank sync.",
     deleteMovementConfirm: "Delete this movement? Its effect on the position is undone.",
+    dismissMovementConfirm: "Delete this movement? It won't come back on the next sync or when importing the spreadsheet again, and the position's value stays what the bank reports.",
   },
 
   details: {

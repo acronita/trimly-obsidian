@@ -1,13 +1,34 @@
 # Changelog
 
+## Unreleased
+
+- 2026-11-08 — README's *Security model* catches up with the code: the full list of `data.json` toggles, public data
+  fetched by default instead of "no network requests", and everything the AI assistants' tools send, plus where the
+  key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
+  out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
+
+## 1.1.0 — 2026-11-08
+
+- 2026-11-08 — Movements from the bank or a spreadsheet can be deleted (trash icon on the row) and stay deleted across
+  syncs and re-imports, in the new optional ledger field `investments.dismissedMovements`; the position's value stays what
+  the bank reports. Repeats are also removed on their own at each sync: a spreadsheet row gives way to the bank's record
+  of the same trade, now matched by date and quantity because the bank's amount includes fees, and a closed position's
+  movements give way to exact copies in an open position with the same bank name, due date and class. A purchase or sale
+  recorded on two days up to 5 apart, as fills on one and a single settlement on the other, counts once when the two days'
+  totals match and the trades add up to more shares than the position holds. Import looks for a repeat in every position
+  of the ticker and adds new rows to an open one. Why: test notes about repeated movements that couldn't be deleted;
+  Pluggy was reporting one Tesouro Selic twice, open and closed, and FII purchases appeared on 5 and 9 January. Files touched: `src/ledger.ts`,
+  `src/investment-import.ts`, `src/investment-sync.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/investment-import.test.ts`, `test/investment-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 1.0.0 — 2026-11-08
 
 - 2026-11-08 — First stable release: the ledger format and the plugin API are now considered stable, so a breaking
   change to either bumps MAJOR. No code changes against 0.39.0. First published release since 0.20.0, so it also brings
   everything from 0.21.0 to 0.39.0 below: savings goals, income tax for variable income, 60-day balance forecast, reports
-  over any period, asset weights inside each class, calculators, Tesouro Direto revaluation from open data, portfolios
-  with their own targets, json and csv export outside the vault, debt planning, transfers between currencies, recommended
-  portfolios, headlines for the positions held, optional AI assistants with read-only tools and history import from
+  over any period, asset weights inside each class, calculators, Tesouro Direto revaluation from open data, json and csv
+  export outside the vault, debt planning, transfers between currencies, recommended portfolios, headlines for the positions held, optional AI assistants with read-only tools and history import from
   spreadsheets. Why: requested by the owner after the test rounds. Files touched: `package.json`, `manifest.json`,
   `versions.json`, `docs/CHANGELOG.md`.
 - 2026-11-05 — New `docs/AI-ASSISTANT.md`: the research and proposed design for the roadmap's optional AI
