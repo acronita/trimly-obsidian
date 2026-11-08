@@ -253,7 +253,7 @@ const INVESTMENT_TOOLS: Tool[] = [
   },
   {
     name: "recommended_portfolios",
-    description: "Public articles from the last year on the portfolios brokers and research houses recommend, grouped by type (diversified, stocks, fii, fixedIncome, funds, etf, abroad, crypto): title, date, source and url. Asks nothing about the user's portfolio.",
+    description: "Public articles from the last year on the portfolios brokers and research houses recommend, grouped by type (diversified, stocks, fii, fixedIncome, funds, etf, abroad, crypto): title, date, source, the house it is about when known (XP, BTG, ...) and url. Asks nothing about the user's portfolio.",
     properties: {},
     run: async (_l, _input, today, web) => {
       if (!web) throw new Error("the web sources are turned off in the settings");

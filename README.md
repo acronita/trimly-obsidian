@@ -60,7 +60,7 @@ passphrase that never leaves your device.
   this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
   Answers can be wrong, and the decisions are yours.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
-  articles from the last year on the portfolios brokers publish, by type (diversified, stocks, FIIs, fixed income, funds, ETFs, abroad, crypto), from public RSS feeds, plus the classic allocation models. Trimly only gathers the links: not a
+  articles from the last year on the portfolios brokers publish, by type (diversified, stocks, FIIs, fixed income, funds, ETFs, abroad, crypto) and filterable by house, from public RSS feeds including XP's own, plus links to the pages of houses with no feed and the classic allocation models. Trimly only gathers the links: not a
   recommendation. It reaches back about a day for your tickers, and has no filings.
 - **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
   everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
@@ -187,7 +187,7 @@ passphrase that never leaves your device.
   downloads the public price file (about 15 MB) from `www.tesourotransparente.gov.br`, at most once a
   day; it has every bond, so nothing about yours is sent. Turn off *Preços do Tesouro Direto* to stop it.
   The News tab reads public RSS feeds from `www.moneytimes.com.br`, `investnews.com.br`,
-  `www.infomoney.com.br` and `www.seudinheiro.com`, at most once a day, requesting only the feed's address:
+  `www.infomoney.com.br`, `www.seudinheiro.com` and `conteudos.xpi.com.br`, at most once a day, requesting only the feed's address:
   your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.
   With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
   category, bill, recurring and future transaction names, positions) go to `api.anthropic.com` with your key, only when you ask something.
