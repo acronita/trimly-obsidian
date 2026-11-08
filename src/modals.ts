@@ -131,7 +131,9 @@ export class PassphraseModal extends Modal {
 }
 
 export class ConfirmModal extends Modal {
-  constructor(app: App, private message: string, private cta: string, private onConfirm: () => void) {
+  private confirmed = false;
+
+  constructor(app: App, private message: string, private cta: string, private onConfirm: () => void, private onDismiss?: () => void) {
     super(app);
   }
 
@@ -144,6 +146,7 @@ export class ConfirmModal extends Modal {
           .setButtonText(this.cta)
           .setWarning()
           .onClick(() => {
+            this.confirmed = true;
             this.close();
             this.onConfirm();
           })
@@ -152,6 +155,7 @@ export class ConfirmModal extends Modal {
 
   onClose() {
     this.contentEl.empty();
+    if (!this.confirmed) this.onDismiss?.();
   }
 }
 
