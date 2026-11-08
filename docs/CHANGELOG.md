@@ -14,6 +14,18 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.38.0 — 2026-11-08
+
+- 2026-11-08 — *Carteiras recomendadas* reach back a year instead of 60 days and are grouped by type (diversified, stocks,
+  FIIs, fixed income, funds, ETFs, abroad, crypto), at most eight each, folded. Since the sites' portfolio tags are almost
+  all about stocks, InvestNews and InfoMoney are also searched with fixed terms (the only two whose feeds honor a search),
+  keeping only titles that recommend something of a known type. New card *Carteiras clássicas* with five well-known
+  allocation models. The assistant's `recommended_portfolios` returns the same groups. Why: test note, the list only had
+  stock portfolios. Against the real feeds on this date, funds had nothing in the last year and titles are classified by
+  words, so some articles land in the wrong group or aren't really recommendations. Files touched: `src/feeds.ts`,
+  `src/assistant.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/feeds.test.ts`, `test/assistant.test.ts`,
+  `README.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.37.0 — 2026-11-08
 
 - 2026-11-08 — The assistants open on a clickable list of past conversations, replacing the dropdown; opening one shows

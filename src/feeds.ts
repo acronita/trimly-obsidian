@@ -13,7 +13,15 @@ export interface FeedSource {
   url: string;
   /** the feed is a site's search, so its results are checked against this */
   titleMatch?: RegExp;
+  /**
+   * Articles on recommended portfolios. "tag": all of it is about them, and what names no
+   * type of asset is about stocks. "search": a site's search also brings guides and market
+   * news, so only what recommends something, of a known type, counts.
+   */
+  portfolio?: "tag" | "search";
 }
+
+export type PortfolioKind = "diversified" | "stocks" | "fii" | "fixedIncome" | "funds" | "etf" | "abroad" | "crypto";
 
 export interface FeedItem {
   title: string;
@@ -21,13 +29,23 @@ export interface FeedItem {
   /** YYYY-MM-DD */
   date: string;
   source: string;
+  /** set on articles about recommended portfolios */
+  kind?: PortfolioKind;
 }
 
-/** Sites that publish what brokers recommend each month, each with its own switch since any of them can change. */
+/** The tags sites use are almost all about stocks, so the other types are searched for: only these two sites' feeds honor a search. */
+const PORTFOLIO_SEARCHES = ["carteira recomendada fiis", "renda fixa recomendada", "fundos multimercados recomendados", "ações internacionais recomendadas", "ações americanas recomendadas", "carteira recomendada etfs", "carteira diversificada alocação", "carteira recomendada xp btg"];
+const SEARCHABLE: Pick<FeedSource, "id" | "name" | "url">[] = [
+  { id: "investnews", name: "InvestNews", url: "https://investnews.com.br/" },
+  { id: "infomoney", name: "InfoMoney", url: "https://www.infomoney.com.br/" },
+];
+
+/** Sites that publish what brokers recommend, each with its own switch since any of them can change. */
 export const PORTFOLIO_SOURCES: FeedSource[] = [
-  { id: "moneytimes", name: "Money Times", url: "https://www.moneytimes.com.br/tag/carteira-recomendada/feed/" },
-  { id: "investnews", name: "InvestNews", url: "https://investnews.com.br/tag/carteira-recomendada/feed/" },
-  { id: "infomoney", name: "InfoMoney", url: "https://www.infomoney.com.br/?s=carteira+recomendada&feed=rss2", titleMatch: /carteira|recomend/i },
+  { id: "moneytimes", name: "Money Times", url: "https://www.moneytimes.com.br/tag/carteira-recomendada/feed/", portfolio: "tag" },
+  { id: "investnews", name: "InvestNews", url: "https://investnews.com.br/tag/carteira-recomendada/feed/", portfolio: "tag" },
+  { id: "infomoney", name: "InfoMoney", url: "https://www.infomoney.com.br/?s=carteira+recomendada&feed=rss2", titleMatch: /carteira|recomend/i, portfolio: "tag" },
+  ...SEARCHABLE.flatMap((site) => PORTFOLIO_SEARCHES.map((q): FeedSource => ({ ...site, url: `${site.url}?s=${q.split(" ").map(encodeURIComponent).join("+")}&feed=rss2`, portfolio: "search" }))),
 ];
 
 /**
@@ -54,7 +72,34 @@ export function newsPages(sources: FeedSource[]): FeedSource[] {
 export const NEWS_MAX_DAYS = 30;
 
 /** How far back a recommendation is still worth listing. */
-export const PORTFOLIO_MAX_DAYS = 60;
+export const PORTFOLIO_MAX_DAYS = 365;
+
+/** Per type, or the list gets too long to read, and costs the assistant too much. */
+const PORTFOLIO_MAX_ITEMS = 8;
+
+/** In the order shown. Over text without accents; the first that matches wins, so the narrow types go first. */
+const PORTFOLIO_KINDS: [PortfolioKind, RegExp][] = [
+  ["crypto", /cripto|bitcoin|ethereum/],
+  ["fii", /\bfiis?\b|fundos? imobiliari/],
+  ["etf", /\betfs?\b/],
+  ["fixedIncome", /renda fixa|tesouro direto|\bcdbs?\b|debentures?|credito privado|prefixado/],
+  ["funds", /multimercado|fundos? de investimento|fundos recomendados/],
+  ["abroad", /internaciona|exterior|\bbdrs?\b|americanas?\b|wall street/],
+  ["diversified", /diversific|alocacao|portfolio|carteiras? de investimentos?/],
+  ["stocks", /\bacoes\b|\bacao\b|dividendos|small caps/],
+];
+const PORTFOLIO_ORDER: PortfolioKind[] = ["diversified", "stocks", "fii", "fixedIncome", "funds", "etf", "abroad", "crypto"];
+
+/** A search's results that actually recommend something, unlike guides and market news. */
+const RECOMMENDS = /recomend|indicad|melhores|favorit|carteiras?\b|top picks|estrategia|portfolio|alocacao/;
+
+const withoutAccents = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+function portfolioKind(title: string, mode: "tag" | "search"): PortfolioKind | null {
+  const text = withoutAccents(title);
+  if (mode === "search" && !RECOMMENDS.test(text)) return null;
+  return PORTFOLIO_KINDS.find(([, pattern]) => pattern.test(text))?.[0] ?? (mode === "tag" ? "stocks" : null);
+}
 
 const ENTITIES: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: " " };
 
@@ -80,7 +125,9 @@ export function parseRss(xml: string, source: FeedSource): FeedItem[] {
     const time = Date.parse(plainText(tag(item, "pubDate") ?? ""));
     if (!title || !link.startsWith("https://") || Number.isNaN(time)) continue;
     if (source.titleMatch && !source.titleMatch.test(title)) continue;
-    out.push({ title, link, date: new Date(time).toISOString().slice(0, 10), source: source.name });
+    const kind = source.portfolio && portfolioKind(title, source.portfolio);
+    if (kind === null) continue;
+    out.push({ title, link, date: new Date(time).toISOString().slice(0, 10), source: source.name, ...(kind ? { kind } : {}) });
   }
   return out;
 }
@@ -92,6 +139,12 @@ export function recentItems(items: FeedItem[], today: string, maxDays: number): 
   return items
     .filter((i) => i.date >= oldest && !seen.has(i.link) && seen.add(i.link))
     .sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0));
+}
+
+/** The articles on recommended portfolios worth listing, by type, without the types that have none. */
+export function portfolioGroups(items: FeedItem[], today: string): { kind: PortfolioKind; items: FeedItem[] }[] {
+  const recent = recentItems(items, today, PORTFOLIO_MAX_DAYS);
+  return PORTFOLIO_ORDER.map((kind) => ({ kind, items: recent.filter((i) => i.kind === kind).slice(0, PORTFOLIO_MAX_ITEMS) })).filter((g) => g.items.length);
 }
 
 /** Only the sites Trimly already reads: the assistant can't be sent anywhere else. */

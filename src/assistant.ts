@@ -23,7 +23,7 @@ import {
   rebalance,
   shiftMonth,
 } from "./ledger.ts";
-import { PORTFOLIO_MAX_DAYS, recentItems } from "./feeds.ts";
+import { portfolioGroups } from "./feeds.ts";
 import type { FeedItem } from "./feeds.ts";
 import type { AiConfig, Ledger } from "./ledger.ts";
 import { tickerOf } from "./quotes.ts";
@@ -253,11 +253,11 @@ const INVESTMENT_TOOLS: Tool[] = [
   },
   {
     name: "recommended_portfolios",
-    description: "Recent public articles on the portfolios brokers and research houses recommend: title, date, source and url. Asks nothing about the user's portfolio.",
+    description: "Public articles from the last year on the portfolios brokers and research houses recommend, grouped by type (diversified, stocks, fii, fixedIncome, funds, etf, abroad, crypto): title, date, source and url. Asks nothing about the user's portfolio.",
     properties: {},
     run: async (_l, _input, today, web) => {
       if (!web) throw new Error("the web sources are turned off in the settings");
-      return recentItems(await web.portfolios(), today, PORTFOLIO_MAX_DAYS);
+      return portfolioGroups(await web.portfolios(), today);
     },
   },
   {
