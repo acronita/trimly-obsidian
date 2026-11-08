@@ -54,6 +54,9 @@ export const en: Strings = {
       etf: "ETFs",
       fund: "Funds",
       retirement: "Retirement",
+      international: "International",
+      gold: "Gold",
+      crypto: "Crypto",
       other: "Other",
     },
     movement: {
@@ -810,6 +813,18 @@ export const en: Strings = {
     weight: "Weight",
     invalidWeight: "Enter a number of zero or more.",
     inClass: (now: string, after: string, target: string) => `${now} of the class now → ${after} after · target ${target}`,
+    classifyEtf: "ETFs take no target of their own. Click each one and pick in “Counts in targets as” what it exposes you to.",
+    reserve: {
+      title: "Emergency fund",
+      none: "Set the fund's amount and the positions holding it. It comes out of the portfolio, and the targets and contributions then apply only to the rest.",
+      set: "Set",
+      edit: "Edit",
+      held: (held: string, amount: string) => `${held} of ${amount}`,
+      missing: (v: string) => `${v} left to complete the fund.`,
+      surplus: (v: string) => `${v} of the marked positions is above the fund's amount and stays in the portfolio.`,
+      partOf: (v: string) => `Part of ${v}`,
+      rest: (v: string) => `Portfolio without the fund: ${v}. The targets below apply to this amount.`,
+    },
   },
 
   modals: {
@@ -985,12 +1000,22 @@ export const en: Strings = {
       assetOption: (name: string) => `Position: ${name}`,
       noLink: "Mark at least one account or position.",
     },
+    reserve: {
+      title: "Emergency fund",
+      amount: "Fund amount",
+      amountDesc: "If the marked positions hold more than this, the difference stays in the portfolio.",
+      assets: "Positions in the fund",
+      noAssets: "Mark at least one position.",
+    },
     asset: {
       newTitle: "New position",
       editTitle: "Edit position",
       name: "Name",
       namePlaceholder: "Name of the investment",
       class: "Class",
+      targetClass: "Counts in targets as",
+      targetClassDesc: "What the position exposes you to, such as International, Stocks or Gold. An ETF needs this to enter the targets. The class above still applies to income tax.",
+      sameClass: "Its own class",
       syncedNote:
         "This position comes from bank sync: its values and movements are updated on every sync. " +
         "The name, class and institution you set here are kept.",

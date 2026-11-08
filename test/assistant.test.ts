@@ -192,6 +192,26 @@ test("a position with no known cost is still reported, with what it is worth", a
   assert.deepEqual([positions[0].invested, positions[0].value], [null, 3000]);
 });
 
+test("an ETF not yet classified is not reported as something to sell", async () => {
+  const l = setup();
+  l.investments.assets.push({ id: "e", name: "BOVA11", code: "BOVA11", assetClass: "etf", value: 1000_00, updatedAt: TODAY });
+  l.investments.targets = [{ assetClass: "reit", pct: 100 }];
+  const lines = JSON.parse((await runTool("investments", l, "contribution_plan", { amount: 0 }, TODAY)).result) as { class: string; to_target: number | null }[];
+  assert.equal(lines.find((x) => x.class === "etf")?.to_target, null);
+  assert.notEqual(lines.find((x) => x.class === "reit")?.to_target, null);
+});
+
+test("the reserve tool gives the assistant what it needs to judge each marked position", async () => {
+  const l = setup();
+  assert.equal(JSON.parse((await runTool("investments", l, "emergency_reserve", {}, TODAY)).result), null);
+  l.investments.assets[0] = { ...l.investments.assets[0], subtype: "CDB", rateType: "CDI", rate: 100, dueDate: "2028-01-01" };
+  l.investments.reserve = { amount: 2000_00, assetIds: ["fii"] };
+  const r = JSON.parse((await runTool("investments", l, "emergency_reserve", {}, TODAY)).result) as { held: number; above_amount: number; positions: { in_reserve: number; product: string; index: string; index_pct: number; due_date: string }[] };
+  assert.deepEqual([r.held, r.above_amount], [2000, 1000]);
+  const [p] = r.positions;
+  assert.deepEqual([p.in_reserve, p.product, p.index, p.index_pct, p.due_date], [2000, "CDB", "CDI", 100, "2028-01-01"]);
+});
+
 test("the history tool gives each month, and movements go back further than the snapshots", async () => {
   const l = setup();
   l.investments.snapshots = [{ date: "2026-10-25", value: 2900_00, invested: 2500_00 }, { date: "2026-11-06", value: 3000_00, invested: 2500_00 }];

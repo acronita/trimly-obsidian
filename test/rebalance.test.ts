@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { assetTargets, defaultLedger, newId, parseLedger, rebalance } from "../src/ledger.ts";
+import { taxKind } from "../src/income-tax.ts";
+import { assetTargets, classAssets, defaultLedger, investableByClass, investableTotal, newId, parseLedger, portfolioValue, rebalance, reservedByAsset, reserveStatus } from "../src/ledger.ts";
 import type { AllocationTarget, Asset, AssetClass, Ledger } from "../src/ledger.ts";
 
 function ledger(values: Partial<Record<AssetClass, number>>, targets: AllocationTarget[]): Ledger {
@@ -136,4 +137,89 @@ test("closed positions and other classes stay out, and a weight survives a reloa
   l.investments.assets.push({ id: "s", name: "s", assetClass: "stock", value: 1000_00, weight: 9, updatedAt: "2026-10-25" });
   assert.deepEqual(assetTargets(l, "reit", 100_00).map((x) => x.asset.id), ["a"]);
   assert.equal(parseLedger(JSON.stringify(l)).investments.assets[0].weight, 1);
+});
+
+function withReserve(amount: number, ...assets: [string, AssetClass, number][]): Ledger {
+  const l = defaultLedger();
+  for (const [id, assetClass, value] of assets) l.investments.assets.push({ id, name: id, assetClass, value, updatedAt: "2026-10-25" });
+  l.investments.reserve = { amount, assetIds: ["selic"] };
+  return l;
+}
+
+test("targets are shares of the portfolio without the reserve", () => {
+  // with the 6,000 reserve counted, fixed income would look far above its 50%
+  const l = withReserve(6000_00, ["selic", "treasury", 6000_00], ["cdb", "fixed_income", 2000_00], ["stock", "stock", 2000_00]);
+  l.investments.targets = [{ assetClass: "fixed_income", pct: 50 }, { assetClass: "stock", pct: 50 }];
+  const lines = rebalance(l, 0);
+  assert.equal(line(lines, "fixed_income").pct, 50);
+  assert.equal(line(lines, "stock").gap, 0);
+  assert.equal(lines.some((x) => x.assetClass === "treasury"), false);
+  assert.equal(investableTotal(l), 4000_00);
+  assert.equal(portfolioValue(l), 10000_00, "the reserve is still the user's money");
+});
+
+test("what a marked position holds above the reserve's amount stays in the portfolio", () => {
+  const l = withReserve(3000_00, ["selic", "treasury", 5000_00]);
+  const status = reserveStatus(l);
+  assert.deepEqual([status?.held, status?.missing, status?.surplus], [3000_00, 0, 2000_00]);
+  assert.deepEqual(investableByClass(l), [["treasury", 2000_00]]);
+});
+
+test("a reserve bigger than what is marked says what is missing and leaves nothing in the portfolio", () => {
+  const l = withReserve(5000_00, ["selic", "treasury", 3000_00]);
+  const status = reserveStatus(l);
+  assert.deepEqual([status?.held, status?.missing, status?.surplus], [3000_00, 2000_00, 0]);
+  assert.deepEqual(investableByClass(l), []);
+});
+
+test("several marked positions give up the same proportion, to the cent", () => {
+  const l = withReserve(1000_00, ["selic", "treasury", 3000_00], ["cdb", "fixed_income", 1000_00]);
+  l.investments.reserve = { amount: 1000_01, assetIds: ["selic", "cdb"] };
+  const reserved = reservedByAsset(l);
+  assert.equal((reserved.get("selic") ?? 0) + (reserved.get("cdb") ?? 0), 1000_01);
+  assert.equal(reserved.get("selic"), 750_01);
+});
+
+test("a closed position stops counting for the reserve", () => {
+  const l = withReserve(1000_00, ["selic", "treasury", 1000_00]);
+  l.investments.assets[0].closed = true;
+  assert.equal(reserveStatus(l)?.missing, 1000_00);
+});
+
+test("a position entirely in the reserve gets no share of a contribution, a partial one counts what is left", () => {
+  const whole = withReserve(1000_00, ["selic", "treasury", 1000_00], ["other", "treasury", 1000_00]);
+  whole.investments.assets.forEach((a) => (a.weight = 1));
+  assert.deepEqual(assetTargets(whole, "treasury", 100_00).map((x) => x.asset.id), ["other"]);
+
+  const partial = withReserve(500_00, ["selic", "treasury", 1000_00], ["other", "treasury", 500_00]);
+  partial.investments.assets.forEach((a) => (a.weight = 1));
+  assert.deepEqual(assetTargets(partial, "treasury", 0).map((x) => x.pct), [50, 50]);
+});
+
+test("the reserve survives a reload, and a ledger without one stays without the field", () => {
+  const l = withReserve(1000_00, ["selic", "treasury", 1000_00]);
+  assert.deepEqual(parseLedger(JSON.stringify(l)).investments.reserve, { amount: 1000_00, assetIds: ["selic"] });
+  assert.equal("reserve" in parseLedger(JSON.stringify(defaultLedger())).investments, false);
+});
+
+test("a ledger from the first 1.2.0 builds moves dollars into international and loses the ETF target", () => {
+  const l = defaultLedger();
+  l.investments.assets.push({ id: "d", name: "d", assetClass: "dollar" as AssetClass, value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.assets.push({ id: "e", name: "e", assetClass: "etf", targetClass: "dollar" as AssetClass, value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.assets.push({ id: "f", name: "f", assetClass: "fund", targetClass: "etf", value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.targets = [{ assetClass: "international", pct: 5 }, { assetClass: "dollar" as AssetClass, pct: 1 }, { assetClass: "etf", pct: 20 }, { assetClass: "stock", pct: 74 }];
+  const { assets, targets } = parseLedger(JSON.stringify(l)).investments;
+  assert.deepEqual(assets.map((a) => [a.assetClass, a.targetClass]), [["international", undefined], ["etf", "international"], ["fund", undefined]]);
+  // the etf class must stay on the position, or income tax loses it
+  assert.deepEqual(targets, [{ assetClass: "international", pct: 6 }, { assetClass: "stock", pct: 74 }]);
+});
+
+test("an ETF counted as international moves in the targets but stays an ETF for income tax", () => {
+  const l = defaultLedger();
+  l.investments.assets.push({ id: "i", name: "IVVB11", code: "IVVB11", assetClass: "etf", targetClass: "international", value: 1000_00, weight: 1, updatedAt: "2026-10-25" });
+  l.investments.targets = [{ assetClass: "international", pct: 100 }];
+  assert.equal(line(rebalance(l, 0), "international").value, 1000_00);
+  assert.deepEqual(classAssets(l, "etf"), []);
+  assert.equal(classAssets(l, "international").length, 1);
+  assert.equal(taxKind(l.investments.assets[0]), "etf");
 });

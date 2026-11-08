@@ -57,6 +57,9 @@ export const ptBR = {
       etf: "ETFs",
       fund: "Fundos",
       retirement: "Previdência",
+      international: "Exterior",
+      gold: "Ouro",
+      crypto: "Cripto",
       other: "Outros",
     },
     movement: {
@@ -816,6 +819,18 @@ export const ptBR = {
     weight: "Peso",
     invalidWeight: "Digite um número maior ou igual a zero.",
     inClass: (now: string, after: string, target: string) => `${now} da classe hoje → ${after} depois · meta ${target}`,
+    classifyEtf: "ETF não tem meta própria. Clique em cada um e escolha em “Conta nas metas como” a que ele te expõe.",
+    reserve: {
+      title: "Reserva de emergência",
+      none: "Separe o valor da reserva e os ativos que a guardam. Ela sai da carteira, e as metas e os aportes passam a valer só para o resto.",
+      set: "Definir",
+      edit: "Editar",
+      held: (held: string, amount: string) => `${held} de ${amount}`,
+      missing: (v: string) => `Faltam ${v} para completar a reserva.`,
+      surplus: (v: string) => `${v} dos ativos marcados passam do valor da reserva e continuam na carteira.`,
+      partOf: (v: string) => `Parte de ${v}`,
+      rest: (v: string) => `Carteira sem a reserva: ${v}. As metas abaixo valem sobre esse valor.`,
+    },
   },
 
   modals: {
@@ -992,12 +1007,22 @@ export const ptBR = {
       assetOption: (name: string) => `Ativo: ${name}`,
       noLink: "Marque pelo menos uma conta ou um ativo.",
     },
+    reserve: {
+      title: "Reserva de emergência",
+      amount: "Valor da reserva",
+      amountDesc: "Se os ativos marcados tiverem mais que isso, a diferença continua na carteira.",
+      assets: "Ativos da reserva",
+      noAssets: "Marque pelo menos um ativo.",
+    },
     asset: {
       newTitle: "Novo ativo",
       editTitle: "Editar ativo",
       name: "Nome",
       namePlaceholder: "Nome do investimento",
       class: "Classe",
+      targetClass: "Conta nas metas como",
+      targetClassDesc: "A que o ativo te expõe, como Exterior, Ações ou Ouro. Um ETF precisa disso para entrar nas metas. A classe acima continua valendo para o IR.",
+      sameClass: "A própria classe",
       syncedNote:
         "Este ativo vem da sincronização bancária: valores e movimentações são atualizados a cada sincronização. " +
         "Nome, classe e instituição que você definir aqui são mantidos.",

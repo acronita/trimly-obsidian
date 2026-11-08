@@ -21,11 +21,13 @@ import {
   openAssets,
   portfolioValue,
   rebalance,
+  reservedByAsset,
+  reserveStatus,
   shiftMonth,
 } from "./ledger.ts";
 import { portfolioGroups } from "./feeds.ts";
 import type { FeedItem } from "./feeds.ts";
-import type { AiConfig, Ledger } from "./ledger.ts";
+import type { AiConfig, Asset, Ledger } from "./ledger.ts";
 import { tickerOf } from "./quotes.ts";
 import { buildReport } from "./reports.ts";
 import { monthlyReturns, periodReturn, portfolioIndex } from "./returns.ts";
@@ -173,29 +175,68 @@ const ACCOUNT_TOOLS: Tool[] = [
   },
 ];
 
+/** What says how safe and how liquid a position is. */
+const productFacts = (a: Asset) => ({
+  product: a.subtype ?? null,
+  index: a.rateType ?? null,
+  index_pct: a.rate ?? null,
+  fixed_rate_pct: a.fixedRate ?? null,
+  due_date: a.dueDate ?? null,
+});
+
 const INVESTMENT_TOOLS: Tool[] = [
   {
     name: "portfolio_summary",
-    description: "Total value and every open position with class, value and cost. A null invested means the bank doesn't report the cost and the user hasn't typed the average price in the IR tab; the value is still real.",
+    description: "Total value, emergency reserve included, and every open position with class, product, rate, value, cost and how much of it is in the reserve. counts_as is the class it counts under in the targets, when not its own. A null invested means the bank doesn't report the cost and the user hasn't typed the average price in the IR tab; the value is still real.",
     properties: {},
-    run: (l) => ({
-      total: money(portfolioValue(l)),
-      positions: openAssets(l).map((a) => ({
-        name: a.name,
-        ticker: tickerOf(a),
-        class: a.assetClass,
-        institution: a.institution ?? null,
-        quantity: a.quantity ?? null,
-        value: money(a.value),
-        invested: a.invested === undefined ? null : money(a.invested),
-        due_date: a.dueDate ?? null,
-        weight: a.weight ?? null,
-      })),
-    }),
+    run: (l) => {
+      const reserved = reservedByAsset(l);
+      return {
+        total: money(portfolioValue(l)),
+        positions: openAssets(l).map((a) => ({
+          name: a.name,
+          ticker: tickerOf(a),
+          class: a.assetClass,
+          counts_as: a.targetClass ?? null,
+          institution: a.institution ?? null,
+          quantity: a.quantity ?? null,
+          value: money(a.value),
+          in_reserve: money(reserved.get(a.id) ?? 0),
+          invested: a.invested === undefined ? null : money(a.invested),
+          weight: a.weight ?? null,
+          ...productFacts(a),
+        })),
+      };
+    },
+  },
+  {
+    name: "emergency_reserve",
+    description: "The emergency reserve the user set apart from the portfolio: the amount wanted, what the positions they marked cover, what is missing, what those positions hold above it (it stays in the portfolio), and each marked position's institution, product, rate and due date. Null when none is set.",
+    properties: {},
+    run: (l) => {
+      const status = reserveStatus(l);
+      return (
+        status && {
+          amount: money(status.amount),
+          held: money(status.held),
+          missing: money(status.missing),
+          above_amount: money(status.surplus),
+          positions: status.lines.map(({ asset, reserved }) => ({
+            name: asset.name,
+            ticker: tickerOf(asset),
+            class: asset.assetClass,
+            institution: asset.institution ?? null,
+            value: money(asset.value),
+            in_reserve: money(reserved),
+            ...productFacts(asset),
+          })),
+        }
+      );
+    },
   },
   {
     name: "contribution_plan",
-    description: "Allocation against the user's own targets per class, and how a contribution would split without selling. Use amount 0 for the allocation alone.",
+    description: "Allocation against the user's own targets per class, and how a contribution would split without selling. The emergency reserve is left out: targets are shares of the rest. The etf line holds ETFs not yet classified; it takes no target, so to_target is null. Use amount 0 for the allocation alone.",
     properties: { amount: { type: "number", description: "Contribution, in currency units" } },
     run: (l, input) => {
       const amount = typeof input.amount === "number" ? Math.max(0, Math.round(input.amount * 100)) : 0;
@@ -204,7 +245,7 @@ const INVESTMENT_TOOLS: Tool[] = [
         value: money(x.value),
         share_pct: Math.round(x.pct * 10) / 10,
         target_pct: Math.round(x.target * 10) / 10,
-        to_target: money(x.gap),
+        to_target: x.assetClass === "etf" ? null : money(x.gap),
         contribute: money(x.contribute),
       }));
     },
@@ -322,7 +363,11 @@ They make their own decisions and want to learn how to reason about them, which 
 
 You have no general web access, but recommended_portfolios lists recent public articles on what brokers recommend and read_article reads them, so you can compare those with the user's positions. Nothing about the user goes to those sites.
 
-Portfolio history starts when Trimly first recorded it, because banks report today's values and past movements, not past values. position_movements goes further back. When a position's cost is null, its value is still right: only its gain can't be known until the user types the average price in the IR tab.`,
+Portfolio history starts when Trimly first recorded it, because banks report today's values and past movements, not past values. position_movements goes further back. When a position's cost is null, its value is still right: only its gain can't be known until the user types the average price in the IR tab.
+
+Each position counts under one class only in the targets: counts_as when set, otherwise its class, so classes never double count. ETF is a product type and takes no target: an ETF with no counts_as is waiting for the user to pick what it exposes them to in "Conta nas metas como" on the position. International covers everything outside Brazil or the real, foreign currency included.
+
+The user can set apart an emergency reserve (emergency_reserve). When asked whether a position works for it or what would work better, weigh redemption without waiting, not losing value if redeemed in a hurry, and who stands behind the money (the Treasury, or FGC coverage up to its limit), compare net of income tax, and consider what else they hold and products commonly used for this, such as Tesouro Selic or a CDB with daily liquidity from a solid bank. Trimly doesn't record whether a product allows daily redemption and a due date doesn't settle it, so ask when the answer depends on it.`,
 };
 
 export function systemPrompt(kind: AssistantKind, language: string, today: string): string {
