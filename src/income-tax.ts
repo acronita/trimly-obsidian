@@ -54,6 +54,8 @@ export interface TaxPosition {
   /** today, after every movement */
   quantity: number;
   cost: number;
+  /** shares the movements don't explain, held from before them */
+  heldBefore: number;
   /** false when nothing says what the shares cost, so `cost` means nothing */
   costKnown: boolean;
   /** quantity and cost at the end of `date` */
@@ -171,7 +173,7 @@ export function taxPosition(asset: Asset, kind: TaxKind, allMovements: Movement[
     return { quantity, cost: Math.round(cost) };
   };
   const now = replay(undefined, true);
-  return { asset, kind, sales, issues: [...issues], quantity: now.quantity, cost: now.cost, costKnown: !issues.has("missingCost") && reliable, at: (date) => replay(date) };
+  return { asset, kind, sales, issues: [...issues], quantity: now.quantity, cost: now.cost, heldBefore: opening, costKnown: !issues.has("missingCost") && reliable, at: (date) => replay(date) };
 }
 
 /** Every stock, BDR, ETF and FII position, closed ones included: their sales still count. */

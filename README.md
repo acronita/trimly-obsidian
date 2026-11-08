@@ -73,6 +73,9 @@ passphrase that never leaves your device.
   how much to contribute to a goal, emergency fund, and CDB against LCI/LCA after tax. They run on the
   device, start from your own numbers when possible and save nothing. Simulations at a constant rate, not
   a forecast or a recommendation.
+- **Import** (*Importar planilha*, in Movements) — buys, sales and income from a B3 statement or a broker's spreadsheet, in
+  Excel or CSV. Banks don't report what FII shares cost: with all the buys of an asset, Trimly gets its real average price.
+  The file is read in memory and goes nowhere.
 - **Income tax** (*IR*, in the investments mode) — an estimate from your movements: average price per
   asset, each month's result and DARF with its due date, the R$ 20.000 stock exemption meter, losses
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,

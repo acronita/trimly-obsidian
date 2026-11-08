@@ -1,7 +1,7 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, ImportModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
@@ -14,6 +14,7 @@ import {
   CategoryKind,
   Debt,
   FORECAST_DAYS,
+  IMPORT_PREFIX,
   Ledger,
   PlannedInstallment,
   MOVEMENT_ICONS,
@@ -112,6 +113,8 @@ import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
 import type { AssistantKind } from "./assistant";
 import { sendToClaude } from "./assistant-fetch";
 import type { SavedChat } from "./chat-store";
+import { applyImport, previewImport } from "./investment-import";
+import { readSpreadsheet } from "./spreadsheet";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
 import type { ReportFilter, ReportPreset } from "./reports";
@@ -2617,7 +2620,7 @@ export class TrimlyView extends ItemView {
     // synced movements mirror Pluggy; only manual ones are edited here
     if (asset && !asset.pluggyId) {
       row.addClass("is-clickable");
-      row.addEventListener("click", () => this.editMovement(m.id));
+      if (!m.pluggyId?.startsWith(IMPORT_PREFIX)) row.addEventListener("click", () => this.editMovement(m.id));
     } else if (asset && linkAsset) {
       row.addClass("is-clickable");
       row.addEventListener("click", () => this.showAsset(asset.id));
@@ -2672,7 +2675,36 @@ export class TrimlyView extends ItemView {
     all.checked = f.allTime;
     allLabel.createSpan({ text: t.movements.allTime });
     all.addEventListener("change", () => ((f.allTime = all.checked), renderList()));
+    bar.createEl("button", { text: t.movements.import, attr: { "aria-label": t.movements.importHint } }).addEventListener("click", () => this.importSpreadsheet());
     renderList();
+  }
+
+  /** Read in memory, shown first, and only movements enter the ledger: the file itself goes nowhere. */
+  private importSpreadsheet() {
+    const picker = createEl("input", { type: "file", attr: { accept: ".xlsx,.csv" } });
+    picker.addEventListener("change", () => {
+      const file = picker.files?.[0];
+      if (file) void this.previewFile(file);
+    });
+    picker.click();
+  }
+
+  private async previewFile(file: File) {
+    const ledger = this.plugin.ledger;
+    if (!ledger) return;
+    try {
+      const preview = previewImport(ledger, await readSpreadsheet(new Uint8Array(await file.arrayBuffer())));
+      if (!preview) {
+        new Notice(t.movements.importUnknown);
+        return;
+      }
+      new ImportModal(this.app, preview, () => {
+        void this.plugin.mutate((l) => applyImport(l, preview));
+        new Notice(t.movements.imported(preview.trades.length));
+      }).open();
+    } catch (e) {
+      new Notice(t.movements.importFailed((e as Error).message));
+    }
   }
 
   private renderMovementList(wrap: HTMLElement, ledger: Ledger) {

@@ -457,7 +457,7 @@ export const ptBR = {
     noSales: "Nenhuma venda neste ano.",
     losses: (common: string, fii: string) => `Prejuízo a compensar: ${common} em ações, BDRs e ETFs; ${fii} em FIIs. Um grupo não compensa o outro.`,
     averageTitle: "Preço médio",
-    averageHint: "O banco não informa o custo destes ativos. Digite o preço médio, que está na nota de corretagem ou no informe da corretora: ele passa a valer aqui, na carteira e no assistente.",
+    averageHint: "Quando o banco não informa o custo, importe o extrato de negociação da B3 em Movimentações, que calcula o preço médio, ou digite o preço médio aqui. Ele passa a valer no IR, na carteira e no assistente.",
     typeAverage: "Digitar",
     position: "Ativo",
     quantity: "Quantidade",
@@ -716,6 +716,11 @@ export const ptBR = {
   },
 
   movements: {
+    import: "Importar planilha",
+    importHint: "Extrato da B3 ou planilha da corretora, em Excel ou CSV",
+    importUnknown: "Não reconheci as colunas desta planilha. Ela precisa de data, ativo, quantidade e tipo da operação.",
+    importFailed: (message: string) => `Não foi possível ler o arquivo: ${message}`,
+    imported: (n: number) => `${n} ${s(n, "movimentação importada", "movimentações importadas")}.`,
     allPositions: "Todos os ativos",
     allTypes: "Todos os tipos",
     allTime: "Todo o período",
@@ -930,6 +935,15 @@ export const ptBR = {
       icon: "Ícone",
       isDefault: "Categoria padrão",
       isDefaultDesc: "Transações deste tipo sem categoria vão para esta, inclusive as que já existem. Só uma categoria de cada tipo pode ser a padrão.",
+    },
+    importer: {
+      title: "Importar planilha",
+      found: (buys: number, sells: number, income: number) => `Novas: ${buys} ${s(buys, "compra", "compras")}, ${sells} ${s(sells, "venda", "vendas")} e ${income} ${s(income, "provento", "proventos")}.`,
+      duplicates: (n: number) => `${n} já ${s(n, "estava registrada", "estavam registradas")} e ${s(n, "fica", "ficam")} de fora.`,
+      unmatched: (tickers: string) => `Sem posição na carteira, ficam de fora: ${tickers}.`,
+      skipped: (labels: string) => `Linhas não importadas: ${labels}.`,
+      note: "Entra só o histórico: o valor e a quantidade de cada posição continuam os do banco. Com todas as compras de um ativo, o custo dele passa a ser o real.",
+      confirm: "Importar",
     },
     debt: {
       newTitle: "Nova dívida",

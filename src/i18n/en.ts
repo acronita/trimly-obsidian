@@ -452,7 +452,7 @@ export const en: Strings = {
     noSales: "No sales this year.",
     losses: (common: string, fii: string) => `Losses to offset: ${common} in stocks, BDRs and ETFs; ${fii} in FIIs. One group can't offset the other.`,
     averageTitle: "Average price",
-    averageHint: "The bank doesn't report the cost of these assets. Type the average price, found on the brokerage note or statement: it then counts here, in the portfolio and in the assistant.",
+    averageHint: "When the bank doesn't report the cost, import the B3 trade statement in Movements, which works out the average price, or type the average price here. It counts in income tax, the portfolio and the assistant.",
     typeAverage: "Type",
     position: "Asset",
     quantity: "Quantity",
@@ -710,6 +710,11 @@ export const en: Strings = {
   },
 
   movements: {
+    import: "Import spreadsheet",
+    importHint: "A B3 statement or a broker's spreadsheet, in Excel or CSV",
+    importUnknown: "I couldn't recognize this spreadsheet's columns. It needs date, asset, quantity and operation type.",
+    importFailed: (message: string) => `Could not read the file: ${message}`,
+    imported: (n: number) => `${n} ${s(n, "movement", "movements")} imported.`,
     allPositions: "All positions",
     allTypes: "All types",
     allTime: "All time",
@@ -923,6 +928,15 @@ export const en: Strings = {
       icon: "Icon",
       isDefault: "Default category",
       isDefaultDesc: "Uncategorized transactions of this kind go here, existing ones included. Only one category of each kind can be the default.",
+    },
+    importer: {
+      title: "Import spreadsheet",
+      found: (buys: number, sells: number, income: number) => `New: ${buys} ${s(buys, "buy", "buys")}, ${sells} ${s(sells, "sale", "sales")} and ${income} income ${s(income, "payment", "payments")}.`,
+      duplicates: (n: number) => `${n} already recorded and left out.`,
+      unmatched: (tickers: string) => `No position in the portfolio, left out: ${tickers}.`,
+      skipped: (labels: string) => `Rows not imported: ${labels}.`,
+      note: "Only history comes in: each position's value and quantity stay the bank's. With all the buys of an asset, its cost becomes the real one.",
+      confirm: "Import",
     },
     debt: {
       newTitle: "New debt",
