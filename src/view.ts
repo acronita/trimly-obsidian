@@ -106,7 +106,7 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
-import { NEWS_MAX_DAYS, PORTFOLIO_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, recentItems } from "./feeds";
+import { NEWS_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, portfolioGroups, recentItems } from "./feeds";
 import { fetchArticle, fetchFeeds } from "./feeds-fetch";
 import type { FeedItem } from "./feeds";
 import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
@@ -3101,11 +3101,23 @@ export class TrimlyView extends ItemView {
     const items = this.plugin.portfolioFeed();
     if (items === null) card.createDiv({ cls: "trimly-muted", text: t.news.loading });
     else {
-      const recent = recentItems(items, todayISO(), PORTFOLIO_MAX_DAYS);
-      if (recent.length === 0) card.createDiv({ cls: "trimly-muted", text: t.news.nothing });
-      for (const item of recent) this.feedRow(card, item);
+      const groups = portfolioGroups(items, todayISO());
+      if (groups.length === 0) card.createDiv({ cls: "trimly-muted", text: t.news.nothing });
+      for (const group of groups) {
+        const fold = card.createEl("details", "trimly-proventos-last");
+        fold.createEl("summary", { text: `${t.news.kinds[group.kind]} (${group.items.length})` });
+        for (const item of group.items) this.feedRow(fold, item);
+      }
     }
     if (this.plugin.feedFailed.portfolios.length) card.createDiv({ cls: "trimly-muted is-expense trimly-card-foot", text: t.news.failed(this.plugin.feedFailed.portfolios.join(", ")) });
+
+    const classics = this.card(body, t.news.classics);
+    classics.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.news.classicsHint });
+    for (const model of t.news.classicModels) {
+      const main = classics.createDiv("trimly-row").createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: model.name });
+      main.createDiv({ cls: "trimly-row-sub", text: model.mix });
+    }
   }
 
   // ---- calculators ----

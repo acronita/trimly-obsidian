@@ -60,7 +60,7 @@ passphrase that never leaves your device.
   this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
   Answers can be wrong, and the decisions are yours.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
-  articles on the portfolios brokers publish, from public RSS feeds. Trimly only gathers the links: not a
+  articles from the last year on the portfolios brokers publish, by type (diversified, stocks, FIIs, fixed income, funds, ETFs, abroad, crypto), from public RSS feeds, plus the classic allocation models. Trimly only gathers the links: not a
   recommendation. It reaches back about a day for your tickers, and has no filings.
 - **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
   everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens

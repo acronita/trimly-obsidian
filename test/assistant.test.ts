@@ -24,7 +24,7 @@ function setup(): Ledger {
   return l;
 }
 
-const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A" }], article: async () => "texto" };
+const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A", kind: "stocks" as const }], article: async () => "texto" };
 
 const reply = (content: ClaudeResponse["content"], stop_reason: string, tokens = 10): ClaudeResponse => ({ content, stop_reason, usage: { input_tokens: tokens, output_tokens: tokens } });
 const say = (text: string) => reply([{ type: "text", text }], "end_turn");
