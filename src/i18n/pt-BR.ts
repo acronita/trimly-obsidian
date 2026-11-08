@@ -260,6 +260,10 @@ export const ptBR = {
       abroad: "Exterior e BDRs",
       crypto: "Cripto",
     },
+    house: "Casa de análise",
+    allHouses: "Todas as casas",
+    housePages: "Páginas das casas",
+    housePagesHint: "Algumas casas só mostram as carteiras no próprio site, sem feed para o Trimly ler. Em algumas, parte do conteúdo pede cadastro.",
     classics: "Carteiras clássicas",
     classicsHint: "Modelos de alocação conhecidos, que dizem quanto ter em cada classe e não quais ativos comprar. Quase todos nasceram nos EUA: \"títulos\" lá equivalem, por aqui, a títulos públicos e renda fixa. Não é recomendação.",
     classicModels: [

@@ -255,6 +255,10 @@ export const en: Strings = {
       abroad: "Abroad and BDRs",
       crypto: "Crypto",
     },
+    house: "Research house",
+    allHouses: "All houses",
+    housePages: "The houses' pages",
+    housePagesHint: "Some houses show their portfolios only on their own site, with no feed for Trimly to read. On some, part of the content asks you to sign up.",
     classics: "Classic portfolios",
     classicsHint: "Well-known allocation models, which say how much to hold in each class and not which assets to buy. Most come from the US: their \"bonds\" correspond, in Brazil, to government bonds and fixed income. Not a recommendation.",
     classicModels: [

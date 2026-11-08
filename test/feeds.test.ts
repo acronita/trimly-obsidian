@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { ALL_SOURCES, NEWS_SOURCES, PORTFOLIO_SOURCES, articleText, isFeedSite, newsForTickers, newsPages, parseRss, portfolioGroups, recentItems } from "../src/feeds.ts";
+import { ALL_SOURCES, HOUSE_PAGES, NEWS_SOURCES, PORTFOLIO_SOURCES, articleText, isFeedSite, newsForTickers, newsPages, parseRss, portfolioGroups, portfolioHouses, recentItems } from "../src/feeds.ts";
 import type { FeedSource } from "../src/feeds.ts";
 
 const SOURCE: FeedSource = { id: "s", name: "Site", url: "https://site/feed" };
@@ -78,11 +78,50 @@ test("news feeds carry no type", () => {
   assert.equal(kindOf("As ações mais indicadas", SOURCE), undefined);
 });
 
+test("a house's own feed says the type and the house, even when the title doesn't", () => {
+  const xp: FeedSource = { ...SOURCE, name: "XP", portfolio: "tag", house: "XP", kind: "abroad" };
+  const [a] = parseRss(rss(item("Top Dividendos Globais – Novembro 2026")), xp);
+  assert.equal(a.kind, "abroad");
+  assert.equal(a.house, "XP");
+});
+
+test("XP's portfolios for companies stay out of a personal budget", () => {
+  const xp = PORTFOLIO_SOURCES.find((s) => s.url.includes("guia-de-investimentos")) as FeedSource;
+  const titles = parseRss(rss(item("Carteiras de Alocação PJ – Novembro 2026", "https://x/1"), item("Carteiras de Alocação Brasil – Novembro 2026", "https://x/2")), xp).map((i) => i.title);
+  assert.deepEqual(titles, ["Carteiras de Alocação Brasil – Novembro 2026"]);
+});
+
+test("an article belongs to the first house it names, since the next ones are usually the stocks picked", () => {
+  const houseOf = (title: string) => parseRss(rss(item(title)), TAG)[0]?.house;
+  assert.equal(houseOf("Ágora troca carteira de novembro e tira BTG (BPAC11)"), "Ágora");
+  assert.equal(houseOf("Itaú BBA tira Vale da carteira"), "Itaú BBA");
+  assert.equal(houseOf("XP revela suas 11 ações favoritas"), "XP");
+});
+
+test("a common word or a ticker isn't a house", () => {
+  const houseOf = (title: string) => parseRss(rss(item(title)), TAG)[0]?.house;
+  assert.equal(houseOf("Chegou a hora: agora é a vez dos dividendos"), undefined);
+  assert.equal(houseOf("XPBR31 sobe"), undefined);
+});
+
+test("narrowing to one house keeps only its portfolios, and only houses with something are offered", () => {
+  const at = (house: string | undefined, n: number) => ({ title: `t${n}`, link: `https://s/${n}`, date: "2026-11-01", source: "S", kind: "fii" as const, ...(house ? { house } : {}) });
+  const items = [at("XP", 1), at("BTG", 2), at(undefined, 3)];
+  assert.deepEqual(portfolioHouses(items, "2026-11-08"), ["BTG", "XP"]);
+  assert.deepEqual(portfolioGroups(items, "2026-11-08", "BTG")[0].items.map((i) => i.link), ["https://s/2"]);
+  assert.equal(portfolioGroups(items, "2026-11-08")[0].items.length, 3);
+});
+
+test("the houses' pages are https, and the assistant can read articles from XP's feeds", () => {
+  assert.ok(HOUSE_PAGES.every((p) => p.url.startsWith("https://")));
+  assert.ok(isFeedSite("https://conteudos.xpi.com.br/acoes/carteiras/top-acoes-xp-novembro-2026/"));
+});
+
 test("portfolios are grouped by type with the mixed ones first, reach back a year, and each type stays short", () => {
   const at = (kind: "fii" | "diversified", n: number, date = "2026-10-01") => ({ title: `${kind}${n}`, link: `https://s/${kind}${n}`, date, source: "S", kind });
-  const fiis = Array.from({ length: 12 }, (_, n) => at("fii", n));
+  const fiis = Array.from({ length: 15 }, (_, n) => at("fii", n));
   const groups = portfolioGroups([...fiis, at("diversified", 0, "2026-01-10"), at("diversified", 1, "2025-10-01")], "2026-11-08");
-  assert.deepEqual(groups.map((g) => [g.kind, g.items.length]), [["diversified", 1], ["fii", 8]]);
+  assert.deepEqual(groups.map((g) => [g.kind, g.items.length]), [["diversified", 1], ["fii", 12]]);
 });
 
 test("every type of portfolio is searched on sites that honor it, sharing those sites' switches", () => {

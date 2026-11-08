@@ -106,7 +106,7 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
-import { NEWS_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, portfolioGroups, recentItems } from "./feeds";
+import { HOUSE_PAGES, NEWS_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, portfolioGroups, portfolioHouses, recentItems } from "./feeds";
 import { fetchArticle, fetchFeeds } from "./feeds-fetch";
 import type { FeedItem } from "./feeds";
 import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
@@ -240,6 +240,8 @@ export class TrimlyView extends ItemView {
   /** the conversation open in each assistant; none = a new one */
   private openChat: Partial<Record<AssistantKind, string>> = {};
   private chatBusy = false;
+  /** house the recommended portfolios are narrowed to; "" = all */
+  private portfolioHouse = "";
   /** what-if extra per month typed on each debt; kept while the view is open, never saved */
   private debtExtra = new Map<string, number>();
   /** what was typed in the calculators, by field; kept while the view is open, never saved */
@@ -3069,16 +3071,20 @@ export class TrimlyView extends ItemView {
 
   // ---- news ----
 
+  /** A row with a link to another site; returns where to put what goes under it. */
+  private linkRow(parent: HTMLElement, text: string, href: string) {
+    const main = parent.createDiv("trimly-row").createDiv("trimly-row-main");
+    // window.open and not the link itself: Surfing takes it over to open a tab here, and without it the browser opens
+    main.createEl("a", { cls: "trimly-row-title", text, href }).addEventListener("click", (e) => {
+      e.preventDefault();
+      window.open(href);
+    });
+    return main;
+  }
+
   /** Headlines from other sites: plain text, opening at the source. */
   private feedRow(parent: HTMLElement, item: FeedItem) {
-    const row = parent.createDiv("trimly-row");
-    const main = row.createDiv("trimly-row-main");
-    // window.open and not the link itself: Surfing takes it over to open a tab here, and without it the browser opens
-    main.createEl("a", { cls: "trimly-row-title", text: item.title, href: item.link }).addEventListener("click", (e) => {
-      e.preventDefault();
-      window.open(item.link);
-    });
-    main.createDiv({ cls: "trimly-row-sub", text: `${this.longDate(item.date)} · ${item.source}` });
+    this.linkRow(parent, item.title, item.link).createDiv({ cls: "trimly-row-sub", text: `${this.longDate(item.date)} · ${item.source}` });
   }
 
   private renderNews(body: HTMLElement, ledger: Ledger) {
@@ -3101,7 +3107,19 @@ export class TrimlyView extends ItemView {
     const items = this.plugin.portfolioFeed();
     if (items === null) card.createDiv({ cls: "trimly-muted", text: t.news.loading });
     else {
-      const groups = portfolioGroups(items, todayISO());
+      const houses = portfolioHouses(items, todayISO());
+      const house = houses.includes(this.portfolioHouse) ? this.portfolioHouse : "";
+      if (houses.length) {
+        const select = card.createDiv("trimly-filters").createEl("select", { cls: "dropdown", attr: { "aria-label": t.news.house } });
+        select.createEl("option", { value: "", text: t.news.allHouses });
+        for (const h of houses) select.createEl("option", { value: h, text: h });
+        select.value = house;
+        select.addEventListener("change", () => {
+          this.portfolioHouse = select.value;
+          this.render();
+        });
+      }
+      const groups = portfolioGroups(items, todayISO(), house);
       if (groups.length === 0) card.createDiv({ cls: "trimly-muted", text: t.news.nothing });
       for (const group of groups) {
         const fold = card.createEl("details", "trimly-proventos-last");
@@ -3110,6 +3128,10 @@ export class TrimlyView extends ItemView {
       }
     }
     if (this.plugin.feedFailed.portfolios.length) card.createDiv({ cls: "trimly-muted is-expense trimly-card-foot", text: t.news.failed(this.plugin.feedFailed.portfolios.join(", ")) });
+
+    const pages = this.card(body, t.news.housePages);
+    pages.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.news.housePagesHint });
+    for (const page of HOUSE_PAGES) this.linkRow(pages, page.name, page.url);
 
     const classics = this.card(body, t.news.classics);
     classics.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.news.classicsHint });

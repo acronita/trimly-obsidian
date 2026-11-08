@@ -14,6 +14,17 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.39.0 — 2026-11-08
+
+- 2026-11-08 — *Carteiras recomendadas* read XP's own portfolios from its public feeds, one per asset class (company
+  portfolios left out), with their own switch *XP*, and can be narrowed to one house. Houses in press articles are read
+  from the title. New card *Páginas das casas* links XP, BTG Pactual, Genial and Itaú, which show portfolios on their own
+  sites with no feed. At most 12 articles per type now. Why: test note asking for the portfolios of XP, BTG, AUVP and
+  others. BTG loads its list with JavaScript and has no feed, Genial's feed fails, and no public AUVP portfolio was found,
+  so none of them is read automatically; nothing behind a login is. Files touched: `src/feeds.ts`, `src/assistant.ts`,
+  `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/feeds.test.ts`, `README.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
 ## 0.38.0 — 2026-11-08
 
 - 2026-11-08 — *Carteiras recomendadas* reach back a year instead of 60 days and are grouped by type (diversified, stocks,
