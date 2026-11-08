@@ -12,6 +12,7 @@ import {
   Debt,
   DueObligation,
   EmergencyReserve,
+  TARGET_CLASSES,
   Frequency,
   Ledger,
   Movement,
@@ -781,7 +782,7 @@ export class AssetModal extends Modal {
       .setDesc(a.targetClassDesc)
       .addDropdown((dd) =>
         dd
-          .addOptions({ "": a.sameClass, ...Object.fromEntries(Object.entries(t.labels.assetClass).filter(([c]) => c !== "etf")) })
+          .addOptions({ "": a.sameClass, ...Object.fromEntries(TARGET_CLASSES.map((c) => [c, t.labels.assetClass[c]])) })
           .setValue(d.targetClass ?? "")
           .onChange((v) => (d.targetClass = (v as AssetClass) || undefined))
       );

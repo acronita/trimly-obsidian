@@ -198,6 +198,9 @@ test("an ETF not yet classified is not reported as something to sell", async () 
   l.investments.targets = [{ assetClass: "reit", pct: 100 }];
   const lines = JSON.parse((await runTool("investments", l, "contribution_plan", { amount: 0 }, TODAY)).result) as { class: string; to_target: number | null }[];
   assert.equal(lines.find((x) => x.class === "etf")?.to_target, null);
+  l.investments.assets.push({ id: "f", name: "Fundo", assetClass: "fund", value: 1000_00, updatedAt: TODAY });
+  const withFund = JSON.parse((await runTool("investments", l, "contribution_plan", { amount: 0 }, TODAY)).result) as { class: string; to_target: number | null }[];
+  assert.equal(withFund.find((x) => x.class === "fund")?.to_target, null);
   assert.notEqual(lines.find((x) => x.class === "reit")?.to_target, null);
 });
 

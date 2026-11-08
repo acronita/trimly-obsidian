@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { taxKind } from "../src/income-tax.ts";
-import { assetTargets, classAssets, defaultLedger, investableByClass, investableTotal, newId, parseLedger, portfolioValue, rebalance, reservedByAsset, reserveStatus } from "../src/ledger.ts";
+import { assetTargets, classAssets, defaultLedger, investableByClass, investableTotal, newId, parseLedger, portfolioValue, rebalance, reservedByAsset, reserveStatus, unclassifiedAssets } from "../src/ledger.ts";
 import type { AllocationTarget, Asset, AssetClass, Ledger } from "../src/ledger.ts";
 
 function ledger(values: Partial<Record<AssetClass, number>>, targets: AllocationTarget[]): Ledger {
@@ -212,6 +212,24 @@ test("a ledger from the first 1.2.0 builds moves dollars into international and 
   assert.deepEqual(assets.map((a) => [a.assetClass, a.targetClass]), [["international", undefined], ["etf", "international"], ["fund", undefined]]);
   // the etf class must stay on the position, or income tax loses it
   assert.deepEqual(targets, [{ assetClass: "international", pct: 6 }, { assetClass: "stock", pct: 74 }]);
+});
+
+test("targets stay on what positions expose you to: product classes lose theirs and wait to be classified", () => {
+  const l = defaultLedger();
+  l.investments.assets.push({ id: "f", name: "f", assetClass: "fund", value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.assets.push({ id: "p", name: "p", assetClass: "retirement", value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.assets.push({ id: "us", name: "us", assetClass: "fund", targetClass: "international", value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.assets.push({ id: "old", name: "old", assetClass: "stock", targetClass: "fund", value: 100_00, updatedAt: "2026-10-25" });
+  l.investments.targets = [{ assetClass: "fund", pct: 7.5 }, { assetClass: "retirement", pct: 5 }, { assetClass: "other", pct: 1 }, { assetClass: "gold", pct: 10 }];
+  const parsed = parseLedger(JSON.stringify(l));
+  assert.deepEqual(parsed.investments.targets, [{ assetClass: "gold", pct: 10 }]);
+  assert.equal(parsed.investments.assets[3].targetClass, undefined);
+  assert.deepEqual(unclassifiedAssets(parsed).map((a) => a.id), ["f", "p"]);
+});
+
+test("a fund entirely in the reserve is not waiting to be classified", () => {
+  const l = withReserve(100_00, ["selic", "fund", 100_00]);
+  assert.deepEqual(unclassifiedAssets(l), []);
 });
 
 test("an ETF counted as international moves in the targets but stays an ETF for income tax", () => {
