@@ -634,6 +634,8 @@ export const ptBR = {
     maturities: "Próximos vencimentos",
     noMaturities: "Nada vence nos próximos 12 meses.",
     allocation: "Alocação",
+    withReserve: "Com a reserva",
+    withoutReserve: "Sem a reserva",
     classes: "Classes",
     targetPct: (pct: string) => `meta ${pct}`,
     noValue: "Sem valor informado",
