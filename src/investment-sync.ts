@@ -45,6 +45,8 @@ export interface PluggyInvestment {
   /** gross amount */
   amount?: number | null;
   amountOriginal?: number | null;
+  /** profit or loss so far */
+  amountProfit?: number | null;
   quantity?: number | null;
   rate?: number | null;
   rateType?: string | null;
@@ -162,6 +164,13 @@ export function displayName(
 }
 
 /** Copy Pluggy's numbers onto `asset`; returns whether anything changed. */
+/** What it cost, when the bank reports the profit and not the cost; a profit of 0 usually means it doesn't know. */
+function costFromProfit(p: PluggyInvestment): number | undefined {
+  if (!p.amountProfit) return undefined;
+  const cost = cents((p.amount ?? p.balance) - p.amountProfit);
+  return cost && cost > 0 ? cost : undefined;
+}
+
 function apply(asset: Asset, p: PluggyInvestment, today: string, itemInstitution?: string): boolean {
   const before = JSON.stringify(asset);
   const set = <K extends keyof Asset>(key: K, value: Asset[K] | null | undefined) => {
@@ -171,7 +180,7 @@ function apply(asset: Asset, p: PluggyInvestment, today: string, itemInstitution
   asset.value = cents(p.balance) ?? 0;
   set("grossValue", cents(p.amount));
   // Pluggy reports 0 when it does not know the cost; 0 would show the whole value as profit
-  set("invested", cents(p.amountOriginal) || undefined);
+  if (!asset.costEdited) set("invested", cents(p.amountOriginal) || costFromProfit(p));
   set("quantity", p.quantity ?? undefined);
   set("code", p.code);
   set("issuer", p.issuer);
@@ -294,7 +303,8 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
       asset.addedOn = today;
       // e.g. a bank linked later: its old purchases are outside the window, so its value arrives as money in, not gain
       if (since !== undefined && !asset.closed) untracked += asset.value;
-    } else if (!p.transactions && since !== undefined) {
+    } else if (!p.transactions && since !== undefined && !(before.invested === undefined && asset.invested !== undefined)) {
+      // a cost becoming known isn't money moved
       untracked += estimatedFlow(before, asset);
     }
   }

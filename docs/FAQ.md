@@ -125,3 +125,12 @@ bank's description).
 
 **Two devices edited at the same time. What happens?**
 The last save wins. Avoid editing on two devices before a sync completes.
+
+**How do I get my data out in a readable form?**
+Settings → *Exportar dados*, on desktop: everything as JSON, or transactions, positions and movements as CSV.
+The files are not encrypted and leave out the Pluggy credentials and the brapi token. Save them outside the
+vault, since vaults get synced. Trimly does not import them back: the real backup is the encrypted ledger.
+
+**The average price of my FIIs shows "—". How do I get it?**
+Banks don't report what the shares cost. At [investidor.b3.com.br](https://investidor.b3.com.br), download the trade statement
+(*Extratos → Negociação*) in Excel, then use *Importar planilha* in Movements. Or type the average price in the IR tab.

@@ -1612,6 +1612,10 @@ input.trimly-amount-input:focus {
   align-items: center;
 }
 
+.trimly-target-asset-label { text-transform: none; }
+
+.trimly-row.trimly-target-asset { padding-left: 44px; }
+
 .trimly-view select.trimly-target-add {
   margin-top: 10px;
 }
@@ -1629,4 +1633,107 @@ input.trimly-amount-input:focus {
   border-radius: 10px;
   object-fit: contain;
   background: var(--background-modifier-hover);
+}
+
+/* ---- calculators ---- */
+
+.trimly-calc-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.trimly-calc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.trimly-view input.trimly-calc-input {
+  width: 100%;
+  font-variant-numeric: tabular-nums;
+}
+
+.trimly-calc-results {
+  margin-top: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--trimly-card-border);
+}
+
+.trimly-calc-result {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 3px 0;
+  font-size: var(--font-ui-small);
+}
+
+.trimly-calc-result.is-main {
+  font-weight: var(--font-semibold);
+}
+
+/* ---- assistant ---- */
+
+.trimly-chat {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.trimly-chat-message {
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: var(--font-ui-small);
+}
+
+.trimly-chat-message.is-user {
+  align-self: flex-end;
+  max-width: 85%;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--background-modifier-hover);
+}
+
+.trimly-chat-message.is-notice {
+  color: var(--text-muted);
+}
+
+.trimly-chat-tool {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+}
+
+.trimly-chat-tool pre {
+  max-height: 200px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.trimly-chat-form {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  margin-bottom: 8px;
+}
+
+.trimly-chat-form textarea {
+  flex: 1;
+  min-width: 0;
+  height: var(--trimly-chat-height, auto);
+  max-height: 40vh;
+  resize: vertical;
+}
+
+/* the period's label holds a date: it wraps instead of cutting it */
+.trimly-perf-table.is-bench .trimly-perf-label {
+  white-space: normal;
+  overflow: visible;
 }

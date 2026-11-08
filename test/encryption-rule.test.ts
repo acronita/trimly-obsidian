@@ -15,6 +15,8 @@ const ALLOWED: Record<string, RegExp> = {
   "store.ts": /\bvault\s*\.\s*(create|modify)\s*\(/,
   // the passphrase lives in device localStorage, outside the vault, by design
   "passphrase.ts": /\bsaveLocalStorage\s*\(/,
+  // the assistants' conversations: on the device, outside the vault, and sealed first
+  "chat-store.ts": /\bsaveLocalStorage\s*\(STORAGE_KEY, sealed\)/,
 };
 
 function sources(dir: string): string[] {
@@ -38,6 +40,11 @@ test("only the encrypted store writes to the vault", () => {
   assert.deepEqual(offenders, [], "unencrypted write paths found");
 });
 
+test("conversations are sealed before they reach the device's storage", () => {
+  const src = readFileSync("src/chat-store.ts", "utf8");
+  assert.match(src, /const sealed = await this\.store\.seal\(/);
+});
+
 test("store.ts only writes text produced by encryptText", () => {
   const src = readFileSync("src/store.ts", "utf8");
   assert.match(src, /const text = await encryptText\(/);
@@ -51,5 +58,5 @@ test("settings (data.json, inside the vault) never hold the passphrase or financ
   const settings = main.slice(main.indexOf("export interface TrimlySettings"), main.indexOf("const DEFAULT_SETTINGS"));
   assert.ok(settings.length > 0);
   const fields = [...settings.matchAll(/^\s*(\w+)\s*:/gm)].map((m) => m[1]);
-  assert.deepEqual(fields.sort(), ["benchmarks", "currency", "folder", "hideValues", "language", "proventos", "rememberPassphrase", "reminders"]);
+  assert.deepEqual(fields.sort(), ["assistant", "benchmarks", "currency", "disabledFeeds", "feeds", "folder", "hideValues", "language", "proventos", "rememberPassphrase", "reminders", "treasuryPrices"]);
 });

@@ -1,5 +1,6 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
 import { t } from "./i18n";
+import type { ImportPreview } from "./investment-import";
 import {
   Account,
   Asset,
@@ -8,6 +9,7 @@ import {
   AccountType,
   Category,
   CategoryKind,
+  Debt,
   DueObligation,
   Frequency,
   Ledger,
@@ -17,12 +19,16 @@ import {
   ObligationFrequency,
   ObligationKind,
   Recurring,
+  SavingsGoal,
   Settlement,
   Transaction,
   TxType,
+  accountCurrency,
   centsToInput,
+  convert,
   defaultCategory,
   newId,
+  openAssets,
   paidOn,
   parseAmount,
   payableOccurrences,
@@ -125,7 +131,9 @@ export class PassphraseModal extends Modal {
 }
 
 export class ConfirmModal extends Modal {
-  constructor(app: App, private message: string, private cta: string, private onConfirm: () => void) {
+  private confirmed = false;
+
+  constructor(app: App, private message: string, private cta: string, private onConfirm: () => void, private onDismiss?: () => void) {
     super(app);
   }
 
@@ -138,6 +146,7 @@ export class ConfirmModal extends Modal {
           .setButtonText(this.cta)
           .setWarning()
           .onClick(() => {
+            this.confirmed = true;
             this.close();
             this.onConfirm();
           })
@@ -146,6 +155,7 @@ export class ConfirmModal extends Modal {
 
   onClose() {
     this.contentEl.empty();
+    if (!this.confirmed) this.onDismiss?.();
   }
 }
 
@@ -176,16 +186,35 @@ interface TxLike {
   amount: number;
   accountId: string;
   toAccountId?: string;
+  toAmount?: number;
   categoryId?: string;
   description: string;
 }
 
-function validateTxLike(d: TxLike): string | null {
+/** The transfer's two currencies when they differ, so it needs an amount for each side; null otherwise. */
+function transferCurrencies(ledger: Ledger, d: TxLike): { from: string; to: string } | null {
+  if (d.type !== "transfer" || !d.toAccountId) return null;
+  // no currency on an account means the settings' one
+  const base = ledger.fx?.base ?? "";
+  const from = accountCurrency(ledger, d.accountId) ?? base;
+  const to = accountCurrency(ledger, d.toAccountId) ?? base;
+  return from === to ? null : { from, to };
+}
+
+function validateTxLike(d: TxLike, ledger: Ledger): string | null {
   if (!d.description.trim()) return t.modals.tx.addDescription;
   if (!(d.amount > 0)) return t.common.amountPositive;
   if (!d.accountId) return t.modals.tx.pickAccount;
   if (d.type === "transfer" && (!d.toAccountId || d.toAccountId === d.accountId)) {
     return t.modals.tx.pickOtherAccount;
+  }
+  const currencies = transferCurrencies(ledger, d);
+  if (!currencies) delete d.toAmount;
+  else if (!d.toAmount) {
+    // left empty: the day's rate, when there is one
+    const converted = convert(ledger, d.amount, currencies.from, currencies.to);
+    if (converted === d.amount) return t.modals.tx.enterReceived(currencies.to);
+    d.toAmount = converted;
   }
   return null;
 }
@@ -239,8 +268,27 @@ function renderTxLikeFields(container: HTMLElement, ledger: Ledger, draft: TxLik
       d
         .addOptions(accountOptions(ledger, draft.toAccountId))
         .setValue(draft.toAccountId ?? "")
-        .onChange((v) => (draft.toAccountId = v))
+        .onChange((v) => {
+          draft.toAccountId = v;
+          delete draft.toAmount;
+          rerender();
+        })
     );
+    const currencies = transferCurrencies(ledger, draft);
+    if (currencies) {
+      new Setting(container)
+        .setName(t.modals.tx.received(currencies.to))
+        .setDesc(t.modals.tx.receivedDesc)
+        .addText((text) => {
+          text.inputEl.inputMode = "decimal";
+          text.setPlaceholder(centsToInput(convert(ledger, draft.amount, currencies.from, currencies.to)));
+          text.setValue(draft.toAmount ? centsToInput(draft.toAmount) : "").onChange((v) => {
+            const cents = v.trim() ? parseAmount(v) : 0;
+            text.inputEl.toggleClass("trimly-invalid", cents === null);
+            if (cents !== null) draft.toAmount = Math.abs(cents) || undefined;
+          });
+        });
+    }
   } else {
     new Setting(container).setName(t.modals.tx.category).addDropdown((d) =>
       d
@@ -307,7 +355,7 @@ export class TransactionModal extends Modal {
 
   /** Validate and save the draft; returns an error message, or null when saved. */
   private save(): string | null {
-    const err = validateTxLike(this.draft) ?? (this.draft.date ? null : t.common.pickDate);
+    const err = validateTxLike(this.draft, this.ledger) ?? (this.draft.date ? null : t.common.pickDate);
     if (err) return err;
     if (this.draft.type !== "transfer") delete this.draft.toAccountId;
     else delete this.draft.categoryId;
@@ -507,7 +555,7 @@ export class RecurringModal extends Modal {
       contentEl,
       errorEl,
       () => {
-        const err = validateTxLike(this.draft) ?? (this.draft.nextDate ? null : t.common.pickDate);
+        const err = validateTxLike(this.draft, this.ledger) ?? (this.draft.nextDate ? null : t.common.pickDate);
         if (err) return err;
         if (this.draft.type !== "transfer") delete this.draft.toAccountId;
         else delete this.draft.categoryId;
@@ -964,6 +1012,176 @@ export class CategoryModal extends Modal {
         return null;
       },
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class ImportModal extends Modal {
+  constructor(
+    app: App,
+    private preview: ImportPreview,
+    private onImport: () => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const m = t.modals.importer;
+    const p = this.preview;
+    this.setTitle(m.title);
+    const count = (type: string) => p.trades.filter((x) => x.type === type).length;
+    contentEl.createEl("p", { text: m.found(count("buy"), count("sell"), count("income")) });
+    if (p.duplicates) contentEl.createEl("p", { cls: "setting-item-description", text: m.duplicates(p.duplicates) });
+    if (p.unmatched.length) contentEl.createEl("p", { cls: "setting-item-description", text: m.unmatched(p.unmatched.join(", ")) });
+    const skipped = Object.entries(p.skipped);
+    if (skipped.length) contentEl.createEl("p", { cls: "setting-item-description", text: m.skipped(skipped.map(([label, n]) => `${label || "?"} (${n})`).join(", ")) });
+    contentEl.createEl("p", { cls: "setting-item-description", text: m.note });
+    new Setting(contentEl).addButton((b) =>
+      b
+        .setButtonText(m.confirm)
+        .setCta()
+        .setDisabled(p.trades.length === 0)
+        .onClick(() => {
+          this.close();
+          this.onImport();
+        })
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class DebtModal extends Modal {
+  constructor(
+    app: App,
+    private existing: Debt | null,
+    private onSave: (d: Debt) => void,
+    private onDelete: ((d: Debt) => void) | null
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const e = this.existing;
+    const m = t.modals.debt;
+    this.setTitle(e ? m.editTitle : m.newTitle);
+    let name = e?.name ?? "";
+    let balance = e ? centsToInput(e.balance) : "";
+    let asOf = e?.asOf ?? todayISO();
+    let rate = e ? String(e.monthlyRate) : "";
+    let payment = e ? centsToInput(e.payment) : "";
+    new Setting(contentEl).setName(m.name).addText((text) => text.setPlaceholder(m.namePlaceholder).setValue(name).onChange((v) => (name = v)));
+    const amount = (label: string, value: string, set: (v: string) => void) =>
+      new Setting(contentEl).setName(label).addText((text) => {
+        text.inputEl.inputMode = "decimal";
+        text.setValue(value).onChange(set);
+      });
+    amount(m.balance, balance, (v) => (balance = v));
+    dateSetting(contentEl, m.asOf, asOf, (v) => (asOf = v));
+    amount(m.rate, rate, (v) => (rate = v));
+    amount(m.payment, payment, (v) => (payment = v));
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!name.trim()) return t.common.addName;
+        const owed = parseAmount(balance);
+        const monthly = parseAmount(payment);
+        const pct = Number(rate.trim().replace(",", ".").replace("%", ""));
+        if (owed === null || owed <= 0 || monthly === null || monthly <= 0) return t.common.amountPositive;
+        if (!asOf) return t.common.pickDate;
+        if (!rate.trim() || !Number.isFinite(pct) || pct < 0 || pct > 100) return m.invalidRate;
+        this.onSave({ id: e?.id ?? newId(), name: name.trim(), balance: owed, asOf, monthlyRate: pct, payment: monthly });
+        return null;
+      },
+      e && this.onDelete ? () => this.onDelete?.(e) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class GoalModal extends Modal {
+  private draft: SavingsGoal;
+
+  constructor(
+    app: App,
+    private ledger: Ledger,
+    existing: SavingsGoal | null,
+    private onSave: (g: SavingsGoal) => void,
+    private onDelete: ((g: SavingsGoal) => void) | null
+  ) {
+    super(app);
+    this.draft = existing ? { ...existing, accountIds: [...existing.accountIds], assetIds: [...existing.assetIds] } : { id: newId(), name: "", target: 0, accountIds: [], assetIds: [] };
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const d = this.draft;
+    const g = t.modals.goal;
+    this.setTitle(this.onDelete ? g.editTitle : g.newTitle);
+    new Setting(contentEl).setName(g.name).addText((text) => text.setPlaceholder(g.namePlaceholder).setValue(d.name).onChange((v) => (d.name = v)));
+    let target = d.target ? centsToInput(d.target) : "";
+    new Setting(contentEl).setName(g.target).addText((text) => {
+      text.inputEl.inputMode = "decimal";
+      text.setValue(target).onChange((v) => (target = v));
+    });
+    new Setting(contentEl)
+      .setName(g.date)
+      .setDesc(g.dateDesc)
+      .addText((text) => {
+        text.inputEl.type = "date";
+        text.setValue(d.date ?? "").onChange((v) => {
+          if (v) d.date = v;
+          else delete d.date;
+        });
+      });
+
+    new Setting(contentEl).setName(g.link).setDesc(g.linkDesc).setHeading();
+    const pick = (name: string, list: string[], id: string) =>
+      new Setting(contentEl).setName(name).addToggle((tg) =>
+        tg.setValue(list.includes(id)).onChange((on) => {
+          const i = list.indexOf(id);
+          if (on && i < 0) list.push(id);
+          else if (!on && i >= 0) list.splice(i, 1);
+        })
+      );
+    // a card's balance is debt, so it can't hold savings
+    for (const a of this.ledger.accounts) if (a.type !== "credit" && (!a.archived || d.accountIds.includes(a.id))) pick(a.name, d.accountIds, a.id);
+    for (const a of openAssets(this.ledger)) pick(g.assetOption(a.name), d.assetIds, a.id);
+
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        if (!d.name.trim()) return t.common.addName;
+        const cents = parseAmount(target);
+        if (cents === null || cents <= 0) return t.common.amountPositive;
+        // what was deleted or closed since can't be picked again, so it doesn't stay in the list
+        const accountIds = d.accountIds.filter((id) => this.ledger.accounts.some((a) => a.id === id));
+        const assetIds = d.assetIds.filter((id) => openAssets(this.ledger).some((a) => a.id === id));
+        if (accountIds.length + assetIds.length === 0) return g.noLink;
+        this.onSave({ ...d, name: d.name.trim(), target: cents, accountIds, assetIds });
+        return null;
+      },
+      this.onDelete ? () => this.onDelete?.(d) : null,
       () => this.close()
     );
   }

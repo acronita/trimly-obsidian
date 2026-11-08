@@ -115,6 +115,8 @@ export interface Transaction {
   accountId: string;
   /** destination account, transfers only */
   toAccountId?: string;
+  /** transfers between currencies: what arrived, in the destination's currency; missing = `amount` */
+  toAmount?: number;
   /** income/expense only; missing = uncategorized */
   categoryId?: string;
   description: string;
@@ -159,6 +161,33 @@ export interface Budget {
   limit: number;
 }
 
+/** A loan or financing being paid off in monthly payments. Tracked apart: it doesn't touch accounts or net worth. */
+export interface Debt {
+  id: string;
+  name: string;
+  /** owed on `asOf`, in cents, in the settings' currency */
+  balance: number;
+  /** ISO date of `balance` */
+  asOf: string;
+  /** interest, percent a month */
+  monthlyRate: number;
+  /** cents a month */
+  payment: number;
+}
+
+/** Money to have (emergency fund, a trip), measured by what a list of accounts and positions hold together. */
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  /** in cents, in the settings' currency */
+  target: number;
+  /** ISO date to reach it by; none, or once it passes, it is a level to keep */
+  date?: string;
+  /** where the money is */
+  accountIds: string[];
+  assetIds: string[];
+}
+
 export interface Recurring {
   id: string;
   description: string;
@@ -166,6 +195,8 @@ export interface Recurring {
   amount: number;
   accountId: string;
   toAccountId?: string;
+  /** transfers between currencies: what arrives, in the destination's currency */
+  toAmount?: number;
   categoryId?: string;
   frequency: Frequency;
   /** first occurrence; its day of month anchors monthly/yearly rules */
@@ -242,12 +273,16 @@ export interface Asset {
   /** broker or bank holding it */
   institution?: string;
   quantity?: number;
+  /** the user's weight or score inside its class, any scale; with any set in a class, contributions split by them */
+  weight?: number;
   /** current net value (after taxes and fees) */
   value: number;
   /** current gross value, when known */
   grossValue?: number;
   /** amount originally invested, when known */
   invested?: number;
+  /** the user typed the cost because the bank doesn't report it, so sync keeps it */
+  costEdited?: boolean;
   /** percentage of the index, e.g. 110 for "110% CDI" */
   rate?: number;
   /** benchmark index, e.g. "CDI", "IPCA" */
@@ -302,6 +337,9 @@ export interface Quote {
   /** daily closes of the last 3 months, oldest first: [YYYY-MM-DD, cents] */
   history?: [string, number][];
 }
+
+/** Starts the `pluggyId` of a movement imported from a spreadsheet: like one from the bank it can't be edited, and sync re-links it if the bank reports it too. */
+export const IMPORT_PREFIX = "import:";
 
 /** Money moving in or out of one position, in cents. */
 export interface Movement {
@@ -373,6 +411,12 @@ export interface FxRates {
 }
 
 /** Bank sync credentials. Kept inside the encrypted ledger, never in data.json. */
+/** The optional AI assistants, with the user's own key. Kept inside the encrypted ledger, never in data.json. */
+export interface AiConfig {
+  apiKey: string;
+  model: string;
+}
+
 export interface PluggyConfig {
   clientId: string;
   clientSecret: string;
@@ -393,12 +437,18 @@ export interface Ledger {
   investments: Investments;
   /** each month's plan ("YYYY-MM"), saved once that month is edited; a month without one uses the latest before it */
   plans?: Record<string, MonthBudget>;
+  goals?: SavingsGoal[];
+  debts?: Debt[];
   /** categories learned from the user: transactions whose description has this key get this category */
   categoryRules?: CategoryRule[];
   /** set when bank sync is configured */
   pluggy?: PluggyConfig;
   /** set when quotes are configured */
   brapi?: BrapiConfig;
+  /** day the Tesouro Direto prices were last fetched; the file is big, so once a day */
+  treasuryCheckedOn?: string;
+  /** set when the AI assistants are turned on */
+  ai?: AiConfig;
   /** exchange rates, set when some account or transaction is in another currency */
   fx?: FxRates;
 }
@@ -478,17 +528,30 @@ export function parseLedger(json: string): Ledger {
     recurring: raw.recurring ?? [],
     obligations: (raw.obligations ?? []).map(migrateObligation),
     investments: {
-      assets: raw.investments?.assets ?? [],
+      // positions could belong to a portfolio until 0.34.0
+      assets: (raw.investments?.assets ?? []).map(({ portfolioId: _dropped, ...a }: Asset & { portfolioId?: string }) => a),
       snapshots: raw.investments?.snapshots ?? [],
       movements: raw.investments?.movements ?? [],
       targets: raw.investments?.targets ?? [],
     },
     plans: raw.plans,
+    goals: raw.goals?.map(migrateGoal),
+    debts: raw.debts,
     categoryRules: raw.categoryRules,
     pluggy: raw.pluggy,
     brapi: raw.brapi,
+    treasuryCheckedOn: raw.treasuryCheckedOn,
+    ai: raw.ai,
     fx: raw.fx,
   };
+}
+
+/** A goal as saved up to 0.34.0, with one account or position. */
+type LegacyGoal = Partial<SavingsGoal> & { accountId?: string; assetId?: string };
+
+function migrateGoal(g: LegacyGoal): SavingsGoal {
+  const { accountId, assetId, ...rest } = g;
+  return { ...rest, accountIds: g.accountIds ?? (accountId ? [accountId] : []), assetIds: g.assetIds ?? (assetId ? [assetId] : []) } as SavingsGoal;
 }
 
 /** An obligation as saved up to 0.9.0, with full first and last due dates instead of days. */
@@ -648,7 +711,7 @@ export function foreignCurrencies(ledger: Ledger, base: string): string[] {
 export function effectOn(tx: Transaction, accountId: string): number {
   let v = 0;
   if (tx.accountId === accountId) v += tx.type === "income" ? tx.amount : -tx.amount;
-  if (tx.type === "transfer" && tx.toAccountId === accountId) v += tx.amount;
+  if (tx.type === "transfer" && tx.toAccountId === accountId) v += tx.toAmount ?? tx.amount;
   return v;
 }
 
@@ -928,6 +991,111 @@ export function movementFlow(m: Movement): number {
   }
 }
 
+// ---- savings goals ----
+
+export interface GoalProgress {
+  /** what the accounts and positions hold now together, in the settings' currency; none counts below zero */
+  saved: number;
+  left: number;
+  /** to save per month to reach the target by the date; 0 with no date ahead */
+  monthly: number;
+  /** "below": under the target with no date ahead, a level to get back to */
+  status: "active" | "done" | "below";
+  /** false when an account was deleted or a position closed */
+  linked: boolean;
+  /** another goal counts one of the same accounts or positions, so that balance counts in full in both */
+  shared: boolean;
+}
+
+export function goalProgress(ledger: Ledger, goal: SavingsGoal, today: string): GoalProgress {
+  const accounts = goal.accountIds.flatMap((id) => ledger.accounts.filter((a) => a.id === id));
+  const assets = goal.assetIds.flatMap((id) => openAssets(ledger).filter((a) => a.id === id));
+  const balances = [...accounts.map((a) => toBase(ledger, accountBalance(ledger, a.id), a.currency)), ...assets.map((a) => a.value)];
+  const saved = Math.round(balances.reduce((sum, b) => sum + Math.max(0, b), 0));
+  const left = Math.max(0, goal.target - saved);
+  const status = left === 0 ? "done" : goal.date && goal.date >= today ? "active" : "below";
+  let months = 1;
+  if (status === "active" && goal.date) {
+    const [fromYear, fromMonth] = today.split("-").map(Number);
+    const [toYear, toMonth] = goal.date.split("-").map(Number);
+    // a goal due this month still has this month to save in
+    months = Math.max(1, (toYear - fromYear) * 12 + toMonth - fromMonth);
+  }
+  return {
+    saved,
+    left,
+    monthly: status === "active" ? Math.ceil(left / months) : 0,
+    status,
+    linked: accounts.length === goal.accountIds.length && assets.length === goal.assetIds.length,
+    shared: (ledger.goals ?? []).some((g) => g.id !== goal.id && (g.accountIds.some((id) => goal.accountIds.includes(id)) || g.assetIds.some((id) => goal.assetIds.includes(id)))),
+  };
+}
+
+export function saveGoal(ledger: Ledger, goal: SavingsGoal) {
+  const goals = ledger.goals ?? [];
+  const i = goals.findIndex((g) => g.id === goal.id);
+  if (i >= 0) goals[i] = goal;
+  else goals.push(goal);
+  ledger.goals = goals;
+}
+
+export function removeGoal(ledger: Ledger, id: string) {
+  const goals = (ledger.goals ?? []).filter((g) => g.id !== id);
+  ledger.goals = goals.length ? goals : undefined;
+}
+
+// ---- debts ----
+
+/** Past this, a debt has no useful payoff date. */
+const MAX_DEBT_MONTHS = 1200;
+const DEBT_ROUNDING_LEFT = 1_00;
+
+export interface DebtPayoff {
+  /** payments left; null when the payment doesn't cover the interest, so it never ends */
+  months: number | null;
+  /** interest still to pay, cents; 0 when it never ends */
+  interest: number;
+}
+
+/** Paying `payment` a month on `balance`, interest charged first each month. */
+export function debtPayoff(balance: number, monthlyRate: number, payment: number): DebtPayoff {
+  const rate = monthlyRate / 100;
+  let left = balance;
+  let interest = 0;
+  for (let months = 0; months < MAX_DEBT_MONTHS; months++) {
+    // a bank's payment is rounded to the cent, which leaves cents at the end, not one more month
+    if (left < DEBT_ROUNDING_LEFT) return { months, interest: Math.round(interest) };
+    const charged = left * rate;
+    if (payment <= charged) return { months: null, interest: 0 };
+    interest += charged;
+    left = left + charged - payment;
+  }
+  return { months: null, interest: 0 };
+}
+
+/** What is owed today, assuming each month's payment since `asOf` was made. */
+export function debtBalance(debt: Debt, today: string): number {
+  const [fy, fm, fd] = debt.asOf.split("-").map(Number);
+  const [ty, tm, td] = today.split("-").map(Number);
+  const months = (ty - fy) * 12 + tm - fm - (td < fd ? 1 : 0);
+  let left = debt.balance;
+  for (let i = 0; i < Math.min(months, MAX_DEBT_MONTHS) && left > 0; i++) left = left * (1 + debt.monthlyRate / 100) - debt.payment;
+  return Math.max(0, Math.round(left));
+}
+
+export function saveDebt(ledger: Ledger, debt: Debt) {
+  const debts = ledger.debts ?? [];
+  const i = debts.findIndex((d) => d.id === debt.id);
+  if (i >= 0) debts[i] = debt;
+  else debts.push(debt);
+  ledger.debts = debts;
+}
+
+export function removeDebt(ledger: Ledger, id: string) {
+  const debts = (ledger.debts ?? []).filter((d) => d.id !== id);
+  ledger.debts = debts.length ? debts : undefined;
+}
+
 /** Aportes (buy movements) made in `month`, in cents. */
 export function contributionsInMonth(ledger: Ledger, month: string): number {
   return ledger.investments.movements.filter((m) => m.type === "buy" && monthOf(m.date) === month).reduce((s, m) => s + m.amount, 0);
@@ -973,7 +1141,8 @@ export function recordSnapshot(ledger: Ledger, today: string, untracked = 0) {
     let moved = 0;
     let income = 0;
     for (const m of ledger.investments.movements) {
-      if (m.date <= since || m.date > today || !tracked.has(m.assetId)) continue;
+      // imported history was already in the position's value
+      if (m.date <= since || m.date > today || !tracked.has(m.assetId) || m.pluggyId?.startsWith(IMPORT_PREFIX)) continue;
       moved += movementFlow(m);
       if (m.type === "income") income += m.amount;
     }
@@ -1029,13 +1198,54 @@ export function rebalance(ledger: Ledger, contribution: number): RebalanceLine[]
     const target = ((targets.find((t) => t.assetClass === c)?.pct ?? 0) / sum) * 100;
     return { assetClass: c, value, pct: total > 0 ? (value / total) * 100 : 0, target, gap: Math.round((total * target) / 100) - value, contribute: 0 };
   });
-  const deficits = lines.map((l) => Math.max(0, Math.round((after * l.target) / 100) - l.value));
-  const behind = deficits.reduce((s, d) => s + d, 0);
-  const c = Math.max(0, contribution);
-  const first = splitCents(Math.min(c, behind), deficits);
-  const rest = splitCents(c - Math.min(c, behind), lines.map((l) => l.target));
-  lines.forEach((l, i) => (l.contribute = first[i] + rest[i]));
+  const split = splitContribution(Math.max(0, contribution), after, lines);
+  lines.forEach((l, i) => (l.contribute = split[i]));
   return lines.sort((a, b) => b.target - a.target || b.value - a.value);
+}
+
+/** Split `cents` among parts with a current value and a target percent of `after`: furthest behind first, then any rest by target. */
+function splitContribution(cents: number, after: number, parts: { value: number; target: number }[]): number[] {
+  const deficits = parts.map((p) => Math.max(0, Math.round((after * p.target) / 100) - p.value));
+  const behind = deficits.reduce((s, d) => s + d, 0);
+  const first = splitCents(Math.min(cents, behind), deficits);
+  const rest = splitCents(cents - Math.min(cents, behind), parts.map((p) => p.target));
+  return parts.map((_, i) => first[i] + rest[i]);
+}
+
+export interface AssetTargetLine {
+  asset: Asset;
+  /** share of its class today, percent */
+  pct: number;
+  /** share of its class by weight, percent */
+  target: number;
+  /** cents of the class's contribution to put here */
+  contribute: number;
+}
+
+/** A class's open positions: what the weights apply to. */
+export function classAssets(ledger: Ledger, assetClass: AssetClass): Asset[] {
+  return openAssets(ledger).filter((a) => a.assetClass === assetClass);
+}
+
+/**
+ * How a class's share of a contribution splits among its positions, by the weights
+ * the user gave them; a position without one counts as 0. Largest target first.
+ * Empty until some position in the class has a weight, so the plan stops at the class.
+ */
+export function assetTargets(ledger: Ledger, assetClass: AssetClass, contribute: number): AssetTargetLine[] {
+  const assets = classAssets(ledger, assetClass);
+  const sum = assets.reduce((s, a) => s + (a.weight ?? 0), 0);
+  if (sum <= 0) return [];
+  const total = assets.reduce((s, a) => s + a.value, 0);
+  const lines: AssetTargetLine[] = assets.map((asset) => ({
+    asset,
+    pct: total > 0 ? (asset.value / total) * 100 : 0,
+    target: ((asset.weight ?? 0) / sum) * 100,
+    contribute: 0,
+  }));
+  const split = splitContribution(contribute, total + contribute, lines.map((l) => ({ value: l.asset.value, target: l.target })));
+  lines.forEach((l, i) => (l.contribute = split[i]));
+  return lines.sort((a, b) => b.target - a.target || b.asset.value - a.asset.value);
 }
 
 // ---- manual investments ----
@@ -1151,7 +1361,7 @@ export function saveManualMovement(ledger: Ledger, m: Movement, today: string) {
 export function removeManualMovement(ledger: Ledger, id: string, today: string) {
   const m = ledger.investments.movements.find((x) => x.id === id);
   const a = m && ledger.investments.assets.find((x) => x.id === m.assetId && !x.pluggyId);
-  if (!m || !a) return;
+  if (!m || !a || m.pluggyId) return;
   applyMovement(a, m, true);
   a.updatedAt = today;
   ledger.investments.movements = ledger.investments.movements.filter((x) => x.id !== id);
@@ -1546,6 +1756,7 @@ export function postDueRecurring(ledger: Ledger, today: string): number {
         amount: r.amount,
         accountId: r.accountId,
         toAccountId: r.type === "transfer" ? r.toAccountId : undefined,
+        ...(r.type === "transfer" && r.toAmount ? { toAmount: r.toAmount } : {}),
         categoryId: r.type === "transfer" ? undefined : r.categoryId,
         description: r.description,
         recurringId: r.id,
@@ -1744,6 +1955,104 @@ export function dueObligations(ledger: Ledger, until: string, today: string): Du
     ...ledger.obligations.flatMap((obligation) => openOccurrences(obligation, until).map((due) => ({ obligation, due }))),
     ...cardBillObligations(ledger, today).filter((d) => d.due <= until),
   ].sort((a, b) => (a.due < b.due ? -1 : a.due > b.due ? 1 : a.obligation.name.localeCompare(b.obligation.name)));
+}
+
+// ---- balance forecast ----
+
+/** How far ahead an account's balance is forecast. */
+export const FORECAST_DAYS = 60;
+
+export interface ForecastEvent {
+  /** overdue bills and rules still waiting for their bank charge count today */
+  date: string;
+  description: string;
+  /** signed, in the settings' currency */
+  amount: number;
+  /** the balance after this event */
+  balance: number;
+  /** a card bill not closed yet: what was charged so far */
+  projected?: boolean;
+}
+
+export interface BalanceForecast {
+  today: string;
+  until: string;
+  /** balance today */
+  start: number;
+  /** soonest first; on one day money comes in before it goes out */
+  events: ForecastEvent[];
+  end: number;
+  /** lowest balance reached, and the first day it gets there */
+  lowest: { date: string; balance: number };
+  /** first day below zero */
+  negativeOn?: string;
+  /** open bills in the period with no amount known, left out of the sums */
+  unpriced: string[];
+}
+
+/**
+ * The balance of all accounts together over the next days, in the settings' currency:
+ * today's, plus future transactions and recurring occurrences. Bills and card bills say
+ * nothing about which account pays them, so they only make sense against the total.
+ * Moving money between own accounts changes nothing here; paying a card does. A card bill
+ * counts as it is now, so later purchases and installments on later bills aren't in.
+ */
+export function balanceForecast(ledger: Ledger, today: string, days = FORECAST_DAYS): BalanceForecast {
+  const held = ledger.accounts.filter((a) => a.type !== "credit" && !a.archived);
+  const isHeld = (id?: string) => held.some((a) => a.id === id);
+  const inBase = (cents: number, accountId: string) => toBase(ledger, cents, accountCurrency(ledger, accountId));
+  const until = toISODate(new Date(Date.parse(`${today}T12:00:00`) + days * 86_400_000));
+  const events: Omit<ForecastEvent, "balance">[] = [];
+  const unpriced: string[] = [];
+
+  for (const tx of ledger.transactions) {
+    if (tx.date <= today || tx.date > until || (isHeld(tx.accountId) && isHeld(tx.toAccountId))) continue;
+    const amount = held.reduce((sum, a) => sum + inBase(effectOn(tx, a.id), a.id), 0);
+    if (amount !== 0) events.push({ date: tx.date, description: tx.description, amount });
+  }
+
+  // a rule on a synced account waits for the bank's charge, which stops being linked after LINK_DAYS
+  const linkableFrom = toISODate(new Date(Date.parse(`${today}T12:00:00`) - LINK_DAYS * 86_400_000));
+  for (const r of ledger.recurring) {
+    const from = isHeld(r.accountId);
+    const into = r.type === "transfer" && isHeld(r.toAccountId);
+    if (from === into) continue;
+    const amount = into ? (r.toAmount && r.toAccountId ? inBase(r.toAmount, r.toAccountId) : inBase(r.amount, r.accountId)) : r.type === "income" ? inBase(r.amount, r.accountId) : -inBase(r.amount, r.accountId);
+    const anchorDay = Number(r.startDate.slice(8, 10));
+    let date = r.nextDate;
+    // guard against a corrupted rule looping forever
+    for (let i = 0; i < 1000 && date <= until; i++) {
+      if (r.endDate && date > r.endDate) break;
+      if (date >= linkableFrom) events.push({ date: date < today ? today : date, description: r.description, amount });
+      date = nextOccurrence(date, r.frequency, anchorDay);
+    }
+  }
+
+  const cardsPaidByRule = new Set(ledger.recurring.filter((r) => r.type === "transfer" && isHeld(r.accountId)).map((r) => r.toAccountId));
+  const paidByRule = (o: Obligation) => o.settled.some((s) => ledger.transactions.find((tx) => tx.id === s.transactionId)?.recurringId);
+  for (const d of dueObligations(ledger, until, today)) {
+    if (d.obligation.kind !== "payment" || (d.cardId ? cardsPaidByRule.has(d.cardId) : paidByRule(d.obligation))) continue;
+    const cost = dueAmount(ledger, d);
+    if (cost <= 0) {
+      unpriced.push(d.obligation.name);
+      continue;
+    }
+    const event = { date: d.due < today ? today : d.due, description: d.obligation.name, amount: -cost };
+    events.push(d.projected ? { ...event, projected: true } : event);
+  }
+
+  events.sort((x, y) => (x.date === y.date ? y.amount - x.amount : x.date < y.date ? -1 : 1));
+  const start = held.reduce((sum, a) => sum + inBase(accountBalance(ledger, a.id, today), a.id), 0);
+  let balance = start;
+  let lowest = { date: today, balance: start };
+  let negativeOn = start < 0 ? today : undefined;
+  const out = events.map((e): ForecastEvent => {
+    balance += e.amount;
+    if (balance < lowest.balance) lowest = { date: e.date, balance };
+    if (balance < 0 && !negativeOn) negativeOn = e.date;
+    return { ...e, balance };
+  });
+  return { today, until, start, events: out, end: balance, lowest, negativeOn, unpriced };
 }
 
 /** Open occurrences inside their reminder window on `today`, overdue ones included. */

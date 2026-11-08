@@ -47,6 +47,48 @@ passphrase that never leaves your device.
   browsed up to 12 bills ahead, and in the card's *Parcelas futuras* total. On a card that is not synced, pick
   the number of installments when adding the purchase (the amount is its total): each installment is
   posted when its date comes.
+- **Reports** (*Relatórios*) — any period, by preset or free dates, for all accounts or one account or
+  category, compared with the period before or a year earlier: income, expenses and net, over time, by
+  category and by account. Transfers are left out, so paying a card bill doesn't count twice.
+- **Balance forecast** (*Projeção de saldo*, in Accounts) — all your accounts together over the next 60 days, with the
+  lowest point and the first day below zero: future transactions, recurring rules, bills and card bills. The open card
+  bill counts what was charged so far; purchases to come and installments on later bills aren't in.
+- **AI assistants (optional, off by default)** (*Assistente*, in each mode, shown only when turned on in the settings,
+  which warn that your data goes to Anthropic) — ask about your spending or your
+  portfolio, with your own Anthropic API key and at your cost. Trimly does the math and sends only your question and
+  the results asked for, which you can open in the chat; the whole ledger is never sent. Past conversations are listed to open again, and stay encrypted on
+  this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
+  Answers can be wrong, and the decisions are yours.
+- **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
+  articles from the last year on the portfolios brokers publish, by type (diversified, stocks, FIIs, fixed income, funds, ETFs, abroad, crypto) and filterable by house, from public RSS feeds including XP's own, plus links to the pages of houses with no feed and the classic allocation models. Trimly only gathers the links: not a
+  recommendation. It reaches back about a day for your tickers, and has no filings.
+- **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
+  everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
+  go in. It is not encrypted, so never save it inside the vault; there is no import back.
+- **Tesouro Direto prices** — manual Tesouro Direto positions are revalued once a day from the Tesouro
+  Transparente open data, with no token: price (what selling pays, before tax) × quantity. Name the
+  position with its type and year, like *Tesouro IPCA+ 2035*, or fill in the maturity; Renda+ and Educa+
+  need the exact maturity, since the year in their names is when payments start. The file can lag
+  a few days behind, and the position's details show the date of the price.
+- **Calculators** (*Calculadoras*, in the investments mode) — financial independence, compound interest,
+  how much to contribute to a goal, emergency fund, and CDB against LCI/LCA after tax. They run on the
+  device, start from your own numbers when possible and save nothing. Simulations at a constant rate, not
+  a forecast or a recommendation.
+- **Import** (*Importar planilha*, in Movements) — buys, sales and income from a B3 statement or a broker's spreadsheet, in
+  Excel or CSV. Banks don't report what FII shares cost: with all the buys of an asset, Trimly gets its real average price.
+  The file is read in memory and goes nowhere.
+- **Income tax** (*IR*, in the investments mode) — an estimate from your movements: average price per
+  asset, each month's result and DARF with its due date, the R$ 20.000 stock exemption meter, losses
+  to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,
+  not day trades, options, fixed income ETFs, FI-Infra, splits or bonus shares. It issues nothing, and
+  lists the positions whose numbers need checking; confirm with the Receita or an accountant.
+- **Debts** (*Dívidas*, in Planning) — a loan's balance, monthly interest and payment give today's balance,
+  when it ends, the interest still to pay, and what paying extra would change. Kept apart from accounts and
+  net worth; today's balance assumes the payments were made.
+- **Savings goals** (*Metas de poupança*, in Planning) — an amount to have, kept in as many accounts and positions as you
+  want, measured by what they hold today. With a date, how much to save per month until then; with none, or after it, a
+  level to keep, like an emergency fund. Goals sharing an account or position are flagged, since the balance counts in
+  full in each.
 - **Planning** (*Planejamento*, was Budgets) — whether spending and investing follow the month's plan.
   The top shows spending against what was planned and aportes against the investment goal, each with
   a bar, then how much the month's forecast leaves to invest (and whether the goal fits). The month's
@@ -101,7 +143,8 @@ passphrase that never leaves your device.
   bank sends no income get it estimated from B3's proventos. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
-  class to see how far you are from it and how to split your next contribution. Positions are imported by bank sync; net worth in the accounts view includes them.
+  class to see how far you are from it and how to split your next contribution; a weight or score per
+  asset takes that split down to each position inside the class. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Hide values** — the eye button in the header masks every amount on screen; click again to show
   them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
@@ -115,7 +158,8 @@ passphrase that never leaves your device.
 - **Other currencies** — accounts in another currency (e.g. a dollar account) and purchases made
   abroad keep their own currency: the amount shows as it was made (US$ 10,00) with its value in your
   currency under it. Purchases abroad count what the card actually charged; totals (net worth,
-  month summary, spending, budgets) convert other currencies at the day's rate.
+  month summary, spending, budgets) convert other currencies at the day's rate. A manual transfer
+  between currencies takes both amounts, what left and what arrived; left empty, it uses the day's rate.
 
 ## Security model
 
@@ -139,7 +183,15 @@ passphrase that never leaves your device.
   *Comparar com índices* in settings to stop both. With positions that have a B3 ticker, the income
   tab fetches their announced proventos from the same B3 website, sending only each ticker's
   four-letter issuer code (PETR for PETR4), at most once a day; the result stays in memory, never in
-  the vault. Turn off *Agenda de proventos* to stop it. With a brapi token, Trimly sends the
+  the vault. Turn off *Agenda de proventos* to stop it. With manual Tesouro Direto positions, Trimly
+  downloads the public price file (about 15 MB) from `www.tesourotransparente.gov.br`, at most once a
+  day; it has every bond, so nothing about yours is sent. Turn off *Preços do Tesouro Direto* to stop it.
+  The News tab reads public RSS feeds from `www.moneytimes.com.br`, `investnews.com.br`,
+  `www.infomoney.com.br`, `www.seudinheiro.com` and `conteudos.xpi.com.br`, at most once a day, requesting only the feed's address:
+  your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.
+  With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
+  category, bill, recurring and future transaction names, positions) go to `api.anthropic.com` with your key, only when you ask something.
+  With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
   reference rates (European Central Bank data) from `api.frankfurter.dev`, at most once a day; only
@@ -166,8 +218,8 @@ Everything still works fully manually if you skip this.
 1. Sign up at [meu.pluggy.ai](https://meu.pluggy.ai) and connect your banks there.
 2. Create an account in the [Pluggy dashboard](https://dashboard.pluggy.ai), add the **MeuPluggy**
    connector, and create an application to get a **client ID** and **client secret**. The developer
-   account starts with a 15-day trial: link Meu Pluggy during it (see
-   [meu-pluggy](https://github.com/pluggyai/meu-pluggy)).
+   account starts with a 15-day trial: link Meu Pluggy during it. Pluggy says you can still pull your data after it
+   expires (see [meu-pluggy](https://github.com/pluggyai/meu-pluggy)).
 3. In the application's demo, connect your Meu Pluggy account once per bank and copy each
    **Item ID**.
 4. In *Settings → Trimly → Bank sync*, enter the client ID, secret and item IDs, then **Connect**.
@@ -184,6 +236,16 @@ estate funds, funds, ETFs, retirement plans) when the item includes Pluggy's inv
 Each sync overwrites their values, imports their movements, and records the day's portfolio total
 with the money moved and the income paid since the day before, so the history starts with your
 first sync. A position the item stops reporting is shown as closed.
+
+## Quotes (optional)
+
+1. Create an account at [brapi.dev](https://brapi.dev) and copy your token.
+2. In *Settings → Trimly → Quotes*, paste the token.
+
+The free plan needs no card and covers quotes of B3 tickers, one ticker per request and 15,000 requests a month
+(as of November 2026; see [brapi's plans](https://brapi.dev/pricing)). Proventos and IBOV/IFIX history come from
+B3's website, with no token, and Tesouro Direto prices from the Tesouro Transparente open data, so Trimly doesn't
+need brapi's paid plans for them.
 
 ## Development
 

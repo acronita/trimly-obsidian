@@ -1,7 +1,19 @@
 # Changelog
 
-## Unreleased
+## 1.0.0 — 2026-11-08
 
+- 2026-11-08 — First stable release: the ledger format and the plugin API are now considered stable, so a breaking
+  change to either bumps MAJOR. No code changes against 0.39.0. First published release since 0.20.0, so it also brings
+  everything from 0.21.0 to 0.39.0 below: savings goals, income tax for variable income, 60-day balance forecast, reports
+  over any period, asset weights inside each class, calculators, Tesouro Direto revaluation from open data, portfolios
+  with their own targets, json and csv export outside the vault, debt planning, transfers between currencies, recommended
+  portfolios, headlines for the positions held, optional AI assistants with read-only tools and history import from
+  spreadsheets. Why: requested by the owner after the test rounds. Files touched: `package.json`, `manifest.json`,
+  `versions.json`, `docs/CHANGELOG.md`.
+- 2026-11-05 — New `docs/AI-ASSISTANT.md`: the research and proposed design for the roadmap's optional AI
+  assistant, which is not built, and the decisions needed first. README gets a *Quotes* section on the brapi
+  token. Why: the roadmap asks for research first and for setup steps in the README. Files touched:
+  `docs/AI-ASSISTANT.md`, `README.md`.
 - 2026-11-01 — README gets a *Screenshots* section with eight screens (overview, accounts, obrigações,
   recurring, investments, returns, allocation targets, proventos), flagged as fictitious values.
   Why: the screenshots taken on 2026-10-27 never made it into the README, and their test ledger uses
@@ -9,6 +21,259 @@
 - 2026-11-01 — README states up front that Trimly is built for Brazil (Open Finance, B3, CDI/IPCA,
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
+
+## 0.39.0 — 2026-11-08
+
+- 2026-11-08 — *Carteiras recomendadas* read XP's own portfolios from its public feeds, one per asset class (company
+  portfolios left out), with their own switch *XP*, and can be narrowed to one house. Houses in press articles are read
+  from the title. New card *Páginas das casas* links XP, BTG Pactual, Genial and Itaú, which show portfolios on their own
+  sites with no feed. At most 12 articles per type now. Why: test note asking for the portfolios of XP, BTG, AUVP and
+  others. BTG loads its list with JavaScript and has no feed, Genial's feed fails, and no public AUVP portfolio was found,
+  so none of them is read automatically; nothing behind a login is. Files touched: `src/feeds.ts`, `src/assistant.ts`,
+  `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/feeds.test.ts`, `README.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
+## 0.38.0 — 2026-11-08
+
+- 2026-11-08 — *Carteiras recomendadas* reach back a year instead of 60 days and are grouped by type (diversified, stocks,
+  FIIs, fixed income, funds, ETFs, abroad, crypto), at most eight each, folded. Since the sites' portfolio tags are almost
+  all about stocks, InvestNews and InfoMoney are also searched with fixed terms (the only two whose feeds honor a search),
+  keeping only titles that recommend something of a known type. New card *Carteiras clássicas* with five well-known
+  allocation models. The assistant's `recommended_portfolios` returns the same groups. Why: test note, the list only had
+  stock portfolios. Against the real feeds on this date, funds had nothing in the last year and titles are classified by
+  words, so some articles land in the wrong group or aren't really recommendations. Files touched: `src/feeds.ts`,
+  `src/assistant.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/feeds.test.ts`, `test/assistant.test.ts`,
+  `README.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.37.0 — 2026-11-08
+
+- 2026-11-08 — The assistants open on a clickable list of past conversations, replacing the dropdown; opening one shows
+  it whole and a button goes back. A conversation is saved when asked, not only when answered, and saved conversations
+  are capped by size so a full localStorage can't stop every later save. New toggle *Ligar o assistente* (`assistant` in
+  `data.json`, off by default): off hides both tabs; turning it on first warns what goes to Anthropic. Why: test note,
+  a conversation was gone after reopening Obsidian (none was stored on the device) and the dropdown hid the history; and
+  sharing data with an AI company has to be an explicit choice. After updating, the assistant stays hidden until turned on.
+  Files touched: `src/view.ts`, `src/chat-store.ts`, `src/main.ts`, `src/modals.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/chat-store.test.ts`, `test/encryption-rule.test.ts`, `README.md`, `docs/AI-ASSISTANT.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
+## 0.36.0 — 2026-11-08
+
+- 2026-11-08 — *Importar planilha* in Movements: the B3 investor area's statements or any broker's spreadsheet, in Excel
+  or CSV, recognized by column names (new `src/investment-import.ts`, `src/spreadsheet.ts`, which reads .xlsx with no new
+  dependency). It previews what it found, reads the file in memory only, and adds buys, sales and income as read-only
+  movements, skipping what is already recorded even days apart. With all the buys of a synced position, its cost becomes
+  the real one. Splits, bonus shares and transfers between brokers are listed as not imported, and tickers with no
+  position are named. Bank sync now also estimates the cost from Pluggy's `amountProfit` when `amountOriginal` is missing.
+  Why: banks don't report what FII shares cost, and no public API can know it. Written from the statements' known layout,
+  without a real file to test against. Files touched: `src/investment-import.ts`, `src/spreadsheet.ts`, `src/investment-sync.ts`,
+  `src/income-tax.ts`, `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/investment-import.test.ts`, `test/investment-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
+## 0.35.0 — 2026-11-08
+
+- 2026-11-08 — First test round. *IR*: the bank reports no cost for FIIs, so what isn't known shows "—" instead of
+  R$ 0,00, and the average price can be typed in the table (new optional `costEdited` on positions, which sync
+  respects), counting there, in the portfolio and in the assistant. Funds with no institution show the manager in
+  their own name. *Projeção de saldo* adds up all accounts, since bills have no account and came out of each one.
+  *Metas de poupança* take a list of accounts and positions (`accountIds`, `assetIds`; old goals open as a list of
+  one) and an optional date: with none, or after it, a goal is a level to keep. *Várias carteiras* was removed: synced
+  positions left nothing to organize, and its `portfolios` and `portfolioId` are dropped when the ledger opens. The
+  independence calculator explains its two rates and shows the time at 3% and 7%. News links go through
+  `window.open`, so Surfing opens them in a tab. The periods table no longer cuts its date. The assistant's tab is its
+  icon. Conversations are several and kept, encrypted with the ledger's key, in this device's localStorage and outside
+  the vault (new `src/chat-store.ts`). Its box grows with the text and answers can be selected. New tools:
+  `portfolio_history`, `position_movements`, `recommended_portfolios` and `read_article`, the last two reading public
+  pages on the device, only from the feed sites. The investments prompt now reasons with the user's actual positions
+  instead of refusing. Why: the user's test notes. Files touched: `src/ledger.ts`, `src/investment-sync.ts`,
+  `src/income-tax.ts`, `src/quotes.ts`, `src/assistant.ts`, `src/chat-store.ts`, `src/store.ts`, `src/feeds.ts`,
+  `src/feeds-fetch.ts`, `src/export.ts`, `src/modals.ts`, `src/view.ts`, `src/main.ts`, `src/styles/index.css`, `styles.css`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/*`, `README.md`, `docs/ARCHITECTURE.md`, `docs/AI-ASSISTANT.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
+## 0.34.0 — 2026-11-06
+
+- 2026-11-06 — Optional AI assistants: an *Assistente* tab in each mode, one for accounts and one for investments,
+  off until the user adds their own Anthropic API key in the settings (new optional `ai` on the ledger, encrypted,
+  left out of exports; version unchanged). The model never gets the ledger: it calls read-only tools (new
+  `src/assistant.ts`, `src/assistant-fetch.ts`) that answer with Trimly's own math, and each result can be opened
+  in the chat. Descriptions of past transactions aren't sent; recurring, bill and future transaction names are, as data the
+  prompt says not to obey. Conversations stay in memory, are gone on lock, stop at 150 thousand tokens, and don't show while values
+  are hidden. Claude only for now, through `requestUrl` with no new dependency. Tested with a fake transport,
+  never against the real API. Why: the roadmap's *Assistente de IA*; see `docs/AI-ASSISTANT.md`. Files touched:
+  `src/assistant.ts`, `src/assistant-fetch.ts`, `src/ledger.ts`, `src/export.ts`, `src/main.ts`, `src/view.ts`,
+  `src/styles/index.css`, `styles.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/assistant.test.ts`,
+  `README.md`, `docs/AI-ASSISTANT.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.33.0 — 2026-11-05
+
+- 2026-11-05 — The *Notícias* tab opens with *Da sua carteira*: headlines naming the tickers of the open
+  positions, any share class of the company (new `newsForTickers`). Asking a site for news on a ticker
+  would tell it what the user holds, so the latest pages of InfoMoney, Money Times and Seu Dinheiro are read
+  whole and filtered on the device, which reaches back about a day. Not there: filings. Fundos.NET lists
+  every FII's documents, but answers automated clients with a redirect loop, and CVM's data comes zipped,
+  so those are left for later rather than working around the site. Why: the roadmap's *Notícias e
+  relatórios*. Files touched: `src/feeds.ts`, `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/feeds.test.ts`, `README.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.32.0 — 2026-11-05
+
+- 2026-11-05 — New *Notícias* tab in the investments mode, opening with *Carteiras recomendadas*: public
+  articles on the portfolios brokers publish, with date, source and a link, from the RSS of Money Times,
+  InvestNews and InfoMoney (new `src/feeds.ts`, `src/feeds-fetch.ts`), fetched when the tab opens and at most
+  once a day, kept in memory. New settings: *Notícias e carteiras* and a switch per source (new `feeds` and
+  `disabledFeeds` keys in `data.json`). Only each feed's address is requested. Titles are plain text and
+  only https links are kept. RSS instead of scraping pages, so a site's change doesn't break it and no paid
+  report is reproduced; that also means *what changed since the last one* isn't there, only what the
+  headline says. Why: the roadmap's *Feed de carteiras recomendadas*. Files touched: `src/feeds.ts`,
+  `src/feeds-fetch.ts`, `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/feeds.test.ts`, `test/encryption-rule.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
+## 0.31.0 — 2026-11-05
+
+- 2026-11-05 — A manual transfer between accounts in different currencies takes both amounts: the new
+  *Valor recebido* field appears when the currencies differ, and left empty it uses the day's rate (new
+  optional `toAmount` on transactions and recurring rules; version unchanged). Each balance moves in its
+  own currency, and the difference is the exchange cost. Older transfers keep moving one amount on both
+  sides. Why: the roadmap's *Transferência entre moedas*, pending since 0.9.0. Still pending: paired bank
+  transfers keep one amount, and positions in another currency. Files touched: `src/ledger.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/export.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/fx-transfers.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
+## 0.30.0 — 2026-11-05
+
+- 2026-11-05 — Planning gets *Dívidas*: a loan or financing with its balance on a date, interest per month
+  and monthly payment shows today's balance, when it ends, the interest still to pay, and what paying
+  extra would change (new optional `debts` on the ledger; version unchanged; new `debtPayoff`,
+  `debtBalance`). A payment that doesn't cover the interest says it never ends. Today's balance assumes
+  the payments were made, and updating the balance corrects it. Debts stay apart from accounts and net
+  worth, and the extra is only a simulation, never saved. Why: the roadmap's *Planejador de dívidas*. Files
+  touched: `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/debts.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.29.0 — 2026-11-05
+
+- 2026-11-05 — New *Exportar dados* section in the settings: the whole ledger as JSON, and transactions,
+  positions and movements as CSV for Excel in Brazil (semicolons, decimal commas, BOM), through the system
+  download and never written to the vault (new `src/export.ts`). The Pluggy credentials and the brapi token
+  stay out, text that a spreadsheet would run as a formula stays text, and a confirmation warns the file
+  isn't encrypted. Desktop only, since the download isn't reliable on mobile. No import back. Trimly can't
+  stop the user from picking a folder inside the vault in the save dialog, so the warning asks them not to.
+  Why: the roadmap's *Exportar dados*. Files touched: `src/export.ts`, `src/main.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/export.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
+## 0.28.0 — 2026-11-05
+
+- 2026-11-05 — Positions can be set apart in portfolios by objective (retirement, emergency fund), each
+  with its own allocation targets, weights and contribution plan (new optional `portfolios` on
+  `investments` and `portfolioId` on positions; version unchanged). The Targets tab picks the portfolio,
+  and creates, renames and deletes them; a position's modal picks where it goes, and the Portfolio tab
+  lists each one's value. What is in no portfolio is the main one, so nothing changes until one is
+  created; deleting one returns its positions there and deletes its targets. Deliberately not split by
+  portfolio: returns, evolution, proventos and income tax stay those of the whole, because snapshots
+  only exist for the whole. Why: the roadmap's *Várias carteiras*. Files touched: `src/ledger.ts`,
+  `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/portfolios.test.ts`,
+  `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.27.0 — 2026-11-05
+
+- 2026-11-05 — Manual Tesouro Direto positions are revalued from the Tesouro Transparente open data: the
+  newest day's selling price × quantity, a market move like a brapi quote, at most once a day (new
+  `src/treasury.ts`, `src/treasury-fetch.ts`, new optional `treasuryCheckedOn` on the ledger; version
+  unchanged). A position is matched by the type in its name and its maturity or year; when that isn't
+  certain it keeps its value and a notice names it (Renda+ and Educa+ need the exact maturity: Renda+ 2065
+  matures in 2084). New setting *Preços do Tesouro Direto* (on by default;
+  new `treasuryPrices` key in `data.json`). The file is about 15 MB, ignores byte ranges and lagged several days
+  business days when checked, so it is fetched only with such a position, and it holds every bond, so nothing about
+  the user's is sent. Why: the roadmap's *Cotação do Tesouro Direto*, which brapi only has on its Pro plan.
+  Files touched: `src/treasury.ts`, `src/treasury-fetch.ts`, `src/ledger.ts`, `src/main.ts`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/treasury.test.ts`, `test/encryption-rule.test.ts`,
+  `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.26.0 — 2026-11-05
+
+- 2026-11-05 — New *Calculadoras* tab in the investments mode: financial independence (wealth needed for
+  an income and the time to reach it), compound interest with contributions, how much to contribute to a
+  goal, emergency fund, and CDB against a tax-free LCI/LCA after income tax. Fields start from real
+  data when possible: wealth, average aporte of the last 12 closed months, income movements of the same
+  months, average expenses of the last 6 and the balance of the accounts (new `calculatorDefaults`). Rates
+  start empty, since the device doesn't fetch them. Everything runs on the device; what is typed lasts
+  until the view closes and is never saved, and money fields are masked while values are hidden. Why: the
+  roadmap's *Calculadoras*. Files touched: `src/calculators.ts`, `src/view.ts`, `src/styles/index.css`,
+  `styles.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/calculators.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.25.0 — 2026-11-05
+
+- 2026-11-05 — New *Relatórios* tab: any period, by preset or free dates, optionally limited to one
+  account or category, against the period before or the same period a year earlier (whole months compare
+  with whole months). It shows income, expenses and net with their change, bars and a table over the
+  period (by year when it spans more than 24 months), expenses and income by category, and each account.
+  Same counting as the overview: transfers are out. Computed on the device and never stored; the filters
+  last until the view closes (new `src/reports.ts`). Why: the roadmap's *Relatórios*; only the overview
+  existed, with its 6 months. Files touched: `src/reports.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/reports.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
+## 0.24.0 — 2026-11-05
+
+- 2026-11-05 — The Targets tab gets *Por ativo*: in each class with more than one position, a weight or
+  score per asset, on any scale (new optional `weight` on positions; version unchanged). *Planejar um
+  aporte* then splits the class's share among its positions, furthest behind their weight first and
+  never asking to sell (new `assetTargets`); a position with no weight gets nothing, and a class with no
+  weights stops at the class as before. Trimly's own weight, not the method of any other tool. Why: the
+  roadmap's *Meta por ativo*; the suggestion stopped at the class. `rebalance` now shares
+  `splitContribution` with it. Files touched: `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`,
+  `styles.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`, `test/investment-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
+## 0.23.0 — 2026-11-05
+
+- 2026-11-05 — The Accounts tab gets *Projeção de saldo*: one account's balance over the next 60 days,
+  with a chart, the balance at the end, its lowest point, the first day below zero and each event with
+  the balance after it (new `balanceForecast`). It adds future transactions and recurring occurrences
+  on the account, plus open bills and card bills, which have no account of their own and so leave the
+  chosen one. It opens on the most used checking account (new `mainAccount`), and the pick lasts until
+  the view closes; nothing is stored. A bill paid by a recurring rule, or a card paid by a recurring
+  transfer, counts once; a bill with no known amount is named, not counted as zero; overdue bills count
+  today. Not in: purchases to come and installments on later card bills. Why: the roadmap's *Projeção
+  de saldo*; recurring rules, bills and card bills were already there, only the sum was missing. Files
+  touched: `src/ledger.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/forecast.test.ts`, `README.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 0.22.0 — 2026-11-05
+
+- 2026-11-05 — New *IR* tab in the investments mode, with the month picker: average price per asset,
+  each month's sales, result and DARF (code 6015, due the last business day of the next month; under
+  R$ 10 it waits for the next one), the R$ 20.000 stock exemption meter, losses carried forward (stocks,
+  BDRs and ETFs apart from FIIs) and the costs for *Bens e direitos* at the two year-ends the return
+  asks for. Rates are 15% for stocks, BDRs and ETFs and 20% for FIIs. Everything is computed from the
+  movements on the device (new `src/income-tax.ts`); nothing is stored or sent, and no DARF is issued.
+  Positions whose numbers are uncertain (no quantity, shares from before the movements, transfers,
+  amortizations, possible day trades) are listed to check, and a sale with no known cost marks its month
+  incomplete instead of counting a made-up gain. Not covered: day trades, options, fixed income ETFs,
+  FI-Infra, splits and bonus shares. Group and code are shown for stocks (03-01) and FIIs (07-03) only,
+  since the sources disagree on ETFs. Why: the roadmap's *Apoio ao IR de renda variável*, the main
+  reason people pay for Investidor10 or myProfit. Files touched: `src/income-tax.ts`, `src/view.ts`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/income-tax.test.ts`, `README.md`, `docs/ARCHITECTURE.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
+## 0.21.0 — 2026-11-05
+
+- 2026-11-05 — Planning gets *Metas de poupança*: a goal has a name, an amount, a date and one account
+  or position it is measured by (new optional `goals` on the ledger; version unchanged). Each tile shows
+  how much is saved, from today's balance, and how much to save per month until the date, or that the
+  goal was reached or is past due (new `goalProgress`). Goals sharing an account or position are flagged,
+  since the balance counts in full in each; a goal whose account was deleted or position closed asks
+  for another link. `progress` in the view takes an optional `warn`, so a goal near its end doesn't turn
+  amber. Why: the roadmap's *Metas de poupança*; only allocation targets and the monthly investment goal
+  existed. Files touched: `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/goals.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`,
+  `manifest.json`, `versions.json`.
 
 ## 0.20.0 — 2026-11-01
 

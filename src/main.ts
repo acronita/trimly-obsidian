@@ -1,8 +1,11 @@
-import { App, Notice, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
+import { App, Notice, Platform, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
 import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync";
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
+import { AI_DEFAULT_MODEL, AI_MODELS } from "./assistant";
+import { ChatStore } from "./chat-store";
 import { fetchProventos } from "./b3";
+import { ledgerJson, movementsCsv, positionsCsv, transactionsCsv } from "./export";
 import { fetchBenchmarks } from "./bcb";
 import { fetchRates } from "./fx";
 import { LANGUAGES, LANGUAGE_NAMES, Language, setLanguage, t } from "./i18n";
@@ -27,6 +30,13 @@ import { ConfirmModal, PassphraseModal } from "./modals";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
 import { applyQuotes, quoteTickers } from "./quotes";
+import { applyTreasuryPrices, manualTreasuryPositions } from "./treasury";
+import type { TreasuryUpdate } from "./treasury";
+import { fetchTreasuryPrices } from "./treasury-fetch";
+import { ALL_SOURCES, NEWS_SOURCES, PORTFOLIO_SOURCES, newsPages } from "./feeds";
+import type { FeedSource } from "./feeds";
+import type { FeedItem } from "./feeds";
+import { fetchFeeds } from "./feeds-fetch";
 import type { Provento } from "./proventos";
 import type { Benchmarks } from "./returns";
 import { EncryptedStore } from "./store";
@@ -46,12 +56,20 @@ export interface TrimlySettings {
   benchmarks: boolean;
   /** fetch announced proventos of the positions' issuers from B3 */
   proventos: boolean;
+  /** fetch Tesouro Direto prices for manual positions */
+  treasuryPrices: boolean;
+  /** fetch public news feeds for the News tab */
+  feeds: boolean;
+  /** ids of the feed sources turned off */
+  disabledFeeds: string[];
   /** interface language; Brazilian Portuguese first */
   language: Language;
   /** mask money amounts on screen (eye button in the header) */
   hideValues: boolean;
   /** how obligation reminders are shown */
   reminders: ReminderMode;
+  /** show the AI assistants; turning it on warns that data goes to the AI company */
+  assistant: boolean;
 }
 
 /** Unlocking syncs the bank again only when the last sync is older than this. */
@@ -65,15 +83,27 @@ const BENCHMARK_RETRY_MS = 60 * 60 * 1000;
 /** The daily CDI series accepts at most 10 years per request. */
 const BENCHMARK_MAX_DAYS = 3650;
 
+/** Hand a file to the system download, which asks where to save it; nothing touches the vault. */
+function downloadFile(name: string, content: string) {
+  const url = URL.createObjectURL(new Blob([content]));
+  const link = createEl("a", { href: url, attr: { download: name } });
+  link.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 const DEFAULT_SETTINGS: TrimlySettings = {
   folder: "Trimly",
   currency: "BRL",
   rememberPassphrase: true,
   benchmarks: true,
   proventos: true,
+  treasuryPrices: true,
+  feeds: true,
+  disabledFeeds: [],
   language: "pt-BR",
   hideValues: false,
   reminders: "app",
+  assistant: false,
 };
 
 function olderThan(iso: string | undefined, ms: number): boolean {
@@ -95,6 +125,15 @@ export default class TrimlyPlugin extends Plugin {
   /** announced proventos, kept in memory only (never in the vault) for the day */
   private proventoCache: { key: string; day: string; data: Provento[] } | null = null;
   private proventoLoading = false;
+  /** day a fetch of the Tesouro Direto prices was tried, whether or not it worked */
+  private treasuryTriedOn = "";
+  /** the assistants' conversations, on this device and outside the vault */
+  chatStore!: ChatStore;
+  private feedCache: Record<"portfolios" | "news", { day: string; data: FeedItem[] } | null> = { portfolios: null, news: null };
+  private feedLoading = { portfolios: false, news: false };
+  private feedFailedAt = { portfolios: 0, news: 0 };
+  /** sources that couldn't be read on the last fetch of each */
+  feedFailed: Record<"portfolios" | "news", string[]> = { portfolios: [], news: [] };
   private proventoFailedAt = 0;
   proventoError: string | null = null;
   /** set when data.json predates the language setting: the ledger's starter names are still English */
@@ -108,6 +147,7 @@ export default class TrimlyPlugin extends Plugin {
     setLanguage(this.settings.language);
     this.passphrases = new PassphraseManager(this.app, () => this.settings.rememberPassphrase);
     this.store = new EncryptedStore(this.app, () => this.settings.folder);
+    this.chatStore = new ChatStore(this.app, this.store, () => this.passphrases.get());
 
     this.registerView(VIEW_TYPE_TRIMLY, (leaf) => new TrimlyView(leaf, this));
     this.addRibbonIcon("wallet", t.commands.ribbon, () => void this.openDashboard());
@@ -395,6 +435,33 @@ export default class TrimlyPlugin extends Plugin {
     const bankDue = !!l.pluggy && (l.investments.snapshots.length === 0 || olderThan(l.pluggy.lastSync, AUTO_SYNC_INTERVAL_MS));
     const quotesDue = !!l.brapi && olderThan(l.brapi.lastUpdate, QUOTES_INTERVAL_MS);
     if (bankDue || quotesDue) void this.sync(true, bankDue);
+    void (this.syncing ?? Promise.resolve()).then(() => this.refreshTreasury());
+  }
+
+  /**
+   * Tesouro Direto prices for manual positions, at most once a day: the open data
+   * is one big file. A failed day isn't retried until the next, so it warns only once.
+   */
+  private async refreshTreasury() {
+    const today = todayISO();
+    const l = this.ledger;
+    if (!l || !this.settings.treasuryPrices || l.treasuryCheckedOn === today || this.treasuryTriedOn === today) return;
+    if (manualTreasuryPositions(l).length === 0) return;
+    this.treasuryTriedOn = today;
+    let data;
+    try {
+      data = await fetchTreasuryPrices();
+    } catch (e) {
+      new Notice(t.notices.treasuryFailed((e as Error).message));
+      return;
+    }
+    let result: TreasuryUpdate = { updated: 0, missing: [] };
+    await this.mutate((ledger) => {
+      result = applyTreasuryPrices(ledger, data, today);
+      ledger.treasuryCheckedOn = today;
+    });
+    if (result.updated) new Notice(t.notices.treasuryUpdated(result.updated));
+    if (result.missing.length) new Notice(t.notices.treasuryMissing(result.missing.join(", ")));
   }
 
   /**
@@ -518,6 +585,47 @@ export default class TrimlyPlugin extends Plugin {
     if (cached && cached.day === today && cached.key === key) return cached.data;
     if (!this.proventoLoading && Date.now() - this.proventoFailedAt > BENCHMARK_RETRY_MS) void this.loadProventos(issuers, key, today);
     return cached?.data ?? null;
+  }
+
+  /**
+   * Recommended portfolios from the public feeds, cached for the day: starts a fetch
+   * when missing and re-renders when it lands; null when turned off or never loaded.
+   */
+  portfolioFeed(): FeedItem[] | null {
+    return this.feed("portfolios", PORTFOLIO_SOURCES);
+  }
+
+  /** The latest news of the feeds, whole: whoever calls filters it by the positions, on the device. */
+  newsFeed(): FeedItem[] | null {
+    return this.feed("news", newsPages(NEWS_SOURCES));
+  }
+
+  private feed(kind: "portfolios" | "news", sources: FeedSource[]): FeedItem[] | null {
+    if (!this.settings.feeds) return null;
+    const today = todayISO();
+    const cached = this.feedCache[kind];
+    if (cached && cached.day === today) return cached.data;
+    if (!this.feedLoading[kind] && Date.now() - this.feedFailedAt[kind] > BENCHMARK_RETRY_MS) void this.loadFeed(kind, sources, today);
+    return cached?.data ?? null;
+  }
+
+  private async loadFeed(kind: "portfolios" | "news", sources: FeedSource[], today: string) {
+    this.feedLoading[kind] = true;
+    try {
+      const res = await fetchFeeds(sources.filter((source) => !this.settings.disabledFeeds.includes(source.id)));
+      this.feedCache[kind] = { day: today, data: res.items };
+      this.feedFailed[kind] = [...new Set(res.failed)];
+      if (res.failed.length) this.feedFailedAt[kind] = Date.now();
+    } finally {
+      this.feedLoading[kind] = false;
+      this.refreshViews();
+    }
+  }
+
+  /** The next read fetches again, after a source is switched on or off. */
+  resetFeeds() {
+    this.feedCache = { portfolios: null, news: null };
+    this.feedFailedAt = { portfolios: 0, news: 0 };
   }
 
   private async loadProventos(issuers: string[], key: string, today: string) {
@@ -715,9 +823,143 @@ class TrimlySettingTab extends PluginSettingTab {
           p.refreshViews();
         })
       );
+    new Setting(containerEl)
+      .setName(s.treasuryPrices)
+      .setDesc(s.treasuryPricesDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.treasuryPrices).onChange(async (v) => {
+          p.settings.treasuryPrices = v;
+          await p.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName(s.feeds)
+      .setDesc(s.feedsDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.feeds).onChange(async (v) => {
+          p.settings.feeds = v;
+          p.resetFeeds();
+          await p.saveSettings();
+          p.refreshViews();
+        })
+      );
+    for (const source of ALL_SOURCES) {
+      new Setting(containerEl).setName(s.feedSource(source.name)).addToggle((tg) =>
+        tg.setValue(!p.settings.disabledFeeds.includes(source.id)).onChange(async (v) => {
+          p.settings.disabledFeeds = v ? p.settings.disabledFeeds.filter((id) => id !== source.id) : [...p.settings.disabledFeeds, source.id];
+          p.resetFeeds();
+          await p.saveSettings();
+          p.refreshViews();
+        })
+      );
+    }
 
     this.displayQuotes();
     this.displayBankSync();
+    this.displayExport();
+    this.displayAssistant();
+  }
+
+  /** Off until the user turns it on, is told what leaves the device, and gives a key of their own. */
+  private displayAssistant() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    const s = t.settings;
+    new Setting(containerEl).setName(s.assistantTitle).setHeading();
+    containerEl.createEl("p", { cls: "setting-item-description", text: s.assistantIntro });
+    const setEnabled = async (on: boolean) => {
+      p.settings.assistant = on;
+      await p.saveSettings();
+      p.refreshViews();
+      this.display();
+    };
+    new Setting(containerEl)
+      .setName(s.assistantEnable)
+      .setDesc(s.assistantEnableDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.assistant).onChange((on) => {
+          if (!on) return void setEnabled(false);
+          // dismissing the warning puts the toggle back
+          new ConfirmModal(this.app, s.assistantWarning, s.assistantWarningOk, () => void setEnabled(true), () => this.display()).open();
+        })
+      );
+    if (!p.settings.assistant) return;
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc(s.unlockForSync);
+      return;
+    }
+    const config = p.ledger.ai;
+    let apiKey = config?.apiKey ?? "";
+    let model = config?.model ?? AI_DEFAULT_MODEL;
+    new Setting(containerEl)
+      .setName(s.assistantKey)
+      .setDesc(s.assistantKeyDesc)
+      .addText((text) => {
+        text.inputEl.type = "password";
+        text.setValue(apiKey).onChange((v) => (apiKey = v.trim()));
+      });
+    const models: Record<string, string> = {};
+    for (const m of AI_MODELS) models[m] = m;
+    new Setting(containerEl)
+      .setName(s.assistantModel)
+      .setDesc(s.assistantModelDesc)
+      .addDropdown((d) => d.addOptions(models).setValue(model).onChange((v) => (model = v)));
+    const actions = new Setting(containerEl);
+    actions.addButton((b) =>
+      b
+        .setButtonText(s.assistantSave)
+        .setCta()
+        .onClick(async () => {
+          if (!apiKey) return void new Notice(s.assistantNoKey);
+          await p.mutate((l) => {
+            l.ai = { apiKey, model };
+          });
+          this.display();
+        })
+    );
+    if (config) {
+      actions.addButton((b) =>
+        b
+          .setButtonText(s.assistantRemove)
+          .setWarning()
+          .onClick(async () => {
+            await p.mutate((l) => {
+              delete l.ai;
+            });
+            this.display();
+          })
+      );
+    }
+  }
+
+  /** Readable copies go through the system download, the only way out that is not the vault. */
+  private displayExport() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    const s = t.settings;
+    new Setting(containerEl).setName(s.exportTitle).setHeading();
+    containerEl.createEl("p", { cls: "setting-item-description", text: s.exportIntro });
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc(s.unlockForSync);
+      return;
+    }
+    if (!Platform.isDesktopApp) {
+      new Setting(containerEl).setDesc(s.exportMobile);
+      return;
+    }
+    const item = (name: string, file: string, extension: string, build: (l: Ledger) => string) =>
+      new Setting(containerEl).setName(name).addButton((b) =>
+        b.setButtonText(s.exportButton).onClick(() =>
+          new ConfirmModal(this.app, s.exportConfirm, s.exportButton, () => {
+            if (p.ledger) downloadFile(`trimly-${file}-${todayISO()}.${extension}`, build(p.ledger));
+          }).open()
+        )
+      );
+    item(s.exportJson, "backup", "json", ledgerJson);
+    item(s.exportTransactions, "transacoes", "csv", (l) => transactionsCsv(l, p.settings.currency));
+    item(s.exportPositions, "posicoes", "csv", positionsCsv);
+    item(s.exportMovements, "movimentacoes", "csv", movementsCsv);
   }
 
   private displayQuotes() {
