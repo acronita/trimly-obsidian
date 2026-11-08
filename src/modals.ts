@@ -1,5 +1,6 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
 import { t } from "./i18n";
+import type { ImportPreview } from "./investment-import";
 import {
   Account,
   Asset,
@@ -1008,6 +1009,45 @@ export class CategoryModal extends Modal {
       },
       this.onDelete ? () => this.onDelete?.(this.draft) : null,
       () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class ImportModal extends Modal {
+  constructor(
+    app: App,
+    private preview: ImportPreview,
+    private onImport: () => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const m = t.modals.importer;
+    const p = this.preview;
+    this.setTitle(m.title);
+    const count = (type: string) => p.trades.filter((x) => x.type === type).length;
+    contentEl.createEl("p", { text: m.found(count("buy"), count("sell"), count("income")) });
+    if (p.duplicates) contentEl.createEl("p", { cls: "setting-item-description", text: m.duplicates(p.duplicates) });
+    if (p.unmatched.length) contentEl.createEl("p", { cls: "setting-item-description", text: m.unmatched(p.unmatched.join(", ")) });
+    const skipped = Object.entries(p.skipped);
+    if (skipped.length) contentEl.createEl("p", { cls: "setting-item-description", text: m.skipped(skipped.map(([label, n]) => `${label || "?"} (${n})`).join(", ")) });
+    contentEl.createEl("p", { cls: "setting-item-description", text: m.note });
+    new Setting(contentEl).addButton((b) =>
+      b
+        .setButtonText(m.confirm)
+        .setCta()
+        .setDisabled(p.trades.length === 0)
+        .onClick(() => {
+          this.close();
+          this.onImport();
+        })
     );
   }
 

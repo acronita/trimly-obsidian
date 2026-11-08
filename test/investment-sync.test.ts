@@ -343,3 +343,16 @@ test("a cost the user typed survives a sync that has none to report", () => {
   applyInvestments(l, [inv("cdb", { amountOriginal: 0, balance: 1010 })], ["item-1"], TODAY);
   assert.equal(asset(l, "cdb").invested, 800_00);
 });
+
+test("with no original amount, the cost comes from the profit the bank reports", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("fii", { amountOriginal: 0, amount: 1050, amountProfit: 150 })], ["item-1"], TODAY);
+  assert.equal(asset(l, "fii").invested, 900_00);
+});
+
+test("a profit of zero says nothing about the cost, and the original amount wins when there is one", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { amountOriginal: 0, amountProfit: 0 }), inv("b", { amountOriginal: 700, amountProfit: 150 })], ["item-1"], TODAY);
+  assert.equal(asset(l, "a").invested, undefined);
+  assert.equal(asset(l, "b").invested, 700_00);
+});

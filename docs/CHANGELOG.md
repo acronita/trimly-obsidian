@@ -14,6 +14,20 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.36.0 — 2026-11-08
+
+- 2026-11-08 — *Importar planilha* in Movements: the B3 investor area's statements or any broker's spreadsheet, in Excel
+  or CSV, recognized by column names (new `src/investment-import.ts`, `src/spreadsheet.ts`, which reads .xlsx with no new
+  dependency). It previews what it found, reads the file in memory only, and adds buys, sales and income as read-only
+  movements, skipping what is already recorded even days apart. With all the buys of a synced position, its cost becomes
+  the real one. Splits, bonus shares and transfers between brokers are listed as not imported, and tickers with no
+  position are named. Bank sync now also estimates the cost from Pluggy's `amountProfit` when `amountOriginal` is missing.
+  Why: banks don't report what FII shares cost, and no public API can know it. Written from the statements' known layout,
+  without a real file to test against. Files touched: `src/investment-import.ts`, `src/spreadsheet.ts`, `src/investment-sync.ts`,
+  `src/income-tax.ts`, `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/investment-import.test.ts`, `test/investment-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`,
+  `package.json`, `manifest.json`, `versions.json`.
+
 ## 0.35.0 — 2026-11-08
 
 - 2026-11-08 — First test round. *IR*: the bank reports no cost for FIIs, so what isn't known shows "—" instead of

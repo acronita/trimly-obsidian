@@ -338,6 +338,9 @@ export interface Quote {
   history?: [string, number][];
 }
 
+/** Starts the `pluggyId` of a movement imported from a spreadsheet: like one from the bank it can't be edited, and sync re-links it if the bank reports it too. */
+export const IMPORT_PREFIX = "import:";
+
 /** Money moving in or out of one position, in cents. */
 export interface Movement {
   id: string;
@@ -1138,7 +1141,8 @@ export function recordSnapshot(ledger: Ledger, today: string, untracked = 0) {
     let moved = 0;
     let income = 0;
     for (const m of ledger.investments.movements) {
-      if (m.date <= since || m.date > today || !tracked.has(m.assetId)) continue;
+      // imported history was already in the position's value
+      if (m.date <= since || m.date > today || !tracked.has(m.assetId) || m.pluggyId?.startsWith(IMPORT_PREFIX)) continue;
       moved += movementFlow(m);
       if (m.type === "income") income += m.amount;
     }
@@ -1357,7 +1361,7 @@ export function saveManualMovement(ledger: Ledger, m: Movement, today: string) {
 export function removeManualMovement(ledger: Ledger, id: string, today: string) {
   const m = ledger.investments.movements.find((x) => x.id === id);
   const a = m && ledger.investments.assets.find((x) => x.id === m.assetId && !x.pluggyId);
-  if (!m || !a) return;
+  if (!m || !a || m.pluggyId) return;
   applyMovement(a, m, true);
   a.updatedAt = today;
   ledger.investments.movements = ledger.investments.movements.filter((x) => x.id !== id);
