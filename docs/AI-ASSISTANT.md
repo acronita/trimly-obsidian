@@ -31,7 +31,8 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
 
 ## Design
 
-- **Off by default.** Turning it on asks for the user's own API key, kept in the encrypted ledger like the
+- **Off by default.** A toggle in the settings (`assistant` in `data.json`) shows the tabs, and turning it on first
+  warns that financial data goes to Anthropic; dismissing the warning leaves it off. It then asks for the user's own API key, kept in the encrypted ledger like the
   Pluggy credentials, and the README says what leaves the device and to where.
 - **The ledger is never sent.** The model calls tools Trimly exposes and receives only their results, so
   Trimly does the math and less data leaves. Tools reuse existing pure functions:

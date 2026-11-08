@@ -5,6 +5,8 @@ import type { EncryptedStore } from "./store.ts";
 const STORAGE_KEY = "trimly-chats";
 /** localStorage is small; the oldest conversations go first. */
 const MAX_CHATS = 50;
+/** Past this a save would run into the browser's quota, and every later one would fail too. */
+const MAX_CHARS = 4_000_000;
 
 export interface SavedChat {
   id: string;
@@ -21,7 +23,14 @@ export interface SavedChat {
 
 /** Newest first, without what doesn't fit. */
 export function trimChats(chats: SavedChat[]): SavedChat[] {
-  return [...chats].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1)).slice(0, MAX_CHATS);
+  let chars = 0;
+  return [...chats]
+    .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
+    .slice(0, MAX_CHATS)
+    .filter((chat, i) => {
+      chars += JSON.stringify(chat).length;
+      return i === 0 || chars <= MAX_CHARS;
+    });
 }
 
 /**
@@ -30,11 +39,15 @@ export function trimChats(chats: SavedChat[]): SavedChat[] {
  * they are encrypted with the ledger's key all the same.
  */
 export class ChatStore {
-  constructor(
-    private app: App,
-    private store: Pick<EncryptedStore, "seal" | "unseal">,
-    private passphrase: () => string | null
-  ) {}
+  private app: App;
+  private store: Pick<EncryptedStore, "seal" | "unseal">;
+  private passphrase: () => string | null;
+
+  constructor(app: App, store: Pick<EncryptedStore, "seal" | "unseal">, passphrase: () => string | null) {
+    this.app = app;
+    this.store = store;
+    this.passphrase = passphrase;
+  }
 
   /** Empty when there is nothing, or it can't be read, as after changing the passphrase. */
   async load(): Promise<SavedChat[]> {

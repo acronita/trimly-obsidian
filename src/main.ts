@@ -68,6 +68,8 @@ export interface TrimlySettings {
   hideValues: boolean;
   /** how obligation reminders are shown */
   reminders: ReminderMode;
+  /** show the AI assistants; turning it on warns that data goes to the AI company */
+  assistant: boolean;
 }
 
 /** Unlocking syncs the bank again only when the last sync is older than this. */
@@ -101,6 +103,7 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   language: "pt-BR",
   hideValues: false,
   reminders: "app",
+  assistant: false,
 };
 
 function olderThan(iso: string | undefined, ms: number): boolean {
@@ -858,13 +861,30 @@ class TrimlySettingTab extends PluginSettingTab {
     this.displayAssistant();
   }
 
-  /** Off until the user gives a key of their own; removing it turns the assistants off. */
+  /** Off until the user turns it on, is told what leaves the device, and gives a key of their own. */
   private displayAssistant() {
     const { containerEl } = this;
     const p = this.plugin;
     const s = t.settings;
     new Setting(containerEl).setName(s.assistantTitle).setHeading();
     containerEl.createEl("p", { cls: "setting-item-description", text: s.assistantIntro });
+    const setEnabled = async (on: boolean) => {
+      p.settings.assistant = on;
+      await p.saveSettings();
+      p.refreshViews();
+      this.display();
+    };
+    new Setting(containerEl)
+      .setName(s.assistantEnable)
+      .setDesc(s.assistantEnableDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.assistant).onChange((on) => {
+          if (!on) return void setEnabled(false);
+          // dismissing the warning puts the toggle back
+          new ConfirmModal(this.app, s.assistantWarning, s.assistantWarningOk, () => void setEnabled(true), () => this.display()).open();
+        })
+      );
+    if (!p.settings.assistant) return;
     if (!p.ledger) {
       new Setting(containerEl).setDesc(s.unlockForSync);
       return;

@@ -289,6 +289,8 @@ export class TrimlyView extends ItemView {
       return this.renderLocked(root);
     }
 
+    // the assistant can be turned off while its tab is open
+    if (!this.visibleTabs().some((tab) => tab.id === this.tabs[this.mode])) this.tabs[this.mode] = TABS[this.mode][0].id;
     const page = root.createDiv("trimly-page");
     this.renderHeader(page);
     const body = page.createDiv("trimly-body");
@@ -481,6 +483,10 @@ export class TrimlyView extends ItemView {
     this.render();
   }
 
+  private visibleTabs() {
+    return TABS[this.mode].filter((tab) => tab.label !== "assistant" || this.plugin.settings.assistant);
+  }
+
   private setMode(m: Mode) {
     this.mode = m;
     this.month = monthOf(todayISO());
@@ -568,7 +574,7 @@ export class TrimlyView extends ItemView {
     });
 
     const tabs = page.createDiv("trimly-tabs");
-    for (const tab of TABS[this.mode]) {
+    for (const tab of this.visibleTabs()) {
       const el = tabs.createEl("button", { cls: "trimly-tab" });
       setIcon(el.createSpan("trimly-tab-icon"), tab.icon);
       // the assistant's tab is the icon alone
@@ -2933,19 +2939,12 @@ export class TrimlyView extends ItemView {
     const mine = this.chats.filter((c) => c.kind === kind).sort((x, y) => (x.updatedAt < y.updatedAt ? 1 : -1));
     const chat = mine.find((c) => c.id === this.openChat[kind]);
 
-    const bar = body.createDiv("trimly-filters");
-    if (mine.length) {
-      const select = bar.createEl("select", { cls: "dropdown", attr: { "aria-label": a.conversations } });
-      select.createEl("option", { value: "", text: a.newChat });
-      for (const c of mine) select.createEl("option", { value: c.id, text: c.title });
-      select.value = chat?.id ?? "";
-      select.addEventListener("change", () => {
-        if (select.value) this.openChat[kind] = select.value;
-        else delete this.openChat[kind];
+    if (chat) {
+      const bar = body.createDiv("trimly-filters");
+      bar.createEl("button", { text: a.conversations }).addEventListener("click", () => {
+        delete this.openChat[kind];
         this.render();
       });
-    }
-    if (chat) {
       bar.createEl("button", { text: a.delete }).addEventListener("click", () => {
         new ConfirmModal(this.app, t.common.deleteQuoted(chat.title), t.common.delete, () => {
           this.chats = (this.chats ?? []).filter((c) => c.id !== chat.id);
@@ -2994,6 +2993,20 @@ export class TrimlyView extends ItemView {
       }
     });
     if (chat) body.createDiv({ cls: "trimly-muted", text: a.usage(Math.round((chat.tokens / MAX_CONVERSATION_TOKENS) * 100)) });
+    else if (mine.length) {
+      const history = this.card(body, a.conversations);
+      for (const c of mine) {
+        const row = history.createDiv("trimly-row is-clickable");
+        const main = row.createDiv("trimly-row-main");
+        main.createDiv({ cls: "trimly-row-title", text: c.title });
+        main.createDiv({ cls: "trimly-row-sub", text: this.longDate(todayISO(new Date(c.updatedAt))) });
+        row.addEventListener("click", () => {
+          this.openChat[kind] = c.id;
+          this.contentEl.scrollTop = 0;
+          this.render();
+        });
+      }
+    }
   }
 
   private async loadChats() {
@@ -3023,6 +3036,8 @@ export class TrimlyView extends ItemView {
     chat.log.push({ role: "user", text: question });
     this.chatBusy = true;
     this.render();
+    // the answer can take minutes: closing Obsidian meanwhile must not lose the conversation
+    await this.saveChats();
     const { feeds, disabledFeeds, language } = this.plugin.settings;
     try {
       const turn = await askAssistant({

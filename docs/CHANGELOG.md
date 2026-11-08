@@ -14,6 +14,18 @@
   DAS MEI/IRPF) and that users outside Brazil may get little from it. Why: set expectations before
   someone abroad installs it. Files touched: `README.md`.
 
+## 0.37.0 — 2026-11-08
+
+- 2026-11-08 — The assistants open on a clickable list of past conversations, replacing the dropdown; opening one shows
+  it whole and a button goes back. A conversation is saved when asked, not only when answered, and saved conversations
+  are capped by size so a full localStorage can't stop every later save. New toggle *Ligar o assistente* (`assistant` in
+  `data.json`, off by default): off hides both tabs; turning it on first warns what goes to Anthropic. Why: test note,
+  a conversation was gone after reopening Obsidian (none was stored on the device) and the dropdown hid the history; and
+  sharing data with an AI company has to be an explicit choice. After updating, the assistant stays hidden until turned on.
+  Files touched: `src/view.ts`, `src/chat-store.ts`, `src/main.ts`, `src/modals.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/chat-store.test.ts`, `test/encryption-rule.test.ts`, `README.md`, `docs/AI-ASSISTANT.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 0.36.0 — 2026-11-08
 
 - 2026-11-08 — *Importar planilha* in Movements: the B3 investor area's statements or any broker's spreadsheet, in Excel

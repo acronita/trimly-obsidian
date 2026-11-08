@@ -53,9 +53,10 @@ passphrase that never leaves your device.
 - **Balance forecast** (*Projeção de saldo*, in Accounts) — all your accounts together over the next 60 days, with the
   lowest point and the first day below zero: future transactions, recurring rules, bills and card bills. The open card
   bill counts what was charged so far; purchases to come and installments on later bills aren't in.
-- **AI assistants (optional, off by default)** (*Assistente*, in each mode) — ask about your spending or your
+- **AI assistants (optional, off by default)** (*Assistente*, in each mode, shown only when turned on in the settings,
+  which warn that your data goes to Anthropic) — ask about your spending or your
   portfolio, with your own Anthropic API key and at your cost. Trimly does the math and sends only your question and
-  the results asked for, which you can open in the chat; the whole ledger is never sent. Conversations stay encrypted on
+  the results asked for, which you can open in the chat; the whole ledger is never sent. Past conversations are listed to open again, and stay encrypted on
   this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
   Answers can be wrong, and the decisions are yours.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
