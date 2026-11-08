@@ -1423,6 +1423,20 @@ input.trimly-amount-input:focus {
   flex-wrap: wrap;
   gap: 6px;
 }
+.trimly-detail-copies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+.trimly-detail-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  height: auto;
+  font-size: var(--font-ui-smaller);
+}
 .trimly-detail-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));

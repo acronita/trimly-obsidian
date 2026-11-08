@@ -2198,6 +2198,20 @@ export class TrimlyView extends ItemView {
     tags.createSpan({ cls: "trimly-tile-tag", text: t.labels.assetClass[a.assetClass] });
     tags.createSpan({ cls: "trimly-tile-tag", text: a.pluggyId ? t.details.bankSync : t.details.manual });
     if (a.closed) tags.createSpan({ cls: "trimly-tile-tag", text: t.details.closed });
+    const copies = head.createDiv("trimly-detail-copies");
+    const copyButton = (label: string, value: string) => {
+      const b = copies.createEl("button", { cls: "clickable-icon trimly-detail-copy", attr: { "aria-label": t.details.copy(value) } });
+      setIcon(b.createSpan(), "clipboard");
+      b.createSpan({ text: label });
+      b.addEventListener("click", () => {
+        navigator.clipboard.writeText(value).then(
+          () => new Notice(t.details.copied(value)),
+          () => new Notice(t.details.copyFailed)
+        );
+      });
+    };
+    copyButton(t.details.copyName, a.name);
+    if (a.code) copyButton(a.code, a.code);
 
     el.createDiv({ cls: "trimly-eyebrow", text: t.details.currentValue });
     el.createDiv({ cls: "trimly-page-value", text: this.money(a.value) });
