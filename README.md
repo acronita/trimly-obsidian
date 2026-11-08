@@ -50,23 +50,20 @@ passphrase that never leaves your device.
 - **Reports** (*Relatórios*) — any period, by preset or free dates, for all accounts or one account or
   category, compared with the period before or a year earlier: income, expenses and net, over time, by
   category and by account. Transfers are left out, so paying a card bill doesn't count twice.
-- **Balance forecast** (*Projeção de saldo*, in Accounts) — one account's balance over the next 60 days,
-  with its lowest point and the first day below zero: future transactions and recurring rules on the
-  account, plus bills and card bills, which leave the chosen account. The open card bill counts what was
-  charged so far; purchases to come and installments on later bills aren't in.
+- **Balance forecast** (*Projeção de saldo*, in Accounts) — all your accounts together over the next 60 days, with the
+  lowest point and the first day below zero: future transactions, recurring rules, bills and card bills. The open card
+  bill counts what was charged so far; purchases to come and installments on later bills aren't in.
 - **AI assistants (optional, off by default)** (*Assistente*, in each mode) — ask about your spending or your
   portfolio, with your own Anthropic API key and at your cost. Trimly does the math and sends only your question and
-  the results asked for, which you can open in the chat; the whole ledger is never sent. Conversations aren't saved.
-  Answers can be wrong, and they aren't investment advice.
+  the results asked for, which you can open in the chat; the whole ledger is never sent. Conversations stay encrypted on
+  this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
+  Answers can be wrong, and the decisions are yours.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
   articles on the portfolios brokers publish, from public RSS feeds. Trimly only gathers the links: not a
   recommendation. It reaches back about a day for your tickers, and has no filings.
 - **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
   everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
   go in. It is not encrypted, so never save it inside the vault; there is no import back.
-- **Portfolios** (*Carteiras*, in the Targets tab) — set positions apart by objective, each with its own
-  allocation targets and contribution plan. Net worth adds them up; returns, proventos and income tax
-  stay those of the whole.
 - **Tesouro Direto prices** — manual Tesouro Direto positions are revalued once a day from the Tesouro
   Transparente open data, with no token: price (what selling pays, before tax) × quantity. Name the
   position with its type and year, like *Tesouro IPCA+ 2035*, or fill in the maturity; Renda+ and Educa+
@@ -84,9 +81,10 @@ passphrase that never leaves your device.
 - **Debts** (*Dívidas*, in Planning) — a loan's balance, monthly interest and payment give today's balance,
   when it ends, the interest still to pay, and what paying extra would change. Kept apart from accounts and
   net worth; today's balance assumes the payments were made.
-- **Savings goals** (*Metas de poupança*, in Planning) — an amount to have by a date (emergency fund,
-  a trip), measured by today's balance of one account or position, with how much to save per month until
-  then. Goals on the same account or position are flagged, since the balance counts in full in each.
+- **Savings goals** (*Metas de poupança*, in Planning) — an amount to have, kept in as many accounts and positions as you
+  want, measured by what they hold today. With a date, how much to save per month until then; with none, or after it, a
+  level to keep, like an emergency fund. Goals sharing an account or position are flagged, since the balance counts in
+  full in each.
 - **Planning** (*Planejamento*, was Budgets) — whether spending and investing follow the month's plan.
   The top shows spending against what was planned and aportes against the investment goal, each with
   a bar, then how much the month's forecast leaves to invest (and whether the goal fits). The month's

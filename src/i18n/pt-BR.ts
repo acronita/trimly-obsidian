@@ -208,7 +208,6 @@ export const ptBR = {
     name: "Nome",
     code: "Código",
     assetClass: "Classe",
-    portfolio: "Carteira",
     institution: "Instituição",
     quantity: "Quantidade",
     invested: "Investido",
@@ -223,16 +222,19 @@ export const ptBR = {
   assistant: {
     off: "Assistente desligado. Para ligar, coloque uma chave de API da Anthropic nas configurações.",
     hintAccounts: "Pergunte sobre seus gastos, contas e metas. As contas são feitas pelo Trimly; o Claude recebe sua pergunta e só os resultados abaixo, que você pode abrir para ver.",
-    hintInvestments: "Pergunte sobre sua carteira, alocação e aportes. As contas são feitas pelo Trimly; o Claude recebe sua pergunta e só os resultados abaixo, que você pode abrir para ver. Não é recomendação de investimento.",
+    hintInvestments: "Pergunte sobre sua carteira, alocação e aportes. As contas são feitas pelo Trimly; o Claude recebe sua pergunta e só os resultados abaixo, que você pode abrir para ver. As decisões são suas.",
     hidden: "Os valores estão ocultos, e as respostas trazem valores. Mostre os valores para usar o assistente.",
-    empty: "Nada aqui ainda. A conversa fica só na memória e some ao travar ou fechar o Trimly.",
+    empty: "Nova conversa. As conversas ficam criptografadas neste aparelho, fora do cofre e do ledger.",
+    conversations: "Conversas",
+    newChat: "Nova conversa",
+    delete: "Excluir conversa",
+    saveFailed: (message: string) => `Não foi possível guardar a conversa: ${message}`,
     placeholder: "Sua pergunta",
     send: "Enviar",
     thinking: "Pensando…",
-    clear: "Limpar conversa",
     sent: (tool: string) => `Enviado ao Claude: ${tool}`,
     usage: (pct: number) => `${pct}% do limite desta conversa usado.`,
-    limit: "Esta conversa chegou ao limite de uso. Limpe a conversa para começar outra.",
+    limit: "Esta conversa chegou ao limite de uso. Comece uma nova conversa.",
     refused: "O modelo não quis responder a isso. Tente perguntar de outro jeito.",
     tooLong: "A resposta ficou longa demais e foi cortada. Tente pedir algo mais específico.",
     badKey: "A chave de API foi recusada. Confira nas configurações.",
@@ -250,17 +252,6 @@ export const ptBR = {
     portfoliosHint: "Reportagens públicas sobre as carteiras que corretoras e casas de análise publicam. O Trimly só reúne os links: não é recomendação, e os detalhes estão em cada site.",
     nothing: "Nada publicado nos últimos 60 dias.",
     failed: (names: string) => `Não foi possível ler: ${names}.`,
-  },
-
-  portfolios: {
-    main: "Principal",
-    pick: "Carteira",
-    add: "Nova carteira",
-    edit: "Editar carteira",
-    title: "Carteiras",
-    empty: "Nenhuma posição nesta carteira. Escolha a carteira ao editar uma posição.",
-    hint: "Separe posições por objetivo, cada carteira com as metas dela. O patrimônio soma todas; rentabilidade, proventos e IR continuam sendo do conjunto.",
-    deleteConfirm: (name: string) => `Excluir a carteira "${name}"? As posições dela voltam para a Principal, e as metas dela são apagadas.`,
   },
 
   calc: {
@@ -281,8 +272,9 @@ export const ptBR = {
       withdrawal: "Retirada (% do patrimônio ao ano)",
       needed: "Patrimônio necessário",
       time: "Tempo até chegar",
+      timeAt: (rate: string) => `Rendendo ${rate} acima da inflação`,
       covered: "Proventos de hoje cobrem",
-      note: "A renda e o resultado ficam em dinheiro de hoje se a rentabilidade for acima da inflação. A retirada de 4% é só um ponto de partida: quanto menor, mais seguro e mais patrimônio é preciso.",
+      note: "Retirada é quanto do patrimônio você gasta por ano: 4% é a referência mais citada e 3% é mais cautelosa. Rentabilidade é o quanto a carteira rende acima da inflação; como ninguém sabe qual será, 5% é só um ponto de partida, e os resultados ao lado mostram como o tempo muda com 3% e 7%. Assim, renda e patrimônio ficam em dinheiro de hoje.",
     },
     compound: {
       title: "Juros compostos",
@@ -359,7 +351,6 @@ export const ptBR = {
 
   forecast: {
     title: "Projeção de saldo",
-    account: "Conta da projeção",
     endIn: (days: number, v: string) => `Em ${days} dias: ${v}`,
     lowest: (v: string, date: string) => `Menor saldo: ${v} em ${date}`,
     negative: (date: string) => `Fica negativo em ${date}`,
@@ -367,7 +358,7 @@ export const ptBR = {
     none: "Nada previsto para esta conta no período.",
     openBill: "fatura aberta, até agora",
     unpriced: (names: string) => `Sem valor conhecido, fora da conta: ${names}.`,
-    hint: "Soma ao saldo de hoje as transações futuras e as recorrentes desta conta, mais as contas a pagar e as faturas, que saem da conta escolhida. A fatura aberta conta o que foi gasto até agora; compras futuras e parcelas de faturas seguintes não entram.",
+    hint: "Soma o saldo de todas as contas, sem os cartões, às transações futuras, recorrentes, contas a pagar e faturas. Transferências entre suas contas não mudam o total. A fatura aberta conta o que foi gasto até agora; compras futuras e parcelas de faturas seguintes não entram.",
   },
 
   accounts: {
@@ -466,6 +457,8 @@ export const ptBR = {
     noSales: "Nenhuma venda neste ano.",
     losses: (common: string, fii: string) => `Prejuízo a compensar: ${common} em ações, BDRs e ETFs; ${fii} em FIIs. Um grupo não compensa o outro.`,
     averageTitle: "Preço médio",
+    averageHint: "O banco não informa o custo destes ativos. Digite o preço médio, que está na nota de corretagem ou no informe da corretora: ele passa a valer aqui, na carteira e no assistente.",
+    typeAverage: "Digitar",
     position: "Ativo",
     quantity: "Quantidade",
     average: "Preço médio",
@@ -477,7 +470,7 @@ export const ptBR = {
     issuesHint: "O cálculo depende das movimentações. Toque numa posição para ver ou corrigir.",
     issue: {
       missingQuantity: "Compra ou venda sem quantidade: o preço médio e o ganho não podem ser calculados.",
-      missingCost: "Cotas de antes das movimentações, sem custo conhecido.",
+      missingCost: "O banco não informa quanto estas cotas custaram. Digite o preço médio na tabela acima.",
       missingHistory: "Venda de mais cotas do que as conhecidas até a data: falta histórico.",
       openingEstimated: "Cotas de antes das movimentações: o custo delas é estimado pelo que o banco informa.",
       notSynced: "As movimentações desta posição não vieram na última sincronização: pode faltar venda.",
@@ -505,15 +498,15 @@ export const ptBR = {
 
   goals: {
     title: "Metas de poupança",
-    hint: "Quanto já tem em cada meta, pelo saldo de hoje da conta ou do ativo ligado, e quanto guardar por mês até a data.",
+    hint: "Quanto já tem em cada meta, somando as contas e os ativos onde ela está guardada. Com data, mostra quanto guardar por mês; sem data, ou depois dela, é um valor a manter.",
     add: "Nova meta",
     perMonth: (v: string) => `Guardar ${v} por mês`,
     done: "Meta atingida",
-    late: (v: string) => `Prazo vencido, faltam ${v}`,
+    below: (v: string) => `Faltam ${v}`,
     savedOf: (saved: string, target: string) => `${saved} de ${target}`,
     until: (date: string) => `até ${date}`,
-    unlinked: "A conta ou o ativo ligado não existe mais. Edite a meta para escolher outro.",
-    shared: "Outra meta usa o mesmo saldo: ele conta inteiro nas duas.",
+    unlinked: "Uma conta ou um ativo desta meta não existe mais. Edite a meta para acertar a lista.",
+    shared: "Outra meta usa um dos mesmos saldos: ele conta inteiro nas duas.",
   },
 
   recurring: {
@@ -956,10 +949,11 @@ export const ptBR = {
       namePlaceholder: "Ex.: Reserva de emergência",
       target: "Valor da meta",
       date: "Data da meta",
+      dateDesc: "Opcional. Sem data, ou depois dela, a meta vira um valor a manter.",
       link: "Guardado em",
-      linkDesc: "O progresso é o saldo de hoje desta conta ou deste ativo.",
+      linkDesc: "O progresso é a soma do saldo de hoje do que você marcar.",
       assetOption: (name: string) => `Ativo: ${name}`,
-      noLink: "Adicione uma conta ou um ativo primeiro.",
+      noLink: "Marque pelo menos uma conta ou um ativo.",
     },
     asset: {
       newTitle: "Novo ativo",
@@ -1101,7 +1095,7 @@ export const ptBR = {
       "Busca no site da B3 (sistemaswebb3-listados.b3.com.br) os dividendos, JCP e rendimentos anunciados dos seus ativos com código da B3. " +
       "Só as quatro letras de cada código são enviadas (PETR para PETR4), sem quantidades nem valores.",
     assistantTitle: "Assistente de IA",
-    assistantIntro: "Opcional e desligado por padrão. Ao ligar, suas perguntas e os resultados das contas do Trimly (saldos, totais por categoria, posições) vão para api.anthropic.com, usando sua própria chave e no seu custo. O ledger inteiro nunca é enviado, e as conversas não são salvas.",
+    assistantIntro: "Opcional e desligado por padrão. Ao ligar, suas perguntas e os resultados das contas do Trimly (saldos, totais por categoria, posições) vão para api.anthropic.com, usando sua própria chave e no seu custo. O ledger inteiro nunca é enviado. As conversas ficam criptografadas neste aparelho, fora do cofre.",
     assistantKey: "Chave de API da Anthropic",
     assistantKeyDesc: "Criada em console.anthropic.com. Fica dentro do ledger criptografado.",
     assistantModel: "Modelo",

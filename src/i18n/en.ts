@@ -203,7 +203,6 @@ export const en: Strings = {
     name: "Name",
     code: "Code",
     assetClass: "Class",
-    portfolio: "Portfolio",
     institution: "Institution",
     quantity: "Quantity",
     invested: "Invested",
@@ -218,16 +217,19 @@ export const en: Strings = {
   assistant: {
     off: "The assistant is off. To turn it on, add an Anthropic API key in the settings.",
     hintAccounts: "Ask about your spending, bills and goals. Trimly does the math; Claude gets your question and only the results below, which you can open to see.",
-    hintInvestments: "Ask about your portfolio, allocation and contributions. Trimly does the math; Claude gets your question and only the results below, which you can open to see. Not investment advice.",
+    hintInvestments: "Ask about your portfolio, allocation and contributions. Trimly does the math; Claude gets your question and only the results below, which you can open to see. The decisions are yours.",
     hidden: "Values are hidden, and answers contain values. Show values to use the assistant.",
-    empty: "Nothing here yet. The conversation stays in memory only and is gone when Trimly locks or closes.",
+    empty: "New conversation. Conversations stay encrypted on this device, outside the vault and the ledger.",
+    conversations: "Conversations",
+    newChat: "New conversation",
+    delete: "Delete conversation",
+    saveFailed: (message: string) => `Could not keep the conversation: ${message}`,
     placeholder: "Your question",
     send: "Send",
     thinking: "Thinking…",
-    clear: "Clear conversation",
     sent: (tool: string) => `Sent to Claude: ${tool}`,
     usage: (pct: number) => `${pct}% of this conversation's limit used.`,
-    limit: "This conversation reached its usage limit. Clear it to start another.",
+    limit: "This conversation reached its usage limit. Start a new one.",
     refused: "The model declined to answer that. Try asking another way.",
     tooLong: "The answer got too long and was cut off. Try asking for something more specific.",
     badKey: "The API key was refused. Check it in the settings.",
@@ -245,17 +247,6 @@ export const en: Strings = {
     portfoliosHint: "Public articles on the portfolios brokers and research houses publish. Trimly only gathers the links: it is not a recommendation, and the details are on each site.",
     nothing: "Nothing published in the last 60 days.",
     failed: (names: string) => `Could not read: ${names}.`,
-  },
-
-  portfolios: {
-    main: "Main",
-    pick: "Portfolio",
-    add: "New portfolio",
-    edit: "Edit portfolio",
-    title: "Portfolios",
-    empty: "No positions in this portfolio. Pick the portfolio when editing a position.",
-    hint: "Set positions apart by objective, each portfolio with its own targets. Net worth adds them all up; returns, proventos and income tax stay those of the whole.",
-    deleteConfirm: (name: string) => `Delete the portfolio "${name}"? Its positions go back to Main, and its targets are deleted.`,
   },
 
   calc: {
@@ -276,8 +267,9 @@ export const en: Strings = {
       withdrawal: "Withdrawal (% of wealth a year)",
       needed: "Wealth needed",
       time: "Time to get there",
+      timeAt: (rate: string) => `Earning ${rate} above inflation`,
       covered: "Today's proventos cover",
-      note: "The income and the result stay in today's money if the return is above inflation. The 4% withdrawal is only a starting point: the lower it is, the safer, and the more wealth it takes.",
+      note: "Withdrawal is how much of your wealth you spend per year: 4% is the most cited reference and 3% is more cautious. Return is how much the portfolio earns above inflation; since nobody knows what it will be, 5% is only a starting point, and the results show how the time changes with 3% and 7%. That way, income and wealth stay in today's money.",
     },
     compound: {
       title: "Compound interest",
@@ -354,7 +346,6 @@ export const en: Strings = {
 
   forecast: {
     title: "Balance forecast",
-    account: "Forecast account",
     endIn: (days: number, v: string) => `In ${days} days: ${v}`,
     lowest: (v: string, date: string) => `Lowest balance: ${v} on ${date}`,
     negative: (date: string) => `Goes negative on ${date}`,
@@ -362,7 +353,7 @@ export const en: Strings = {
     none: "Nothing expected for this account in the period.",
     openBill: "open bill, so far",
     unpriced: (names: string) => `No known amount, left out: ${names}.`,
-    hint: "Adds to today's balance this account's future transactions and recurring rules, plus bills and card bills, which leave the chosen account. The open card bill counts what was charged so far; future purchases and installments on later bills aren't in.",
+    hint: "Adds up all accounts, without the cards, plus future transactions, recurring rules, bills and card bills. Transfers between your accounts don't change the total. The open card bill counts what was charged so far; future purchases and installments on later bills aren't in.",
   },
 
   accounts: {
@@ -461,6 +452,8 @@ export const en: Strings = {
     noSales: "No sales this year.",
     losses: (common: string, fii: string) => `Losses to offset: ${common} in stocks, BDRs and ETFs; ${fii} in FIIs. One group can't offset the other.`,
     averageTitle: "Average price",
+    averageHint: "The bank doesn't report the cost of these assets. Type the average price, found on the brokerage note or statement: it then counts here, in the portfolio and in the assistant.",
+    typeAverage: "Type",
     position: "Asset",
     quantity: "Quantity",
     average: "Average price",
@@ -472,7 +465,7 @@ export const en: Strings = {
     issuesHint: "The calculation depends on the movements. Tap a position to see or fix it.",
     issue: {
       missingQuantity: "A buy or sale has no quantity: the average price and the gain can't be calculated.",
-      missingCost: "Shares from before the movements, with no known cost.",
+      missingCost: "The bank doesn't report what these shares cost. Type the average price in the table above.",
       missingHistory: "Sold more shares than known by that date: history is missing.",
       openingEstimated: "Shares from before the movements: their cost is estimated from what the bank reports.",
       notSynced: "This position's movements didn't come in the last sync: a sale may be missing.",
@@ -500,15 +493,15 @@ export const en: Strings = {
 
   goals: {
     title: "Savings goals",
-    hint: "How much each goal has, from today's balance of the linked account or position, and how much to save per month until the date.",
+    hint: "How much each goal has, adding up the accounts and positions it is kept in. With a date, how much to save per month; with none, or after it, a level to keep.",
     add: "New goal",
     perMonth: (v: string) => `Save ${v} per month`,
     done: "Goal reached",
-    late: (v: string) => `Past due, ${v} to go`,
+    below: (v: string) => `${v} to go`,
     savedOf: (saved: string, target: string) => `${saved} of ${target}`,
     until: (date: string) => `by ${date}`,
-    unlinked: "The linked account or position no longer exists. Edit the goal to pick another.",
-    shared: "Another goal uses the same balance: it counts in full in both.",
+    unlinked: "An account or position of this goal no longer exists. Edit the goal to fix the list.",
+    shared: "Another goal uses one of the same balances: it counts in full in both.",
   },
 
   recurring: {
@@ -949,10 +942,11 @@ export const en: Strings = {
       namePlaceholder: "E.g. Emergency fund",
       target: "Goal amount",
       date: "Goal date",
+      dateDesc: "Optional. With none, or after it, the goal becomes a level to keep.",
       link: "Saved in",
-      linkDesc: "Progress is today's balance of this account or position.",
+      linkDesc: "Progress adds up today's balance of what you mark.",
       assetOption: (name: string) => `Position: ${name}`,
-      noLink: "Add an account or a position first.",
+      noLink: "Mark at least one account or position.",
     },
     asset: {
       newTitle: "New position",
@@ -1094,7 +1088,7 @@ export const en: Strings = {
       "Fetches the dividends, JCP and income announced for your positions with a B3 ticker from the B3 website (sistemaswebb3-listados.b3.com.br). " +
       "Only the four letters of each ticker are sent (PETR for PETR4), no quantities or amounts.",
     assistantTitle: "AI assistant",
-    assistantIntro: "Optional and off by default. When on, your questions and the results of Trimly's math (balances, totals by category, positions) go to api.anthropic.com, with your own key and at your cost. The whole ledger is never sent, and conversations aren't saved.",
+    assistantIntro: "Optional and off by default. When on, your questions and the results of Trimly's math (balances, totals by category, positions) go to api.anthropic.com, with your own key and at your cost. The whole ledger is never sent. Conversations stay encrypted on this device, outside the vault.",
     assistantKey: "Anthropic API key",
     assistantKeyDesc: "Created at console.anthropic.com. Kept inside the encrypted ledger.",
     assistantModel: "Model",

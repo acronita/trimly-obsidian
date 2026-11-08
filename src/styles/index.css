@@ -1685,6 +1685,8 @@ input.trimly-amount-input:focus {
 }
 
 .trimly-chat-message {
+  user-select: text;
+  -webkit-user-select: text;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font-size: var(--font-ui-small);
@@ -1725,5 +1727,13 @@ input.trimly-amount-input:focus {
 .trimly-chat-form textarea {
   flex: 1;
   min-width: 0;
+  height: var(--trimly-chat-height, auto);
+  max-height: 40vh;
   resize: vertical;
+}
+
+/* the period's label holds a date: it wraps instead of cutting it */
+.trimly-perf-table.is-bench .trimly-perf-label {
+  white-space: normal;
+  overflow: visible;
 }

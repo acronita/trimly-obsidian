@@ -25,6 +25,22 @@ export class EncryptedStore {
 
   constructor(private app: App, private folder: () => string) {}
 
+  /** Encrypt text under the ledger's key, for what is kept on the device instead of in the vault. */
+  async seal(text: string): Promise<string> {
+    if (!this.key) throw new Error("locked");
+    return encryptText(text, this.key);
+  }
+
+  /** Decrypt what `seal` wrote; null when it can't be read, as after changing the passphrase. */
+  async unseal(text: string, passphrase: string): Promise<string | null> {
+    try {
+      const env = parseEnvelope(text);
+      return await decryptEnvelope(env, await keyForEnvelope(env, passphrase, this.key));
+    } catch {
+      return null;
+    }
+  }
+
   get path(): string {
     return normalizePath(`${this.folder() || "Trimly"}/${LEDGER_FILE}`);
   }

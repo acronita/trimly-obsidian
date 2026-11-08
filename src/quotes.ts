@@ -49,19 +49,35 @@ function toQuote(q: QuoteData): Quote {
   return out;
 }
 
+/** Words every fund's name has, before or after the manager's. */
+const FUND_WORDS = /^(FII|FI|FIC|FDO|FUNDO|FUNDOS|DE|DO|DA|EM|INV|INVEST|INVESTIMENTO|INVESTIMENTOS|IMOB|IMOBILIARIO|IMOBILIARIOS|RESPONSABILIDADE|LIMITADA|LTDA|CLASSE|UNICA)$/;
+
+/** The manager in a fund's own name: "KINEA RENDIMENTOS IMOBILIÁRIOS FDO INV IMOB" is Kinea's. Null for a bare ticker. */
+export function fundManager(name: string | undefined): string | null {
+  if (!name) return null;
+  const words = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+  const first = words.find((w) => !FUND_WORDS.test(w));
+  if (!first || words.length < 2 || TICKER.test(first)) return null;
+  return first.length <= 3 ? first : first[0] + first.slice(1).toLowerCase();
+}
+
+const MANAGED: Asset["assetClass"][] = ["reit", "fund", "etf", "retirement"];
+
 /**
  * Institution to show for a position: the one the bank or the user set; else
  * the company or fund name from its quote (`via: "quote"`); else, for Tesouro
- * Direto, its issuer (`via: "issuer"`); else null. Display only: the stored
- * institution is never replaced.
+ * Direto, its issuer (`via: "issuer"`); else, for a fund, the manager in its
+ * name (`via: "name"`); else null. Display only: the stored institution is
+ * never replaced.
  */
 export function institutionOf(
-  a: Pick<Asset, "institution" | "quote" | "assetClass">
-): { name: string; via?: "quote" | "issuer" } | null {
+  a: Pick<Asset, "institution" | "quote" | "assetClass" | "name" | "pluggyName">
+): { name: string; via?: "quote" | "issuer" | "name" } | null {
   if (a.institution) return { name: a.institution };
   if (a.quote?.longName) return { name: a.quote.longName, via: "quote" };
   if (a.assetClass === "treasury") return { name: "Tesouro Nacional", via: "issuer" };
-  return null;
+  const manager = MANAGED.includes(a.assetClass) ? (fundManager(a.pluggyName) ?? fundManager(a.name)) : null;
+  return manager ? { name: manager, via: "name" } : null;
 }
 
 /** Average price paid per share, in cents; null without quantity or cost. */

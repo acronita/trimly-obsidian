@@ -1,7 +1,7 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, MovementModal, ObligationModal, PortfolioModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, MovementModal, ObligationModal, RecurringModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   ASSET_CLASS_COLORS,
@@ -21,7 +21,6 @@ import {
   MovementType,
   Obligation,
   ObligationKind,
-  Portfolio,
   Recurring,
   SavingsGoal,
   Transaction,
@@ -52,7 +51,6 @@ import {
   centsToInput,
   fixedMonthlyIncome,
   goalProgress,
-  mainAccount,
   monthPlan,
   movementFlow,
   monthOf,
@@ -86,14 +84,10 @@ import {
   settleObligation,
   unsettleObligation,
   windowStart,
-  portfolioLedger,
   removeCategory,
   removeDebt,
   removeGoal,
-  removePortfolio,
   saveDebt,
-  savePortfolio,
-  setPortfolioTarget,
   removeRecurring,
   removeManualAsset,
   removeManualMovement,
@@ -111,11 +105,13 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
-import { NEWS_MAX_DAYS, PORTFOLIO_MAX_DAYS, newsForTickers, recentItems } from "./feeds";
+import { NEWS_MAX_DAYS, PORTFOLIO_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, recentItems } from "./feeds";
+import { fetchArticle, fetchFeeds } from "./feeds-fetch";
 import type { FeedItem } from "./feeds";
 import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
-import type { AssistantKind, ChatMessage, ToolCall } from "./assistant";
+import type { AssistantKind } from "./assistant";
 import { sendToClaude } from "./assistant-fetch";
+import type { SavedChat } from "./chat-store";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
 import { REPORT_PRESETS, buildReport, changePct, lastYearRange, presetRange, previousRange, seriesKeys } from "./reports";
 import type { ReportFilter, ReportPreset } from "./reports";
@@ -128,23 +124,25 @@ export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
 
 type Mode = "accounts" | "investments";
 
-interface Chat {
-  /** what goes to the API */
-  messages: ChatMessage[];
-  /** what the user sees */
-  log: ({ role: "user" | "assistant" | "notice"; text: string } | { role: "tool"; calls: ToolCall[] })[];
-  tokens: number;
-  busy: boolean;
-}
-
-const newChat = (): Chat => ({ messages: [], log: [], tokens: 0, busy: false });
-
 /** Set (or, at 0, clear) a category's limit in `month`'s plan. */
 function setLimit(l: Ledger, month: string, categoryId: string, cents: number) {
   editBudget(l, month, (b) => {
     b.budgets = b.budgets.filter((x) => x.categoryId !== categoryId);
     if (cents > 0) b.budgets.push({ categoryId, limit: cents });
   });
+}
+
+/** The average price the user typed for a position the bank gives no cost for; 0 clears it. */
+function setTypedCost(l: Ledger, assetId: string, averageCents: number) {
+  const a = l.investments.assets.find((x) => x.id === assetId);
+  if (!a?.quantity) return;
+  if (averageCents > 0) {
+    a.invested = Math.round(averageCents * a.quantity);
+    a.costEdited = true;
+  } else {
+    delete a.invested;
+    delete a.costEdited;
+  }
 }
 
 type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "news" | "reports" | "assistant-accounts" | "assistant-investments";
@@ -233,14 +231,14 @@ export class TrimlyView extends ItemView {
   private movementFilter: MovementFilter = { assetId: "", type: "", allTime: false };
   /** amount typed in the Targets tab to plan a contribution, in cents; not saved */
   private contribution = 0;
-  /** account picked in the balance forecast; null opens on the main one */
-  private forecastAccount: string | null = null;
-  /** the assistants' conversations: in memory only, gone when locked or closed */
-  private chats: Record<AssistantKind, Chat> = { accounts: newChat(), investments: newChat() };
+  /** the assistants' conversations once unlocked; null until loaded and after locking */
+  private chats: SavedChat[] | null = null;
+  private chatsLoading = false;
+  /** the conversation open in each assistant; none = a new one */
+  private openChat: Partial<Record<AssistantKind, string>> = {};
+  private chatBusy = false;
   /** what-if extra per month typed on each debt; kept while the view is open, never saved */
   private debtExtra = new Map<string, number>();
-  /** portfolio the Targets tab is on; "" = the main one */
-  private portfolioId = "";
   /** what was typed in the calculators, by field; kept while the view is open, never saved */
   private calcValues = new Map<string, string>();
   /** what the reports tab is showing; kept while the view is open */
@@ -283,7 +281,8 @@ export class TrimlyView extends ItemView {
     const ledger = this.plugin.ledger;
     if (!ledger) {
       // a conversation holds financial data: it doesn't outlive the lock
-      this.chats = { accounts: newChat(), investments: newChat() };
+      this.chats = null;
+      this.openChat = {};
       return this.renderLocked(root);
     }
 
@@ -569,7 +568,9 @@ export class TrimlyView extends ItemView {
     for (const tab of TABS[this.mode]) {
       const el = tabs.createEl("button", { cls: "trimly-tab" });
       setIcon(el.createSpan("trimly-tab-icon"), tab.icon);
-      el.createSpan({ text: t.tabs[tab.label] });
+      // the assistant's tab is the icon alone
+      if (tab.label === "assistant") el.setAttr("aria-label", t.tabs.assistant);
+      else el.createSpan({ text: t.tabs[tab.label] });
       if (tab.id === this.tabs[this.mode]) el.addClass("is-active");
       el.addEventListener("click", () => this.goTab(tab.id));
     }
@@ -1202,23 +1203,13 @@ export class TrimlyView extends ItemView {
     }
   }
 
-  /** Where one account's balance is heading: the end of the period, its lowest point, and what moves it. */
+  /** Where the balance of all accounts is heading: the end of the period, its lowest point, and what moves it. */
   private renderBalanceForecast(body: HTMLElement, ledger: Ledger) {
-    const options = ledger.accounts.filter((a) => a.type !== "credit" && !a.archived);
-    const account = options.find((a) => a.id === this.forecastAccount) ?? mainAccount(ledger);
-    if (!account) return;
-    const f = balanceForecast(ledger, account.id, todayISO());
-    const money = (cents: number) => `${cents < 0 ? "−" : ""}${this.money(Math.abs(cents), account.currency)}`;
+    if (!ledger.accounts.some((a) => a.type !== "credit" && !a.archived)) return;
+    const f = balanceForecast(ledger, todayISO());
+    const money = (cents: number) => `${cents < 0 ? "−" : ""}${this.money(Math.abs(cents))}`;
 
     const card = this.card(body, t.forecast.title);
-    const select = card.createEl("select", { cls: "dropdown", attr: { "aria-label": t.forecast.account } });
-    for (const a of options) select.createEl("option", { value: a.id, text: a.name });
-    select.value = account.id;
-    select.addEventListener("change", () => {
-      this.forecastAccount = select.value;
-      this.render();
-    });
-
     card.createDiv({ cls: `trimly-tile-value ${f.end < 0 ? "is-expense" : ""}`, text: t.forecast.endIn(FORECAST_DAYS, money(f.end)) });
     card.createDiv({
       cls: `trimly-muted ${f.negativeOn ? "is-expense" : ""}`,
@@ -1245,7 +1236,7 @@ export class TrimlyView extends ItemView {
       main.createDiv({ cls: "trimly-row-title", text: e.description });
       main.createDiv({ cls: "trimly-row-sub", text: e.projected ? `${this.shortDate(e.date)} · ${t.forecast.openBill}` : this.shortDate(e.date) });
       const amounts = row.createDiv();
-      amounts.createDiv({ cls: `trimly-amount ${e.amount < 0 ? "is-expense" : "is-income"}`, text: `${e.amount < 0 ? "−" : "+"}${this.money(Math.abs(e.amount), account.currency)}` });
+      amounts.createDiv({ cls: `trimly-amount ${e.amount < 0 ? "is-expense" : "is-income"}`, text: `${e.amount < 0 ? "−" : "+"}${this.money(Math.abs(e.amount))}` });
       amounts.createDiv({ cls: "trimly-amount-sub", text: money(e.balance) });
     }
     if (f.unpriced.length) card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.forecast.unpriced([...new Set(f.unpriced)].join(", ")) });
@@ -1536,30 +1527,29 @@ export class TrimlyView extends ItemView {
     }
   }
 
-  /** Savings goals, soonest first: they follow today's balances, whatever month is being browsed. */
+  /** Savings goals, those with a date first: they follow today's balances, whatever month is being browsed. */
   private renderGoals(body: HTMLElement, ledger: Ledger) {
     body.createDiv({ cls: "trimly-section-title", text: t.goals.title });
     const bar = body.createDiv("trimly-section-bar");
     bar.createDiv({ cls: "trimly-muted", text: t.goals.hint });
     const grid = body.createDiv("trimly-tiles trimly-tiles-3");
     const today = todayISO();
-    const goals = [...(ledger.goals ?? [])].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const goals = [...(ledger.goals ?? [])].sort((a, b) => (a.date ?? "9999") < (b.date ?? "9999") ? -1 : 1);
     for (const g of goals) {
       const p = goalProgress(ledger, g, today);
-      const color = p.status === "late" ? "var(--trimly-expense)" : "var(--interactive-accent)";
       const tile = grid.createDiv("trimly-tile is-clickable");
       const top = tile.createDiv("trimly-tile-top");
-      this.iconTile(top, "piggy-bank", color);
+      this.iconTile(top, "piggy-bank", "var(--interactive-accent)");
       top.createDiv({ cls: "trimly-tile-tag", text: `${Math.min(100, Math.floor((p.saved / g.target) * 100))}%` });
       tile.createDiv({ cls: "trimly-tile-name", text: g.name });
       tile.createDiv({
-        cls: `trimly-tile-value ${p.status === "late" ? "is-expense" : ""}`,
-        text: p.status === "done" ? t.goals.done : p.status === "late" ? t.goals.late(this.money(p.left)) : t.goals.perMonth(this.money(p.monthly)),
+        cls: "trimly-tile-value",
+        text: p.status === "done" ? t.goals.done : p.status === "below" ? t.goals.below(this.money(p.left)) : t.goals.perMonth(this.money(p.monthly)),
       });
-      this.progress(tile, Math.min(p.saved, g.target), g.target, color, false);
+      this.progress(tile, Math.min(p.saved, g.target), g.target, "var(--interactive-accent)", false);
       const foot = tile.createDiv("trimly-tile-foot is-split");
       foot.createSpan({ cls: "trimly-muted", text: t.goals.savedOf(this.money(p.saved), this.money(g.target)) });
-      foot.createSpan({ cls: "trimly-muted", text: t.goals.until(this.fmt({ month: "short", year: "numeric" }, this.parseDate(g.date))) });
+      if (g.date) foot.createSpan({ cls: "trimly-muted", text: t.goals.until(this.fmt({ month: "short", year: "numeric" }, this.parseDate(g.date))) });
       if (!p.linked) tile.createDiv({ cls: "trimly-muted is-expense", text: t.goals.unlinked });
       else if (p.shared) tile.createDiv({ cls: "trimly-muted", text: t.goals.shared });
       tile.addEventListener("click", () => this.editGoal(g));
@@ -2148,7 +2138,6 @@ export class TrimlyView extends ItemView {
     new AssetModal(
       this.app,
       existing,
-      ledger.investments.portfolios ?? [],
       (asset, toConnection) =>
         void this.plugin.mutate((l) => {
           saveAsset(l, asset, todayISO());
@@ -2899,16 +2888,46 @@ export class TrimlyView extends ItemView {
   private renderAssistant(body: HTMLElement, ledger: Ledger, kind: AssistantKind) {
     const a = t.assistant;
     if (!ledger.ai) return this.empty(body, "message-circle", a.off);
-    const chat = this.chats[kind];
-    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: kind === "accounts" ? a.hintAccounts : a.hintInvestments });
     if (this.plugin.settings.hideValues) {
       // answers are full of amounts that can't be masked one by one
       body.createDiv({ cls: "trimly-muted", text: a.hidden });
       return;
     }
+    if (this.chats === null) {
+      if (!this.chatsLoading) void this.loadChats();
+      body.createDiv({ cls: "trimly-muted", text: t.news.loading });
+      return;
+    }
+    const mine = this.chats.filter((c) => c.kind === kind).sort((x, y) => (x.updatedAt < y.updatedAt ? 1 : -1));
+    const chat = mine.find((c) => c.id === this.openChat[kind]);
+
+    const bar = body.createDiv("trimly-filters");
+    if (mine.length) {
+      const select = bar.createEl("select", { cls: "dropdown", attr: { "aria-label": a.conversations } });
+      select.createEl("option", { value: "", text: a.newChat });
+      for (const c of mine) select.createEl("option", { value: c.id, text: c.title });
+      select.value = chat?.id ?? "";
+      select.addEventListener("change", () => {
+        if (select.value) this.openChat[kind] = select.value;
+        else delete this.openChat[kind];
+        this.render();
+      });
+    }
+    if (chat) {
+      bar.createEl("button", { text: a.delete }).addEventListener("click", () => {
+        new ConfirmModal(this.app, t.common.deleteQuoted(chat.title), t.common.delete, () => {
+          this.chats = (this.chats ?? []).filter((c) => c.id !== chat.id);
+          delete this.openChat[kind];
+          void this.saveChats();
+          this.render();
+        }).open();
+      });
+    }
+    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: kind === "accounts" ? a.hintAccounts : a.hintInvestments });
+
     const card = body.createDiv("trimly-card trimly-chat");
-    if (chat.log.length === 0) card.createDiv({ cls: "trimly-muted", text: a.empty });
-    for (const entry of chat.log) {
+    if (!chat) card.createDiv({ cls: "trimly-muted", text: a.empty });
+    for (const entry of chat?.log ?? []) {
       if (entry.role === "tool") {
         for (const call of entry.calls) {
           const details = card.createEl("details", { cls: "trimly-chat-tool" });
@@ -2920,15 +2939,20 @@ export class TrimlyView extends ItemView {
         card.createDiv({ cls: `trimly-chat-message is-${entry.role}`, text: entry.text });
       }
     }
-    if (chat.busy) card.createDiv({ cls: "trimly-muted", text: a.thinking });
+    if (this.chatBusy) card.createDiv({ cls: "trimly-muted", text: a.thinking });
 
     const form = body.createDiv("trimly-chat-form");
     const input = form.createEl("textarea", { attr: { placeholder: a.placeholder, rows: "2", "aria-label": a.placeholder } });
+    input.addEventListener("input", () => {
+      // grows with the text: measured from its natural height, so it also shrinks
+      input.setCssProps({ "--trimly-chat-height": "auto" });
+      input.setCssProps({ "--trimly-chat-height": `${input.scrollHeight}px` });
+    });
     const send = form.createEl("button", { cls: "mod-cta", text: a.send });
-    send.disabled = chat.busy;
+    send.disabled = this.chatBusy;
     const submit = () => {
       const question = input.value.trim();
-      if (question && !chat.busy) void this.askChat(kind, question);
+      if (question && !this.chatBusy) void this.askChat(kind, chat, question);
     };
     send.addEventListener("click", submit);
     input.addEventListener("keydown", (e) => {
@@ -2937,23 +2961,37 @@ export class TrimlyView extends ItemView {
         submit();
       }
     });
-    const foot = body.createDiv("trimly-section-bar");
-    foot.createDiv({ cls: "trimly-muted", text: a.usage(Math.round((chat.tokens / MAX_CONVERSATION_TOKENS) * 100)) });
-    if (chat.log.length) {
-      foot.createEl("button", { text: a.clear }).addEventListener("click", () => {
-        this.chats[kind] = newChat();
-        this.render();
-      });
+    if (chat) body.createDiv({ cls: "trimly-muted", text: a.usage(Math.round((chat.tokens / MAX_CONVERSATION_TOKENS) * 100)) });
+  }
+
+  private async loadChats() {
+    this.chatsLoading = true;
+    try {
+      this.chats = await this.plugin.chatStore.load();
+    } finally {
+      this.chatsLoading = false;
+      this.render();
     }
   }
 
-  private async askChat(kind: AssistantKind, question: string) {
+  private async saveChats() {
+    try {
+      await this.plugin.chatStore.save(this.chats ?? []);
+    } catch (e) {
+      new Notice(t.assistant.saveFailed((e as Error).message));
+    }
+  }
+
+  private async askChat(kind: AssistantKind, existing: SavedChat | undefined, question: string) {
     const ledger = this.plugin.ledger;
-    if (!ledger?.ai) return;
-    const chat = this.chats[kind];
+    if (!ledger?.ai || !this.chats) return;
+    const chat: SavedChat = existing ?? { id: newId(), kind, title: question.slice(0, 60), updatedAt: new Date().toISOString(), messages: [], log: [], tokens: 0 };
+    if (!existing) this.chats.push(chat);
+    this.openChat[kind] = chat.id;
     chat.log.push({ role: "user", text: question });
-    chat.busy = true;
+    this.chatBusy = true;
     this.render();
+    const { feeds, disabledFeeds, language } = this.plugin.settings;
     try {
       const turn = await askAssistant({
         send: sendToClaude,
@@ -2961,10 +2999,11 @@ export class TrimlyView extends ItemView {
         kind,
         ledger,
         today: todayISO(),
-        language: this.plugin.settings.language,
+        language,
         history: chat.messages,
         tokensUsed: chat.tokens,
         question,
+        web: feeds ? { portfolios: async () => (await fetchFeeds(PORTFOLIO_SOURCES.filter((s) => !disabledFeeds.includes(s.id)))).items, article: fetchArticle } : undefined,
       });
       chat.messages = turn.messages;
       chat.tokens += turn.tokens;
@@ -2974,7 +3013,9 @@ export class TrimlyView extends ItemView {
     } catch (e) {
       chat.log.push({ role: "notice", text: (e as Error).message });
     } finally {
-      chat.busy = false;
+      chat.updatedAt = new Date().toISOString();
+      this.chatBusy = false;
+      await this.saveChats();
       this.render();
     }
   }
@@ -2985,7 +3026,11 @@ export class TrimlyView extends ItemView {
   private feedRow(parent: HTMLElement, item: FeedItem) {
     const row = parent.createDiv("trimly-row");
     const main = row.createDiv("trimly-row-main");
-    main.createEl("a", { cls: "trimly-row-title", text: item.title, href: item.link });
+    // window.open and not the link itself: Surfing takes it over to open a tab here, and without it the browser opens
+    main.createEl("a", { cls: "trimly-row-title", text: item.title, href: item.link }).addEventListener("click", (e) => {
+      e.preventDefault();
+      window.open(item.link);
+    });
     main.createDiv({ cls: "trimly-row-sub", text: `${this.longDate(item.date)} · ${item.source}` });
   }
 
@@ -3087,7 +3132,7 @@ export class TrimlyView extends ItemView {
         { key: "withdrawal", label: c.independence.withdrawal, initial: "4" },
         { key: "wealth", label: c.wealth, money: true, initial: real.wealth },
         { key: "monthly", label: c.contribution, money: true, initial: real.contribution },
-        { key: "rate", label: c.realRate },
+        { key: "rate", label: c.realRate, initial: "5" },
       ],
       (get) => {
         const income = get("income");
@@ -3096,7 +3141,10 @@ export class TrimlyView extends ItemView {
         const needed = wealthForIncome(income, withdrawal);
         const lines = [{ label: c.independence.needed, value: this.money(needed), main: true }];
         const rate = get("rate");
-        if (rate !== null) lines.push({ label: c.independence.time, value: duration(monthsToReach(get("wealth") ?? 0, get("monthly") ?? 0, rate, needed)), main: false });
+        const time = (r: number) => duration(monthsToReach(get("wealth") ?? 0, get("monthly") ?? 0, r, needed));
+        if (rate !== null) lines.push({ label: c.independence.time, value: time(rate), main: false });
+        // the rate is a guess, so show how much the answer depends on it
+        for (const r of [3, 7].filter((x) => x !== rate)) lines.push({ label: c.independence.timeAt(this.pct(r, 0)), value: time(r), main: false });
         lines.push({ label: c.independence.covered, value: this.pct((real.passiveIncome / income) * 100), main: false });
         return lines;
       },
@@ -3257,13 +3305,18 @@ export class TrimlyView extends ItemView {
     const count = (n: number) => (this.plugin.settings.hideValues ? "••••" : new Intl.NumberFormat(this.plugin.locale(), { maximumFractionDigits: 6 }).format(n));
     const held = positions.filter((p) => p.quantity > 0).sort((x, y) => (label(x.asset) < label(y.asset) ? -1 : 1));
     if (held.length) {
-      const el = table(this.card(body, t.tax.averageTitle), [t.tax.position, t.tax.quantity, t.tax.average, t.tax.cost]);
+      const averageCard = this.card(body, t.tax.averageTitle);
+      if (held.some((p) => p.asset.pluggyId)) averageCard.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.tax.averageHint });
+      const el = table(averageCard, [t.tax.position, t.tax.quantity, t.tax.average, t.tax.cost]);
       for (const p of held) {
         const row = el.createDiv("trimly-perf-row");
         row.createDiv({ cls: "trimly-perf-label", text: label(p.asset) });
         row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: count(p.quantity) });
-        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(Math.round(p.cost / p.quantity)) });
-        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(p.cost) });
+        const average = row.createDiv("trimly-perf-cell trimly-amount");
+        const known = p.costKnown ? Math.round(p.cost / p.quantity) : 0;
+        if (p.asset.pluggyId) this.limitInput(average, known, t.tax.typeAverage, (l, cents) => setTypedCost(l, p.asset.id, cents));
+        else average.setText(p.costKnown ? this.money(known) : "—");
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: p.costKnown ? this.money(p.cost) : "—" });
       }
     }
 
@@ -3282,8 +3335,8 @@ export class TrimlyView extends ItemView {
         const row = el.createDiv("trimly-perf-row");
         row.createDiv({ cls: "trimly-perf-label", text: code ? `${code} · ${label(p.asset)}` : label(p.asset) });
         row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: count(end.quantity) });
-        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(start.cost) });
-        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(end.cost) });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: p.costKnown ? this.money(start.cost) : "—" });
+        row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: p.costKnown ? this.money(end.cost) : "—" });
       }
       card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.tax.assetsNote });
     }
@@ -3302,50 +3355,8 @@ export class TrimlyView extends ItemView {
     }
   }
 
-  /** Which portfolio the Targets tab is on, and the way to add or edit them. */
-  private portfolioBar(body: HTMLElement, full: Ledger) {
-    const portfolios = full.investments.portfolios ?? [];
-    const bar = body.createDiv("trimly-filters");
-    if (portfolios.length) {
-      const select = bar.createEl("select", { cls: "dropdown", attr: { "aria-label": t.portfolios.pick } });
-      select.createEl("option", { value: "", text: t.portfolios.main });
-      for (const p of portfolios) select.createEl("option", { value: p.id, text: p.name });
-      select.value = this.portfolioId;
-      select.addEventListener("change", () => {
-        this.portfolioId = select.value;
-        this.render();
-      });
-      const current = portfolios.find((p) => p.id === this.portfolioId);
-      if (current) bar.createEl("button", { text: t.portfolios.edit }).addEventListener("click", () => this.editPortfolio(current));
-    }
-    bar.createEl("button", { text: t.portfolios.add }).addEventListener("click", () => this.editPortfolio(null));
-  }
-
-  private editPortfolio(existing: Portfolio | null) {
-    new PortfolioModal(
-      this.app,
-      existing,
-      (name) => {
-        const portfolio: Portfolio = existing ? { ...existing, name } : { id: newId(), name, targets: [] };
-        this.portfolioId = portfolio.id;
-        void this.plugin.mutate((l) => savePortfolio(l, portfolio));
-      },
-      existing
-        ? () =>
-            new ConfirmModal(this.app, t.portfolios.deleteConfirm(existing.name), t.common.delete, () => {
-              this.portfolioId = "";
-              void this.plugin.mutate((l) => removePortfolio(l, existing.id));
-            }).open()
-        : null
-    ).open();
-  }
-
-  private renderTargets(body: HTMLElement, full: Ledger) {
-    if (full.investments.assets.length === 0) return this.emptyInvestments(body);
-    if (!full.investments.portfolios?.some((p) => p.id === this.portfolioId)) this.portfolioId = "";
-    this.portfolioBar(body, full);
-    const ledger = portfolioLedger(full, this.portfolioId);
-    if (openAssets(ledger).length === 0) body.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.portfolios.empty });
+  private renderTargets(body: HTMLElement, ledger: Ledger) {
+    if (ledger.investments.assets.length === 0) return this.emptyInvestments(body);
     const targets = ledger.investments.targets;
     const sum = targets.reduce((s, t) => s + t.pct, 0);
     const lines = rebalance(ledger, this.contribution);
@@ -3503,7 +3514,10 @@ export class TrimlyView extends ItemView {
       new Notice(t.targets.invalidPct);
       return;
     }
-    void this.plugin.mutate((l) => setPortfolioTarget(l, this.portfolioId, c, v));
+    void this.plugin.mutate((l) => {
+      l.investments.targets = l.investments.targets.filter((x) => x.assetClass !== c);
+      if (v > 0) l.investments.targets.push({ assetClass: c, pct: v });
+    });
   }
 
   private openMovements(type: MovementType) {
@@ -3545,22 +3559,6 @@ export class TrimlyView extends ItemView {
     const h = head.createDiv();
     h.createDiv({ cls: "trimly-eyebrow", text: t.inv.portfolio });
     h.createDiv({ cls: "trimly-page-value", text: this.money(total) });
-
-    const portfolios = ledger.investments.portfolios ?? [];
-    if (portfolios.length) {
-      const card = this.card(body, t.portfolios.title);
-      card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.portfolios.hint });
-      for (const { id, name } of [{ id: "", name: t.portfolios.main }, ...portfolios]) {
-        const value = portfolioValue(portfolioLedger(ledger, id));
-        const row = card.createDiv("trimly-row is-clickable");
-        row.createDiv("trimly-row-main").createDiv({ cls: "trimly-row-title", text: name });
-        row.createDiv({ cls: "trimly-amount", text: `${this.money(value)}${total > 0 ? ` · ${this.pct((value / total) * 100, 0)}` : ""}` });
-        row.addEventListener("click", () => {
-          this.portfolioId = id;
-          this.goTab("targets");
-        });
-      }
-    }
 
     const byClass = new Map<AssetClass, Asset[]>();
     for (const a of assets) byClass.set(a.assetClass, [...(byClass.get(a.assetClass) ?? []), a]);

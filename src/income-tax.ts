@@ -54,6 +54,8 @@ export interface TaxPosition {
   /** today, after every movement */
   quantity: number;
   cost: number;
+  /** false when nothing says what the shares cost, so `cost` means nothing */
+  costKnown: boolean;
   /** quantity and cost at the end of `date` */
   at: (date: string) => { quantity: number; cost: number };
 }
@@ -133,10 +135,10 @@ export function taxPosition(asset: Asset, kind: TaxKind, allMovements: Movement[
       const put = trades.filter(isIn).reduce((s, m) => s + m.amount, 0);
       const taken = outs.reduce((s, m) => s + (m.cost ?? 0), 0);
       openingCost = Math.max(0, asset.invested - put + taken);
-      if (asset.pluggyId && trades.length) issues.add("openingEstimated");
+      if (asset.pluggyId && trades.length && !asset.costEdited) issues.add("openingEstimated");
     } else if (asset.invested && asset.quantity) {
       openingCost = (opening * asset.invested) / asset.quantity;
-      issues.add("openingEstimated");
+      if (!asset.costEdited) issues.add("openingEstimated");
     } else {
       issues.add("missingCost");
       reliable = false;
@@ -169,7 +171,7 @@ export function taxPosition(asset: Asset, kind: TaxKind, allMovements: Movement[
     return { quantity, cost: Math.round(cost) };
   };
   const now = replay(undefined, true);
-  return { asset, kind, sales, issues: [...issues], quantity: now.quantity, cost: now.cost, at: (date) => replay(date) };
+  return { asset, kind, sales, issues: [...issues], quantity: now.quantity, cost: now.cost, costKnown: !issues.has("missingCost") && reliable, at: (date) => replay(date) };
 }
 
 /** Every stock, BDR, ETF and FII position, closed ones included: their sales still count. */

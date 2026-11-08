@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { defaultLedger, newId, saveAsset } from "../src/ledger.ts";
 import type { Asset } from "../src/ledger.ts";
-import { applyQuotes, averagePrice, institutionOf, quoteTickers, tickerOf } from "../src/quotes.ts";
+import { applyQuotes, averagePrice, institutionOf, quoteTickers, tickerOf, fundManager } from "../src/quotes.ts";
 import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
 const asset = (extra: Partial<Asset>): Asset => ({ id: newId(), name: "x", assetClass: "stock", value: 0, updatedAt: "2026-10-01", ...extra });
@@ -86,4 +86,16 @@ test("a position without an institution is shown under its quoted company or fun
   // Tesouro Direto has no quote on the free plan, but its issuer is always the same
   assert.deepEqual(institutionOf({ assetClass: "treasury" }), { name: "Tesouro Nacional", via: "issuer" });
   assert.equal(institutionOf({ assetClass: "fund" }), null);
+});
+
+test("a fund with no institution shows the manager in its own name", () => {
+  const a = { assetClass: "reit" as const, name: "KNCR11", pluggyName: "KINEA RENDIMENTOS IMOBILIÁRIOS FDO INV IMOB -" };
+  assert.deepEqual(institutionOf(a), { name: "Kinea", via: "name" });
+  assert.equal(fundManager("XP MALLS FII"), "XP");
+  assert.equal(fundManager("FUNDO DE INVESTIMENTO IMOBILIARIO VINCI LOGISTICA"), "Vinci");
+});
+
+test("a bare ticker or a position that isn't a fund names no manager", () => {
+  assert.equal(fundManager("KNCR11"), null);
+  assert.equal(institutionOf({ assetClass: "fixed_income", name: "BANCO XYZ CDB" }), null);
 });

@@ -9,16 +9,19 @@ function position(extra: Partial<Asset> = {}): Asset {
   return { id: "cdb", name: "CDB", assetClass: "fixed_income", value: 300_00, updatedAt: TODAY, ...extra };
 }
 
-/** One savings account holding `balance` and one position. */
+/** One savings account holding `balance`, another with 100, and one position. */
 function setup(balance = 400_00): Ledger {
   const l = defaultLedger();
-  l.accounts = [{ id: "acc", name: "Poupança", type: "savings", openingBalance: balance }];
+  l.accounts = [
+    { id: "acc", name: "Poupança", type: "savings", openingBalance: balance },
+    { id: "other", name: "Corrente", type: "checking", openingBalance: 100_00 },
+  ];
   l.investments.assets = [position()];
   return l;
 }
 
 function goal(extra: Partial<SavingsGoal> = {}): SavingsGoal {
-  return { id: "trip", name: "Viagem", target: 1000_00, date: "2027-03-15", accountId: "acc", ...extra };
+  return { id: "trip", name: "Viagem", target: 1000_00, date: "2027-03-15", accountIds: ["acc"], assetIds: [], ...extra };
 }
 
 test("what to save per month spreads the rest over the months until the date, rounded up so the goal is reached", () => {
@@ -30,16 +33,21 @@ test("what to save per month spreads the rest over the months until the date, ro
   assert.equal(p.status, "active");
 });
 
+test("a goal kept in several places counts all of them together", () => {
+  const p = goalProgress(setup(), goal({ accountIds: ["acc", "other"], assetIds: ["cdb"] }), TODAY);
+  assert.equal(p.saved, 800_00);
+  assert.equal(p.linked, true);
+});
+
 test("a goal due this month still asks for the whole rest, not a division by zero", () => {
   const p = goalProgress(setup(), goal({ date: "2026-11-30" }), TODAY);
   assert.equal(p.monthly, 600_00);
   assert.equal(p.status, "active");
 });
 
-test("progress follows the linked position's current value", () => {
-  const p = goalProgress(setup(), goal({ accountId: undefined, assetId: "cdb" }), TODAY);
+test("progress follows a position's current value", () => {
+  const p = goalProgress(setup(), goal({ accountIds: [], assetIds: ["cdb"] }), TODAY);
   assert.equal(p.saved, 300_00);
-  assert.equal(p.linked, true);
 });
 
 test("a goal in the base currency counts a foreign account at the day's rate", () => {
@@ -49,41 +57,55 @@ test("a goal in the base currency counts a foreign account at the day's rate", (
   assert.equal(goalProgress(l, goal(), TODAY).saved, 500_00);
 });
 
-test("reaching the target is done, even past the date, and asks for nothing more", () => {
+test("reaching the target is done and asks for nothing more", () => {
   const p = goalProgress(setup(1200_00), goal({ date: "2026-01-01" }), TODAY);
   assert.equal(p.status, "done");
   assert.equal(p.left, 0);
   assert.equal(p.monthly, 0);
 });
 
-test("a date gone by without reaching the target is late, with no monthly amount left to plan", () => {
+test("a goal with no date is a level to keep: only how far from it, never a monthly amount", () => {
+  const { date: _date, ...undated } = goal();
+  const below = goalProgress(setup(), undated, TODAY);
+  assert.equal(below.status, "below");
+  assert.equal(below.left, 600_00);
+  assert.equal(below.monthly, 0);
+  assert.equal(goalProgress(setup(1000_00), undated, TODAY).status, "done");
+});
+
+test("after its date a goal becomes a level to keep, not something overdue", () => {
   const p = goalProgress(setup(), goal({ date: "2026-11-04" }), TODAY);
-  assert.equal(p.status, "late");
+  assert.equal(p.status, "below");
   assert.equal(p.left, 600_00);
   assert.equal(p.monthly, 0);
 });
 
-test("an overdrawn account counts as nothing saved, not as negative progress", () => {
-  const p = goalProgress(setup(-50_00), goal(), TODAY);
-  assert.equal(p.saved, 0);
-  assert.equal(p.left, 1000_00);
+test("spending from a reserve that had reached its goal shows what is missing again", () => {
+  const { date: _date, ...undated } = goal();
+  const l = setup(1000_00);
+  assert.equal(goalProgress(l, undated, TODAY).status, "done");
+  l.transactions = [{ id: "e", date: TODAY, type: "expense", amount: 200_00, accountId: "acc", description: "Emergência" }];
+  assert.equal(goalProgress(l, undated, TODAY).left, 200_00);
 });
 
-test("a deleted account or a closed position leaves the goal unlinked with nothing saved", () => {
+test("an overdrawn account adds nothing, and doesn't eat what the others hold", () => {
+  const p = goalProgress(setup(-50_00), goal({ accountIds: ["acc", "other"] }), TODAY);
+  assert.equal(p.saved, 100_00);
+});
+
+test("a deleted account or a closed position is flagged, and what remains still counts", () => {
   const l = setup();
   l.investments.assets[0].closed = true;
-  for (const g of [goal({ accountId: "gone" }), goal({ accountId: undefined, assetId: "cdb" })]) {
-    const p = goalProgress(l, g, TODAY);
-    assert.equal(p.linked, false);
-    assert.equal(p.saved, 0);
-  }
+  const p = goalProgress(l, goal({ accountIds: ["acc", "gone"], assetIds: ["cdb"] }), TODAY);
+  assert.equal(p.linked, false);
+  assert.equal(p.saved, 400_00);
 });
 
-test("two goals on the same account are flagged, since each counts the whole balance", () => {
+test("goals sharing any account or position are flagged, since each counts the whole balance", () => {
   const l = setup();
-  const trip = goal();
-  const other = goal({ id: "reserve", name: "Reserva" });
-  const elsewhere = goal({ id: "car", name: "Carro", accountId: undefined, assetId: "cdb" });
+  const trip = goal({ accountIds: ["acc", "other"] });
+  const other = goal({ id: "reserve", name: "Reserva", accountIds: ["other"] });
+  const elsewhere = goal({ id: "car", name: "Carro", accountIds: [], assetIds: ["cdb"] });
   saveGoal(l, trip);
   saveGoal(l, other);
   saveGoal(l, elsewhere);
@@ -101,6 +123,14 @@ test("saving edits a goal in place, removing the last one clears the field, and 
   assert.deepEqual(parseLedger(JSON.stringify(l)).goals, l.goals);
   removeGoal(l, "trip");
   assert.equal(l.goals, undefined);
+});
+
+test("a goal saved with one account or position opens as a list of one", () => {
+  const raw = { ...defaultLedger(), goals: [{ id: "a", name: "A", target: 1, date: TODAY, accountId: "acc" }, { id: "b", name: "B", target: 1, date: TODAY, assetId: "cdb" }] };
+  const goals = parseLedger(JSON.stringify(raw)).goals ?? [];
+  assert.deepEqual([goals[0].accountIds, goals[0].assetIds], [["acc"], []]);
+  assert.deepEqual([goals[1].accountIds, goals[1].assetIds], [[], ["cdb"]]);
+  assert.ok(!("accountId" in goals[0]));
 });
 
 test("a ledger from before goals loads without any", () => {

@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { parseRss } from "./feeds";
+import { articleText, isFeedSite, parseRss } from "./feeds";
 import type { FeedItem, FeedSource } from "./feeds";
 
 export interface FeedFetch {
@@ -22,4 +22,12 @@ export async function fetchFeeds(sources: FeedSource[]): Promise<FeedFetch> {
     })
   );
   return out;
+}
+
+/** One article from a site already read for the feeds, as plain text. */
+export async function fetchArticle(url: string): Promise<string> {
+  if (!isFeedSite(url)) throw new Error("only articles from the listed sources can be read");
+  const res = await requestUrl({ url, throw: false });
+  if (res.status >= 300) throw new Error(`HTTP ${res.status}`);
+  return articleText(res.text);
 }

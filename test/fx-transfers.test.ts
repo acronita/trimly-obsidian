@@ -47,13 +47,14 @@ test("a recurring transfer posts with what arrives on the other side", () => {
   assert.equal(accountBalance(l, "usd"), 19_00);
 });
 
-test("the forecast of the destination uses what was agreed, or the day's rate when there is none", () => {
+test("money arriving from outside the total counts at what was agreed, or the same amount when there is none", () => {
   const l = setup();
+  l.accounts[0].archived = true;
   const rule: Recurring = { id: "r", description: "Câmbio", type: "transfer", amount: 100_00, toAccountId: "usd", accountId: "brl", frequency: "monthly", startDate: "2026-11-10", nextDate: "2026-11-10", endDate: "2026-11-30" };
   l.recurring = [rule];
-  assert.equal(balanceForecast(l, "usd", TODAY).end, 20_00);
+  assert.equal(balanceForecast(l, TODAY).end, 100_00);
   rule.toAmount = 19_00;
-  assert.equal(balanceForecast(l, "usd", TODAY).end, 19_00);
+  assert.equal(balanceForecast(l, TODAY).end, 95_00);
 });
 
 test("what arrived survives a reload and appears in the export", () => {

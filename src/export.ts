@@ -69,12 +69,11 @@ export function transactionsCsv(ledger: Ledger, baseCurrency: string): string {
 export function positionsCsv(ledger: Ledger): string {
   const e = t.exportFile;
   return table(
-    [e.name, e.code, e.assetClass, e.portfolio, e.institution, e.quantity, e.invested, e.value, e.dueDate, e.closed],
+    [e.name, e.code, e.assetClass, e.institution, e.quantity, e.invested, e.value, e.dueDate, e.closed],
     ledger.investments.assets.map((a) => [
       textCell(a.name),
       textCell(a.code),
       textCell(t.labels.assetClass[a.assetClass]),
-      textCell(ledger.investments.portfolios?.find((p) => p.id === a.portfolioId)?.name ?? t.portfolios.main),
       textCell(a.institution),
       numberCell(a.quantity),
       moneyCell(a.invested),

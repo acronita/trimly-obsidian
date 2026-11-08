@@ -3,6 +3,7 @@ import { SYNC_HISTORY_DAYS, SYNC_WINDOW_DAYS, applyBankData } from "./bank-sync"
 import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { AI_DEFAULT_MODEL, AI_MODELS } from "./assistant";
+import { ChatStore } from "./chat-store";
 import { fetchProventos } from "./b3";
 import { ledgerJson, movementsCsv, positionsCsv, transactionsCsv } from "./export";
 import { fetchBenchmarks } from "./bcb";
@@ -123,6 +124,8 @@ export default class TrimlyPlugin extends Plugin {
   private proventoLoading = false;
   /** day a fetch of the Tesouro Direto prices was tried, whether or not it worked */
   private treasuryTriedOn = "";
+  /** the assistants' conversations, on this device and outside the vault */
+  chatStore!: ChatStore;
   private feedCache: Record<"portfolios" | "news", { day: string; data: FeedItem[] } | null> = { portfolios: null, news: null };
   private feedLoading = { portfolios: false, news: false };
   private feedFailedAt = { portfolios: 0, news: 0 };
@@ -141,6 +144,7 @@ export default class TrimlyPlugin extends Plugin {
     setLanguage(this.settings.language);
     this.passphrases = new PassphraseManager(this.app, () => this.settings.rememberPassphrase);
     this.store = new EncryptedStore(this.app, () => this.settings.folder);
+    this.chatStore = new ChatStore(this.app, this.store, () => this.passphrases.get());
 
     this.registerView(VIEW_TYPE_TRIMLY, (leaf) => new TrimlyView(leaf, this));
     this.addRibbonIcon("wallet", t.commands.ribbon, () => void this.openDashboard());

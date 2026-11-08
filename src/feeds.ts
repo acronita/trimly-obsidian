@@ -94,6 +94,25 @@ export function recentItems(items: FeedItem[], today: string, maxDays: number): 
     .sort((x, y) => (x.date < y.date ? 1 : x.date > y.date ? -1 : 0));
 }
 
+/** Only the sites Trimly already reads: the assistant can't be sent anywhere else. */
+export function isFeedSite(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    return protocol === "https:" && ALL_SOURCES.some((s) => new URL(s.url).hostname === hostname);
+  } catch {
+    return false;
+  }
+}
+
+/** Longer than this, an article costs more than it adds. */
+const MAX_ARTICLE_CHARS = 30_000;
+
+/** The readable text of a page. */
+export function articleText(html: string): string {
+  const body = html.replace(/<(script|style|nav|header|footer|aside|noscript)\b[\s\S]*?<\/\1>/gi, " ").replace(/<(\/p|br|\/h\d|\/li)\b[^>]*>/gi, " ");
+  return plainText(body).slice(0, MAX_ARTICLE_CHARS);
+}
+
 const tickerRoot = (ticker: string) => ticker.slice(0, 4);
 
 /** Items naming one of `tickers` in the title: any share class of the company counts (PETR3 for PETR4). */

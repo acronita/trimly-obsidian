@@ -335,3 +335,11 @@ test("a weight the user gave a synced position survives the next sync", () => {
   assert.equal(asset(l, "cdb").weight, 3);
   assert.equal(asset(l, "cdb").value, 1010_00);
 });
+
+test("a cost the user typed survives a sync that has none to report", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("cdb", { amountOriginal: 0 })], ["item-1"], "2026-10-24");
+  Object.assign(asset(l, "cdb"), { invested: 800_00, costEdited: true });
+  applyInvestments(l, [inv("cdb", { amountOriginal: 0, balance: 1010 })], ["item-1"], TODAY);
+  assert.equal(asset(l, "cdb").invested, 800_00);
+});

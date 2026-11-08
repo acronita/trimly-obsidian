@@ -171,7 +171,7 @@ function apply(asset: Asset, p: PluggyInvestment, today: string, itemInstitution
   asset.value = cents(p.balance) ?? 0;
   set("grossValue", cents(p.amount));
   // Pluggy reports 0 when it does not know the cost; 0 would show the whole value as profit
-  set("invested", cents(p.amountOriginal) || undefined);
+  if (!asset.costEdited) set("invested", cents(p.amountOriginal) || undefined);
   set("quantity", p.quantity ?? undefined);
   set("code", p.code);
   set("issuer", p.issuer);

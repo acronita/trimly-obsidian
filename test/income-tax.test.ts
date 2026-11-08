@@ -193,3 +193,16 @@ test("only stocks, BDRs, ETFs and FIIs are in, with a code only where it is conf
   assert.equal(assetCode("fii"), "07-03");
   assert.equal(assetCode("etf"), null);
 });
+
+test("with no cost known the position says so, instead of a cost of zero", () => {
+  const p = taxPosition(asset({ assetClass: "reit", code: "KNCR11", pluggyId: "x", movementsSynced: true, quantity: 10, invested: undefined }), "fii", []);
+  assert.equal(p.costKnown, false);
+  assert.ok(p.issues.includes("missingCost"));
+});
+
+test("an average price the user typed counts as the cost, with nothing left to check", () => {
+  const p = taxPosition(asset({ assetClass: "reit", code: "KNCR11", pluggyId: "x", movementsSynced: true, quantity: 10, invested: 1000_00, costEdited: true }), "fii", [mov("2026-03-05", "sell", 300_00, 2, { cost: undefined })]);
+  assert.equal(p.costKnown, true);
+  assert.equal(p.sales[0].gain, 300_00 - 2 * 100_00);
+  assert.ok(!p.issues.includes("openingEstimated"));
+});
