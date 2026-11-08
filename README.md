@@ -171,8 +171,10 @@ passphrase that never leaves your device.
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
 - The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle,
-  the benchmarks toggle, the proventos calendar toggle, the hide-values toggle and how obligation reminders are shown.
-- **Network:** Trimly makes no network requests unless you set up bank sync. With bank sync on, it
+  the benchmarks, proventos calendar, Tesouro Direto prices, news and AI assistants toggles, which news sources are off,
+  the hide-values toggle and how obligation reminders are shown.
+- **Network:** Bank sync, quotes and the AI assistants stay off until you set them up. The public data below (indices,
+  proventos, Tesouro Direto prices, news) is fetched by default, and each has its own switch in settings. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With
   investments that have history, the investments view also fetches the public CDI, IPCA and
@@ -190,7 +192,8 @@ passphrase that never leaves your device.
   `www.infomoney.com.br`, `www.seudinheiro.com` and `conteudos.xpi.com.br`, at most once a day, requesting only the feed's address:
   your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.
   With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
-  category, bill, recurring and future transaction names, positions) go to `api.anthropic.com` with your key, only when you ask something.
+  category, bill, recurring and future transaction names, goals and debts, positions, the portfolio's history and movements, income
+  and the tax estimate) go to `api.anthropic.com` with your key, only when you ask something; the key is stored inside the encrypted ledger.
   With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's

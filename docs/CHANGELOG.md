@@ -1,13 +1,19 @@
 # Changelog
 
+## Unreleased
+
+- 2026-11-08 — README's *Security model* catches up with the code: the full list of `data.json` toggles, public data
+  fetched by default instead of "no network requests", and everything the AI assistants' tools send, plus where the
+  key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
+  out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
+
 ## 1.0.0 — 2026-11-08
 
 - 2026-11-08 — First stable release: the ledger format and the plugin API are now considered stable, so a breaking
   change to either bumps MAJOR. No code changes against 0.39.0. First published release since 0.20.0, so it also brings
   everything from 0.21.0 to 0.39.0 below: savings goals, income tax for variable income, 60-day balance forecast, reports
-  over any period, asset weights inside each class, calculators, Tesouro Direto revaluation from open data, portfolios
-  with their own targets, json and csv export outside the vault, debt planning, transfers between currencies, recommended
-  portfolios, headlines for the positions held, optional AI assistants with read-only tools and history import from
+  over any period, asset weights inside each class, calculators, Tesouro Direto revaluation from open data, json and csv
+  export outside the vault, debt planning, transfers between currencies, recommended portfolios, headlines for the positions held, optional AI assistants with read-only tools and history import from
   spreadsheets. Why: requested by the owner after the test rounds. Files touched: `package.json`, `manifest.json`,
   `versions.json`, `docs/CHANGELOG.md`.
 - 2026-11-05 — New `docs/AI-ASSISTANT.md`: the research and proposed design for the roadmap's optional AI
