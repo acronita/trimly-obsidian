@@ -2394,7 +2394,7 @@ export class TrimlyView extends ItemView {
     this.renderPeriodsCard(row0, ledger, { label: t.inv.details, onClick: () => this.goTab("performance") });
 
     const row1 = body.createDiv("trimly-grid");
-    this.renderAllocationCard(row1, ledger, total);
+    this.renderAllocationCard(row1, ledger);
     const instCard = this.card(row1, t.inv.byInstitution);
     const byInst = new Map<string, number>();
     for (const a of assets) {
@@ -3696,13 +3696,25 @@ export class TrimlyView extends ItemView {
     this.goTab("movements");
   }
 
-  private renderAllocationCard(parent: HTMLElement, ledger: Ledger, total: number) {
+  private renderAllocationCard(parent: HTMLElement, ledger: Ledger) {
     const card = this.card(parent, t.inv.allocation);
-    const wrap = card.createDiv("trimly-spending");
-    // targets are shares of the portfolio without the reserve, so the percentages next to them are too
     const alloc = investableByClass(ledger);
     const reserved = reserveStatus(ledger)?.held ?? 0;
-    const base = total - reserved;
+    if (!reserved) {
+      this.allocationDonut(card, ledger, alloc, 0);
+      return;
+    }
+    card.createDiv({ cls: "trimly-eyebrow trimly-plan-section", text: t.inv.withReserve });
+    this.allocationDonut(card, ledger, alloc, reserved);
+    if (!alloc.length) return;
+    card.createDiv({ cls: "trimly-eyebrow trimly-plan-section", text: t.inv.withoutReserve });
+    this.allocationDonut(card, ledger, alloc, 0);
+  }
+
+  /** With `reserved`, the reserve is a slice of its own; only without it do the shares compare to the targets, which ignore the reserve. */
+  private allocationDonut(card: HTMLElement, ledger: Ledger, alloc: [AssetClass, number][], reserved: number) {
+    const wrap = card.createDiv("trimly-spending");
+    const base = alloc.reduce((s, [, v]) => s + v, reserved);
     donut(
       wrap,
       [...alloc.map(([c, value]) => ({ value, color: ASSET_CLASS_COLORS[c] })), ...(reserved ? [{ value: reserved, color: RESERVE_COLOR }] : [])],
@@ -3716,7 +3728,7 @@ export class TrimlyView extends ItemView {
       const row = legend.createDiv("trimly-legend-row");
       row.createSpan("trimly-dot").setCssProps({ "--trimly-color": ASSET_CLASS_COLORS[c] });
       row.createSpan({ cls: "trimly-legend-name", text: t.labels.assetClass[c] });
-      const target = ledger.investments.targets.find((x) => x.assetClass === c)?.pct;
+      const target = reserved ? undefined : ledger.investments.targets.find((x) => x.assetClass === c)?.pct;
       if (target) row.createSpan({ cls: "trimly-legend-target", text: t.inv.targetPct(this.pct(target, 0)) });
       row.createSpan({ cls: "trimly-legend-pct", text: this.pct((value / base) * 100, 0) });
       row.createSpan({ cls: "trimly-amount", text: this.money(value) });
@@ -3725,6 +3737,7 @@ export class TrimlyView extends ItemView {
       const row = legend.createDiv("trimly-legend-row");
       row.createSpan("trimly-dot").setCssProps({ "--trimly-color": RESERVE_COLOR });
       row.createSpan({ cls: "trimly-legend-name", text: t.targets.reserve.title });
+      row.createSpan({ cls: "trimly-legend-pct", text: this.pct((reserved / base) * 100, 0) });
       row.createSpan({ cls: "trimly-amount", text: this.money(reserved) });
     }
   }

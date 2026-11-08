@@ -628,6 +628,8 @@ export const en: Strings = {
     maturities: "Upcoming maturities",
     noMaturities: "Nothing matures in the next 12 months.",
     allocation: "Allocation",
+    withReserve: "With the fund",
+    withoutReserve: "Without the fund",
     classes: "Classes",
     targetPct: (pct: string) => `target ${pct}`,
     noValue: "No value reported",

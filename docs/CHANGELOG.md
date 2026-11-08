@@ -7,6 +7,12 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.5.0 — 2026-11-08
+
+- 2026-11-08 — With an emergency reserve set, the dashboard's allocation card shows two charts: with the reserve as a
+  slice, and without it, where the shares sit next to the targets. Why: to see the portfolio on its own. Files touched:
+  `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.4.0 — 2026-11-08
 
 - 2026-11-08 — A position's details have clipboard buttons to copy its name and, when it has one, its code. Why: asked
