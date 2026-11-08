@@ -389,6 +389,8 @@ export interface Investments {
   /** oldest first, at most one per day */
   snapshots: PortfolioSnapshot[];
   movements: Movement[];
+  /** bank or spreadsheet movements taken out as repeats: kept only so sync and import don't bring them back */
+  dismissedMovements: Movement[];
   targets: AllocationTarget[];
 }
 
@@ -501,7 +503,7 @@ export function defaultLedger(): Ledger {
     budgets: [],
     recurring: [],
     obligations: [],
-    investments: { assets: [], snapshots: [], movements: [], targets: [] },
+    investments: { assets: [], snapshots: [], movements: [], dismissedMovements: [], targets: [] },
   };
 }
 
@@ -532,6 +534,7 @@ export function parseLedger(json: string): Ledger {
       assets: (raw.investments?.assets ?? []).map(({ portfolioId: _dropped, ...a }: Asset & { portfolioId?: string }) => a),
       snapshots: raw.investments?.snapshots ?? [],
       movements: raw.investments?.movements ?? [],
+      dismissedMovements: raw.investments?.dismissedMovements ?? [],
       targets: raw.investments?.targets ?? [],
     },
     plans: raw.plans,
