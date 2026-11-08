@@ -146,7 +146,7 @@ passphrase that never leaves your device.
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution; a weight or score per
   asset takes that split down to each position inside the class. Classes include Exterior (foreign currency too), Ouro and Cripto, and a position can count under any class
-  while keeping its own for income tax; ETFs take no target of their own and count by what they expose you to. The emergency fund can be set apart with an amount and the positions holding it: targets and contributions then apply to the rest. Positions are imported by bank sync; net worth in the accounts view includes them.
+  while keeping its own for income tax; targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto, so ETFs, funds and retirement plans count by what they expose you to. The emergency fund can be set apart with an amount and the positions holding it: targets and contributions then apply to the rest. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Hide values** — the eye button in the header masks every amount on screen; click again to show
   them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks

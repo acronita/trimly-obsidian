@@ -7,6 +7,15 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.3.0 — 2026-11-08
+
+- 2026-11-08 — Allocation targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto. Fundos,
+  Previdência and Outros join ETF as product classes: saved targets for them are dropped on load, the others rescale, and
+  their positions are listed in *Metas* until *Conta nas metas como* says what they expose you to. Why: a fund target
+  tracks the wrapper and hides what is inside it. Files touched: `src/ledger.ts`, `src/view.ts`, `src/modals.ts`,
+  `src/assistant.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`, `test/assistant.test.ts`,
+  `README.md`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.2.0 — 2026-11-08
 
 - 2026-11-08 — Allocation targets gain the classes Exterior (foreign currency included), Ouro and Cripto, and ETF no

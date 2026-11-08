@@ -24,6 +24,7 @@ import {
   reservedByAsset,
   reserveStatus,
   shiftMonth,
+  takesTarget,
 } from "./ledger.ts";
 import { portfolioGroups } from "./feeds.ts";
 import type { FeedItem } from "./feeds.ts";
@@ -236,7 +237,7 @@ const INVESTMENT_TOOLS: Tool[] = [
   },
   {
     name: "contribution_plan",
-    description: "Allocation against the user's own targets per class, and how a contribution would split without selling. The emergency reserve is left out: targets are shares of the rest. The etf line holds ETFs not yet classified; it takes no target, so to_target is null. Use amount 0 for the allocation alone.",
+    description: "Allocation against the user's own targets per class, and how a contribution would split without selling. The emergency reserve is left out: targets are shares of the rest. Lines for etf, fund, retirement and other hold positions not yet classified; they take no target, so to_target is null. Use amount 0 for the allocation alone.",
     properties: { amount: { type: "number", description: "Contribution, in currency units" } },
     run: (l, input) => {
       const amount = typeof input.amount === "number" ? Math.max(0, Math.round(input.amount * 100)) : 0;
@@ -245,7 +246,7 @@ const INVESTMENT_TOOLS: Tool[] = [
         value: money(x.value),
         share_pct: Math.round(x.pct * 10) / 10,
         target_pct: Math.round(x.target * 10) / 10,
-        to_target: x.assetClass === "etf" ? null : money(x.gap),
+        to_target: takesTarget(x.assetClass) ? money(x.gap) : null,
         contribute: money(x.contribute),
       }));
     },
@@ -365,7 +366,7 @@ You have no general web access, but recommended_portfolios lists recent public a
 
 Portfolio history starts when Trimly first recorded it, because banks report today's values and past movements, not past values. position_movements goes further back. When a position's cost is null, its value is still right: only its gain can't be known until the user types the average price in the IR tab.
 
-Each position counts under one class only in the targets: counts_as when set, otherwise its class, so classes never double count. ETF is a product type and takes no target: an ETF with no counts_as is waiting for the user to pick what it exposes them to in "Conta nas metas como" on the position. International covers everything outside Brazil or the real, foreign currency included.
+Each position counts under one class only in the targets: counts_as when set, otherwise its class, so classes never double count. Targets exist only for treasury, fixed_income, reit, stock, international, gold and crypto. etf, fund, retirement and other name a product, so they take no target: a position in one of those with no counts_as is waiting for the user to pick what it exposes them to in "Conta nas metas como" on the position. International covers everything outside Brazil or the real, foreign currency included.
 
 The user can set apart an emergency reserve (emergency_reserve). When asked whether a position works for it or what would work better, weigh redemption without waiting, not losing value if redeemed in a hurry, and who stands behind the money (the Treasury, or FGC coverage up to its limit), compare net of income tax, and consider what else they hold and products commonly used for this, such as Tesouro Selic or a CDB with daily liquidity from a solid bank. Trimly doesn't record whether a product allows daily redemption and a due date doesn't settle it, so ask when the answer depends on it.`,
 };

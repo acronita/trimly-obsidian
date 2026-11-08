@@ -819,7 +819,7 @@ export const ptBR = {
     weight: "Peso",
     invalidWeight: "Digite um número maior ou igual a zero.",
     inClass: (now: string, after: string, target: string) => `${now} da classe hoje → ${after} depois · meta ${target}`,
-    classifyEtf: "ETF não tem meta própria. Clique em cada um e escolha em “Conta nas metas como” a que ele te expõe.",
+    classify: "ETFs, fundos, previdência e outros não têm meta própria. Clique em cada ativo e escolha em “Conta nas metas como” a que ele te expõe.",
     reserve: {
       title: "Reserva de emergência",
       none: "Separe o valor da reserva e os ativos que a guardam. Ela sai da carteira, e as metas e os aportes passam a valer só para o resto.",
@@ -1021,7 +1021,7 @@ export const ptBR = {
       namePlaceholder: "Nome do investimento",
       class: "Classe",
       targetClass: "Conta nas metas como",
-      targetClassDesc: "A que o ativo te expõe, como Exterior, Ações ou Ouro. Um ETF precisa disso para entrar nas metas. A classe acima continua valendo para o IR.",
+      targetClassDesc: "A que o ativo te expõe, como Exterior, Ações ou Ouro. Um ETF, fundo ou previdência precisa disso para entrar nas metas. A classe acima continua valendo para o IR.",
       sameClass: "A própria classe",
       syncedNote:
         "Este ativo vem da sincronização bancária: valores e movimentações são atualizados a cada sincronização. " +

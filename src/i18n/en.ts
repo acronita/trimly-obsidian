@@ -813,7 +813,7 @@ export const en: Strings = {
     weight: "Weight",
     invalidWeight: "Enter a number of zero or more.",
     inClass: (now: string, after: string, target: string) => `${now} of the class now → ${after} after · target ${target}`,
-    classifyEtf: "ETFs take no target of their own. Click each one and pick in “Counts in targets as” what it exposes you to.",
+    classify: "ETFs, funds, retirement and other positions take no target of their own. Click each one and pick in “Counts in targets as” what it exposes you to.",
     reserve: {
       title: "Emergency fund",
       none: "Set the fund's amount and the positions holding it. It comes out of the portfolio, and the targets and contributions then apply only to the rest.",
@@ -1014,7 +1014,7 @@ export const en: Strings = {
       namePlaceholder: "Name of the investment",
       class: "Class",
       targetClass: "Counts in targets as",
-      targetClassDesc: "What the position exposes you to, such as International, Stocks or Gold. An ETF needs this to enter the targets. The class above still applies to income tax.",
+      targetClassDesc: "What the position exposes you to, such as International, Stocks or Gold. An ETF, fund or retirement position needs this to enter the targets. The class above still applies to income tax.",
       sameClass: "Its own class",
       syncedNote:
         "This position comes from bank sync: its values and movements are updated on every sync. " +

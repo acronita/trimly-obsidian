@@ -99,6 +99,8 @@ import {
   removeManualMovement,
   reserveStatus,
   saveAsset,
+  takesTarget,
+  unclassifiedAssets,
   saveGoal,
   saveManualMovement,
   shiftMonth,
@@ -3489,8 +3491,8 @@ export class TrimlyView extends ItemView {
       const value = byClass.get(c) ?? 0;
       row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: total > 0 ? this.pct((value / total) * 100) : "—" });
       const cell = row.createDiv("trimly-perf-cell");
-      // ETF is a product, not an exposure: these wait to be classified, so no target and no "sell it all"
-      if (c === "etf") cell.setText("—");
+      // a product, not an exposure: these wait to be classified, so no target and no "sell it all"
+      if (!takesTarget(c)) cell.setText("—");
       else {
         const input = cell.createEl("input", { cls: "trimly-limit-input trimly-target-input", type: "text", placeholder: "0" });
         input.inputMode = "decimal";
@@ -3501,13 +3503,13 @@ export class TrimlyView extends ItemView {
         });
         input.addEventListener("change", () => this.setTarget(c, input.value));
       }
-      const gap = c === "etf" ? undefined : lines.find((l) => l.assetClass === c)?.gap;
+      const gap = !takesTarget(c) ? undefined : lines.find((l) => l.assetClass === c)?.gap;
       row.createDiv({
         cls: `trimly-perf-cell trimly-amount ${gap ? (gap > 0 ? "is-income" : "is-expense") : ""}`,
         text: gap === undefined ? "—" : `${gap >= 0 ? "+" : "−"}${this.money(Math.abs(gap))}`,
       });
     }
-    const missing = (Object.keys(ASSET_CLASS_ICONS) as AssetClass[]).filter((c) => !shown.has(c) && c !== "etf");
+    const missing = (Object.keys(ASSET_CLASS_ICONS) as AssetClass[]).filter((c) => !shown.has(c) && takesTarget(c));
     if (missing.length) {
       const add = card.createEl("select", { cls: "dropdown trimly-target-add" });
       add.createEl("option", { value: "", text: t.targets.addClass });
@@ -3518,9 +3520,9 @@ export class TrimlyView extends ItemView {
       cls: "trimly-muted trimly-card-foot",
       text: t.targets.toTargetNote,
     });
-    const unclassified = classAssets(ledger, "etf");
+    const unclassified = unclassifiedAssets(ledger);
     if (unclassified.length) {
-      card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.targets.classifyEtf });
+      card.createDiv({ cls: "trimly-muted trimly-card-foot", text: t.targets.classify });
       for (const a of unclassified) {
         const row = card.createDiv("trimly-row is-clickable");
         row.createDiv("trimly-row-main").createDiv({ cls: "trimly-row-title", text: a.name });
@@ -3620,7 +3622,7 @@ export class TrimlyView extends ItemView {
 
   /** A weight per position inside each class holding more than one: one alone has nothing to split with. */
   private renderAssetTargets(body: HTMLElement, ledger: Ledger, classes: AssetClass[]) {
-    const held = classes.filter((c) => c !== "etf" && classAssets(ledger, c).length > 1);
+    const held = classes.filter((c) => takesTarget(c) && classAssets(ledger, c).length > 1);
     if (held.length === 0) return;
     const card = this.card(body, t.targets.byAsset);
     card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.targets.byAssetHint });

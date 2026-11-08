@@ -44,6 +44,13 @@ export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
   other: "#999999",
 };
 
+/** The classes that take allocation targets: what a position exposes you to. The others name a product. */
+export const TARGET_CLASSES: AssetClass[] = ["treasury", "fixed_income", "reit", "stock", "international", "gold", "crypto"];
+
+export function takesTarget(c: AssetClass): boolean {
+  return TARGET_CLASSES.includes(c);
+}
+
 /** The emergency reserve's slice in the allocation chart. */
 export const RESERVE_COLOR = "#a2c4c9";
 
@@ -577,16 +584,20 @@ type LegacyAsset = Omit<Asset, "assetClass" | "targetClass"> & { portfolioId?: s
 
 function migrateAsset({ portfolioId: _dropped, ...a }: LegacyAsset): Asset {
   const out = { ...a, assetClass: currentClass(a.assetClass) } as Asset;
-  if (a.targetClass === "etf") delete out.targetClass;
-  else if (a.targetClass) out.targetClass = currentClass(a.targetClass);
+  if (a.targetClass) {
+    const c = currentClass(a.targetClass);
+    if (takesTarget(c)) out.targetClass = c;
+    else delete out.targetClass;
+  }
   return out;
 }
 
-/** ETF says what the product is, not what it exposes you to, so it takes no target. */
+/** Only exposure classes keep their targets; dollars add to international. */
 function migrateTargets(targets: { assetClass: LegacyClass; pct: number }[]): AllocationTarget[] {
   const out = new Map<AssetClass, number>();
   for (const t of targets) {
-    if (t.assetClass !== "etf") out.set(currentClass(t.assetClass), (out.get(currentClass(t.assetClass)) ?? 0) + t.pct);
+    const c = currentClass(t.assetClass);
+    if (takesTarget(c)) out.set(c, (out.get(c) ?? 0) + t.pct);
   }
   return [...out].map(([assetClass, pct]) => ({ assetClass, pct }));
 }
@@ -1340,6 +1351,11 @@ export interface AssetTargetLine {
 export function classAssets(ledger: Ledger, assetClass: AssetClass): Asset[] {
   const reserved = reservedByAsset(ledger);
   return openAssets(ledger).filter((a) => allocationClass(a) === assetClass && !(a.value > 0 && reserved.get(a.id) === a.value));
+}
+
+/** Positions still under a product class: outside any target until the user says what they expose them to. */
+export function unclassifiedAssets(ledger: Ledger): Asset[] {
+  return (Object.keys(ASSET_CLASS_ICONS) as AssetClass[]).filter((c) => !takesTarget(c)).flatMap((c) => classAssets(ledger, c));
 }
 
 /**
