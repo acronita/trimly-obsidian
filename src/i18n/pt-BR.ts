@@ -645,6 +645,7 @@ export const ptBR = {
     deleteConfirm: (name: string) => `Excluir "${name}" e as movimentações dele?`,
     manualFirst: "Adicione um ativo manual primeiro. As movimentações de ativos sincronizados vêm do banco.",
     deleteMovementConfirm: "Excluir esta movimentação? O efeito dela no ativo é desfeito.",
+    dismissMovementConfirm: "Excluir esta movimentação? Ela não volta na próxima sincronização nem ao importar a planilha de novo, e o valor do ativo continua o informado pelo banco.",
   },
 
   details: {

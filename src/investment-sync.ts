@@ -13,7 +13,8 @@
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
 import { t } from "./i18n/index.ts";
-import { flowWindowStart, newId, recordSnapshot } from "./ledger.ts";
+import { isSameTrade, setAsideMovement, setAsideSettlementRepeats } from "./investment-import.ts";
+import { IMPORT_PREFIX, flowWindowStart, newId, recordSnapshot } from "./ledger.ts";
 import type { Asset, AssetClass, Ledger, Movement, MovementType } from "./ledger.ts";
 
 export interface PluggyInvestmentTransaction {
@@ -220,10 +221,12 @@ function estimatedFlow(before: Pick<Asset, "value" | "invested" | "closed">, aft
 
 /**
  * Upsert the movements Pluggy returned for `asset`. A movement that came back
- * with a new id is re-linked to the existing one. Returns how many are new.
+ * with a new id is re-linked to the existing one, and one the user deleted stays
+ * deleted. Spreadsheet rows for a trade the bank now reports give way to it.
+ * Returns how many are new.
  */
 function mergeMovements(ledger: Ledger, asset: Asset, txs: PluggyInvestmentTransaction[]): number {
-  const movements = ledger.investments.movements;
+  const { movements, dismissedMovements } = ledger.investments;
   const returned = new Set(txs.map((t) => t.id));
   let added = 0;
   for (const t of txs) {
@@ -239,23 +242,46 @@ function mergeMovements(ledger: Ledger, asset: Asset, txs: PluggyInvestmentTrans
     if (t.quantity) m.quantity = Math.abs(t.quantity);
     if (t.description) m.description = t.description;
     if (type === "transfer") m.direction = t.movementType === "DEBIT" ? "out" : "in";
+    const relinks = (x: Movement) =>
+      x.assetId === asset.id && x.type === type && x.amount === m.amount && !returned.has(x.pluggyId ?? "") && daysBetween(x.date, m.date) <= RELINK_DAYS;
     const existing =
       movements.find((x) => x.pluggyId === t.id) ??
-      movements.find(
-        (x) =>
-          x.assetId === asset.id &&
-          x.type === type &&
-          x.amount === m.amount &&
-          !returned.has(x.pluggyId ?? "") &&
-          daysBetween(x.date, m.date) <= RELINK_DAYS
-      );
+      dismissedMovements.find((x) => x.pluggyId === t.id) ??
+      movements.find(relinks) ??
+      dismissedMovements.find(relinks);
     if (existing) Object.assign(existing, m);
     else {
       movements.push({ id: newId(), ...m });
       added++;
     }
   }
+  const imported = movements.filter((x) => x.assetId === asset.id && x.pluggyId?.startsWith(IMPORT_PREFIX));
+  for (const bank of movements.filter((x) => x.assetId === asset.id && returned.has(x.pluggyId ?? ""))) {
+    const i = imported.findIndex((x) => isSameTrade(x, bank));
+    if (i >= 0) setAsideMovement(ledger, imported.splice(i, 1)[0]);
+  }
   return added;
+}
+
+/**
+ * Pluggy can report one product twice, as an open position and a closed one, each
+ * with its own copy of the same movements: they would count double. The open
+ * position keeps them. Mutates the ledger.
+ */
+function setAsideClosedTwins(ledger: Ledger) {
+  const { assets, movements } = ledger.investments;
+  for (const closed of assets.filter((a) => a.pluggyId && a.closed && a.pluggyName)) {
+    const open = assets.filter(
+      (a) => a.pluggyId && !a.closed && a.pluggyName === closed.pluggyName && a.dueDate === closed.dueDate && a.assetClass === closed.assetClass
+    );
+    const pool = movements.filter((m) => open.some((a) => a.id === m.assetId));
+    for (const m of movements.filter((x) => x.assetId === closed.id)) {
+      const i = pool.findIndex((x) => x.type === m.type && x.date === m.date && x.amount === m.amount && x.quantity === m.quantity);
+      if (i < 0) continue;
+      pool.splice(i, 1);
+      setAsideMovement(ledger, m);
+    }
+  }
 }
 
 /**
@@ -298,6 +324,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
       result.updated++;
     }
     if (p.transactions) result.movements += mergeMovements(ledger, asset, p.transactions);
+    setAsideSettlementRepeats(ledger, asset);
     asset.movementsSynced = !!p.transactions;
     if (newlyTracked) {
       asset.addedOn = today;
@@ -316,6 +343,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
     // gone without a word: assume it was withdrawn at its last value
     if (since !== undefined) untracked += estimatedFlow(before, a);
   }
+  setAsideClosedTwins(ledger);
   recordSnapshot(ledger, today, untracked);
   return result;
 }

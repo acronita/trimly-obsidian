@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { deflateRawSync } from "node:zlib";
 import { taxMonths, taxPositions } from "../src/income-tax.ts";
-import { applyImport, parseDate, parseNumber, parseStatement, previewImport } from "../src/investment-import.ts";
+import { applyImport, dismissMovement, parseDate, parseNumber, parseStatement, previewImport, setAsideSettlementRepeats } from "../src/investment-import.ts";
 import { defaultLedger, recordSnapshot } from "../src/ledger.ts";
 import type { Asset, Ledger } from "../src/ledger.ts";
 import { parseCsv, readSpreadsheet, readXlsx } from "../src/spreadsheet.ts";
@@ -108,6 +108,99 @@ test("a trade the bank already reported, days apart from the statement's date, i
   const preview = previewImport(l, [buys]);
   assert.equal(preview?.duplicates, 1);
   assert.equal(preview?.trades.length, 1);
+});
+
+test("a bank's trade without a quantity still answers for the statement's row, allowing for fees", () => {
+  const l = setup();
+  l.investments.movements = [{ id: "m", assetId: "hglg", date: "2025-03-05", type: "buy", amount: 900_27, pluggyId: "bank" }];
+  assert.equal(previewImport(l, [buys])?.duplicates, 1);
+});
+
+test("a trade the bank put in a closed copy of the position isn't counted again, and new ones go to the open one", () => {
+  const closed = position({ id: "old", closed: true, value: 0, pluggyId: "p-old" });
+  const l = setup(closed, position());
+  l.investments.movements = [{ id: "m", assetId: "old", date: "2025-03-05", type: "buy", amount: 900_00, quantity: 6, pluggyId: "bank" }];
+  const preview = previewImport(l, [buys]);
+  assert.equal(preview?.duplicates, 1);
+  assert.deepEqual(preview?.trades.map((t) => t.assetId), ["hglg"]);
+});
+
+test("a deleted row stays deleted when the same file is imported again", () => {
+  const l = setup();
+  applyImport(l, previewImport(l, [buys]) as NonNullable<ReturnType<typeof previewImport>>);
+  dismissMovement(l, l.investments.movements[0].id, "2026-11-08");
+  assert.equal(l.investments.movements.length, 1);
+  assert.equal(previewImport(l, [buys])?.trades.length, 0);
+});
+
+test("deleting a repeated buy lets the statement give the real cost, which the extra shares had blocked", () => {
+  const l = setup();
+  const repeated = [...buys, trade("05/06/2025", "Compra", "HGLG11", "4", "R$ 175,00", "R$ 700,00")];
+  applyImport(l, previewImport(l, [repeated]) as NonNullable<ReturnType<typeof previewImport>>);
+  assert.equal(l.investments.assets[0].invested, undefined);
+  dismissMovement(l, l.investments.movements[2].id, "2026-11-08");
+  assert.equal(l.investments.assets[0].invested, 1600_00);
+});
+
+const buyRow = (id: string, date: string, quantity: number, amount: number, pluggyId = `import:${id}`) => ({ id, assetId: "hglg", date, type: "buy" as const, amount, quantity, pluggyId });
+const ids = (l: Ledger) => l.investments.movements.map((m) => m.id);
+
+test("a purchase recorded on the trade day and again four days later counts once, keeping the trade day", () => {
+  const l = setup(position({ quantity: 70 }));
+  l.investments.movements = [buyRow("trade", "2026-01-05", 70, 517_30), buyRow("settled", "2026-01-09", 70, 517_30)];
+  setAsideSettlementRepeats(l, l.investments.assets[0]);
+  assert.deepEqual(ids(l), ["trade"]);
+});
+
+test("fills of the trade day and their single settlement are one purchase", () => {
+  const l = setup(position({ quantity: 4 }));
+  l.investments.movements = [buyRow("fill1", "2026-01-05", 1, 91_32), buyRow("fill2", "2026-01-05", 3, 273_99), buyRow("settled", "2026-01-09", 4, 365_31)];
+  setAsideSettlementRepeats(l, l.investments.assets[0]);
+  assert.deepEqual(ids(l), ["fill1", "fill2"]);
+});
+
+test("when one side came from the bank, the spreadsheet's copy is the one that goes", () => {
+  const l = setup(position({ quantity: 70 }));
+  l.investments.movements = [buyRow("sheet", "2026-01-05", 70, 517_30), buyRow("bank", "2026-01-09", 70, 517_30, "bank-id")];
+  setAsideSettlementRepeats(l, l.investments.assets[0]);
+  assert.deepEqual(ids(l), ["bank"]);
+});
+
+test("two equal purchases the position really holds both stay", () => {
+  const l = setup(position({ quantity: 140 }));
+  l.investments.movements = [buyRow("a", "2026-01-05", 70, 517_30), buyRow("b", "2026-01-09", 70, 517_30)];
+  setAsideSettlementRepeats(l, l.investments.assets[0]);
+  assert.deepEqual(ids(l), ["a", "b"]);
+});
+
+test("when removing the matches would leave fewer shares than held, none of them is taken for a repeat", () => {
+  const l = setup(position({ quantity: 75 }));
+  l.investments.movements = [buyRow("a", "2026-01-05", 70, 517_30), buyRow("b", "2026-01-09", 70, 517_30)];
+  setAsideSettlementRepeats(l, l.investments.assets[0]);
+  assert.deepEqual(ids(l), ["a", "b"]);
+});
+
+test("equal purchases weeks apart aren't a settlement", () => {
+  const l = setup(position({ quantity: 70 }));
+  l.investments.movements = [buyRow("a", "2026-01-05", 70, 517_30), buyRow("b", "2026-02-05", 70, 517_30)];
+  setAsideSettlementRepeats(l, l.investments.assets[0]);
+  assert.deepEqual(ids(l), ["a", "b"]);
+});
+
+test("importing the settlement statement after the trade statement doesn't double the shares, and gives the cost", () => {
+  const l = setup(position({ quantity: 6 }));
+  const apply = (rows: string[][]) => applyImport(l, previewImport(l, [rows]) as NonNullable<ReturnType<typeof previewImport>>);
+  apply([TRADES, trade("05/01/2026", "Compra", "HGLG11", "2", "150,00", "300,00"), trade("05/01/2026", "Compra", "HGLG11", "4", "150,00", "600,00")]);
+  apply([MOVES, ["Credito", "09/01/2026", "Transferência - Liquidação", "HGLG11 - CSHG LOGÍSTICA FII", "XP", "6", "150,00", "900,00"]]);
+  assert.equal(l.investments.movements.length, 2);
+  assert.equal(l.investments.assets[0].invested, 900_00);
+});
+
+test("a manual movement isn't dismissed: deleting it has to undo its effect on the position", () => {
+  const l = setup();
+  l.investments.movements = [{ id: "m", assetId: "hglg", date: "2025-03-05", type: "buy", amount: 900_00 }];
+  dismissMovement(l, "m", "2026-11-08");
+  assert.equal(l.investments.movements.length, 1);
 });
 
 test("a ticker with no position is named instead of creating one", () => {

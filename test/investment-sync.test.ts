@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyInvestments, assetClass, displayName } from "../src/investment-sync.ts";
+import { dismissMovement } from "../src/investment-import.ts";
 import type { PluggyInvestment, PluggyInvestmentTransaction } from "../src/investment-sync.ts";
 import { LEDGER_VERSION, allocationByClass, applyInstitutionToConnection, defaultLedger, netWorth, parseLedger, portfolioInvested, portfolioValue, saveAsset } from "../src/ledger.ts";
 import type { Ledger } from "../src/ledger.ts";
@@ -142,7 +143,7 @@ test("allocation groups open positions by class, largest first", () => {
 
 test("ledgers from before investments existed load with an empty portfolio", () => {
   const l = parseLedger(JSON.stringify({ version: 2, accounts: [], categories: [], transactions: [], budgets: [], recurring: [] }));
-  assert.deepEqual(l.investments, { assets: [], snapshots: [], movements: [], targets: [] });
+  assert.deepEqual(l.investments, { assets: [], snapshots: [], movements: [], dismissedMovements: [], targets: [] });
   assert.equal(l.version, LEDGER_VERSION);
 });
 
@@ -174,6 +175,87 @@ test("a movement that comes back with a new id is re-linked, not duplicated", ()
   applyInvestments(l, [inv("a", { transactions: [mov("new", "BUY", "2026-10-21", 500)] })], ["item-1"], TODAY);
   assert.equal(l.investments.movements.length, 1);
   assert.equal(l.investments.movements[0].pluggyId, "new");
+});
+
+test("a movement the user deleted doesn't come back, even under a new id", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { transactions: [mov("old", "BUY", "2026-10-20", 500)] })], ["item-1"], "2026-10-24");
+  dismissMovement(l, l.investments.movements[0].id, "2026-10-24");
+  applyInvestments(l, [inv("a", { transactions: [mov("old", "BUY", "2026-10-20", 500)] })], ["item-1"], "2026-10-25");
+  assert.equal(l.investments.movements.length, 0);
+  applyInvestments(l, [inv("a", { transactions: [mov("new", "BUY", "2026-10-21", 500)] })], ["item-1"], "2026-10-26");
+  assert.equal(l.investments.movements.length, 0);
+});
+
+test("a spreadsheet row gives way to the bank's record of the trade, whose amount includes fees", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a", { transactions: [] })], ["item-1"], "2026-10-24");
+  l.investments.movements.push({ id: "x", assetId: asset(l, "a").id, date: "2026-10-20", type: "buy", amount: 1000_00, quantity: 10, pluggyId: "import:1" });
+  applyInvestments(l, [inv("a", { transactions: [mov("b", "BUY", "2026-10-22", 1000, { netAmount: 1000.3, quantity: 10 })] })], ["item-1"], TODAY);
+  assert.deepEqual(l.investments.movements.map((m) => m.pluggyId), ["b"]);
+});
+
+test("a sync clears a purchase already recorded twice, days apart, when the position holds only one of them", () => {
+  const l = defaultLedger();
+  const fii = { type: "EQUITY", subtype: "REAL_ESTATE_FUND", quantity: 70 };
+  applyInvestments(l, [inv("a", { ...fii, transactions: [] })], ["item-1"], "2026-10-24");
+  const row = (id: string, date: string) => ({ id, assetId: asset(l, "a").id, date, type: "buy" as const, amount: 517_30, quantity: 70, pluggyId: `import:${id}` });
+  l.investments.movements.push(row("trade", "2026-01-05"), row("settled", "2026-01-09"));
+  applyInvestments(l, [inv("a", { ...fii, transactions: [] })], ["item-1"], TODAY);
+  assert.deepEqual(l.investments.movements.map((m) => m.id), ["trade"]);
+});
+
+test("if the user deleted the bank's copy of a trade, the spreadsheet row they kept stays", () => {
+  const l = defaultLedger();
+  const txs = [mov("b", "BUY", "2026-10-22", 1000, { netAmount: 1000.3, quantity: 10 })];
+  applyInvestments(l, [inv("a", { transactions: txs })], ["item-1"], "2026-10-24");
+  dismissMovement(l, l.investments.movements[0].id, "2026-10-24");
+  l.investments.movements.push({ id: "x", assetId: asset(l, "a").id, date: "2026-10-20", type: "buy", amount: 1000_00, quantity: 10, pluggyId: "import:1" });
+  applyInvestments(l, [inv("a", { transactions: txs })], ["item-1"], TODAY);
+  assert.deepEqual(l.investments.movements.map((m) => m.pluggyId), ["import:1"]);
+});
+
+test("a bond Pluggy reports twice, open and closed, keeps one copy of each movement, in the open position", () => {
+  const l = defaultLedger();
+  const bond = { name: "LFT", subtype: "TREASURY", dueDate: "2031-03-01T00:00:00.000Z" };
+  const buy = (id: string) => mov(id, "BUY", "2026-08-24", 1376, { quantity: 0.07 });
+  const sync = (today: string) =>
+    applyInvestments(
+      l,
+      [
+        inv("closed", { ...bond, balance: 0, amount: 0, status: "TOTAL_WITHDRAWAL", transactions: [buy("c")] }),
+        inv("open", { ...bond, transactions: [buy("o")] }),
+      ],
+      ["item-1"],
+      today
+    );
+  sync("2026-10-24");
+  sync(TODAY);
+  assert.deepEqual(l.investments.movements.map((m) => m.pluggyId), ["o"]);
+  assert.equal(l.investments.movements[0].assetId, asset(l, "open").id);
+});
+
+test("a closed position's own history stays: only an exact copy in an open twin is a repeat", () => {
+  const l = defaultLedger();
+  const bond = { name: "LFT", subtype: "TREASURY", dueDate: "2031-03-01T00:00:00.000Z" };
+  applyInvestments(
+    l,
+    [
+      inv("closed", { ...bond, balance: 0, status: "TOTAL_WITHDRAWAL", transactions: [mov("c", "BUY", "2026-01-10", 500)] }),
+      inv("open", { ...bond, transactions: [mov("o", "BUY", "2026-08-24", 1376)] }),
+      inv("other", { ...bond, dueDate: "2029-03-01T00:00:00.000Z", status: "TOTAL_WITHDRAWAL", balance: 0, transactions: [mov("x", "BUY", "2026-08-24", 1376)] }),
+    ],
+    ["item-1"],
+    TODAY
+  );
+  assert.deepEqual(l.investments.movements.map((m) => m.pluggyId).sort(), ["c", "o", "x"]);
+});
+
+test("ledgers saved before deleted movements existed still load", () => {
+  const l = defaultLedger();
+  const raw = JSON.parse(JSON.stringify(l));
+  delete raw.investments.dismissedMovements;
+  assert.deepEqual(parseLedger(JSON.stringify(raw)).investments.dismissedMovements, []);
 });
 
 test("fees in netAmount are part of the money moved", () => {

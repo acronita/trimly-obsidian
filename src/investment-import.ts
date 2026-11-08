@@ -7,7 +7,7 @@
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
 import { taxKind, taxPosition } from "./income-tax.ts";
-import { IMPORT_PREFIX, newId } from "./ledger.ts";
+import { IMPORT_PREFIX, newId, recordSnapshot } from "./ledger.ts";
 import type { Asset, Ledger, Movement, MovementType } from "./ledger.ts";
 import { tickerOf } from "./quotes.ts";
 import type { Rows } from "./spreadsheet.ts";
@@ -142,9 +142,15 @@ const days = (a: string, b: string) => Math.abs(Date.parse(a) - Date.parse(b)) /
 /** A statement dates a trade and its settlement apart, and a bank may report either. */
 const SAME_TRADE_DAYS = 3;
 
-function isSame(m: Movement, trade: ImportedTrade): boolean {
-  if (m.type !== trade.type || days(m.date, trade.date) > SAME_TRADE_DAYS) return false;
-  return trade.type === "income" ? Math.abs(m.amount - trade.amount) <= 1 : m.quantity === trade.quantity;
+type Trade = Pick<Movement, "date" | "type" | "amount" | "quantity">;
+
+/** Whether two records describe one trade. Amounts can't decide it: a bank reports them with fees, a statement without. */
+export function isSameTrade(a: Trade, b: Trade): boolean {
+  if (a.type !== b.type || days(a.date, b.date) > SAME_TRADE_DAYS) return false;
+  if (a.type === "income") return Math.abs(a.amount - b.amount) <= 1;
+  if (a.quantity && b.quantity) return Math.abs(a.quantity - b.quantity) < 1e-6;
+  // no quantity to compare: the amount, allowing for fees
+  return Math.abs(a.amount - b.amount) <= Math.max(a.amount, b.amount) * 0.01;
 }
 
 /** What importing would do. Each movement already recorded answers for one row only, so importing twice adds nothing and two equal trades both count. */
@@ -153,18 +159,21 @@ export function previewImport(ledger: Ledger, sheets: Rows[]): ImportPreview | n
   if (parsed.length === 0) return null;
   const out: ImportPreview = { trades: [], duplicates: 0, unmatched: [], skipped: {} };
   const unmatched = new Set<string>();
-  const pool = [...ledger.investments.movements];
+  // a movement the user deleted is still recorded: importing the same file must not bring it back
+  const pool = [...ledger.investments.movements, ...ledger.investments.dismissedMovements];
   for (const sheet of parsed) {
     for (const [label, n] of Object.entries(sheet.skipped)) out.skipped[label] = (out.skipped[label] ?? 0) + n;
     // only other sheets can repeat a row: two equal rows in one sheet are two trades
     const added: Movement[] = [];
     for (const trade of sheet.trades) {
-      const asset = ledger.investments.assets.find((a) => tickerOf(a) === trade.ticker);
+      // a bank can report one ticker as more than one position, and the trade may be in any of them
+      const held = ledger.investments.assets.filter((a) => tickerOf(a) === trade.ticker);
+      const asset = held.find((a) => !a.closed) ?? held[0];
       if (!asset) {
         unmatched.add(trade.ticker);
         continue;
       }
-      const same = pool.findIndex((m) => m.assetId === asset.id && isSame(m, trade));
+      const same = pool.findIndex((m) => held.some((a) => a.id === m.assetId) && isSameTrade(m, trade));
       if (same >= 0) {
         pool.splice(same, 1);
         out.duplicates++;
@@ -190,6 +199,70 @@ function setCostFromTrades(ledger: Ledger, asset: Asset) {
   asset.costEdited = true;
 }
 
+/**
+ * Take a bank or spreadsheet movement out, remembering it so sync and import don't
+ * bring it back. The position's value stays what the bank says. Mutates the ledger.
+ */
+export function setAsideMovement(ledger: Ledger, m: Movement) {
+  const { movements, dismissedMovements, assets } = ledger.investments;
+  movements.splice(movements.indexOf(m), 1);
+  dismissedMovements.push(m);
+  // a repeat keeps a statement's trades from adding up to what is held, and so from giving the cost
+  const asset = assets.find((a) => a.id === m.assetId);
+  if (asset && movements.some((x) => x.assetId === asset.id && x.pluggyId?.startsWith(IMPORT_PREFIX))) setCostFromTrades(ledger, asset);
+}
+
+/** Longest gap expected between a trade's own date and the date another source gives it. */
+const SETTLEMENT_DAYS = 5;
+
+/**
+ * One purchase can be recorded twice on different days: by the fills of the trade
+ * day and as one settlement days later, so rows can't be paired one by one. Two
+ * close days with the same totals are that repeat, but only if the trades add up to
+ * more shares than the position holds; otherwise they are real, equal purchases.
+ * All the repeats go or none do. A spreadsheet day gives way to a bank's, and
+ * otherwise the later day goes, since the trade day is the one tax needs. Mutates the ledger.
+ */
+export function setAsideSettlementRepeats(ledger: Ledger, asset: Asset) {
+  if (asset.quantity === undefined) return;
+  const own = ledger.investments.movements.filter((m) => m.assetId === asset.id);
+  const netShares = (rows: Movement[]) => rows.reduce((s, m) => s + (m.type === "buy" ? 1 : m.type === "sell" ? -1 : 0) * (m.quantity ?? 0), 0);
+  const surplus = netShares(own) - asset.quantity;
+  if (surplus <= 1e-6) return;
+  const sum = (rows: Movement[], value: (m: Movement) => number) => rows.reduce((s, m) => s + value(m), 0);
+  const sameTotals = (a: Movement[], b: Movement[]) => {
+    const shares = sum(a, (m) => m.quantity ?? 0);
+    const amount = sum(a, (m) => m.amount);
+    return shares > 0 && Math.abs(shares - sum(b, (m) => m.quantity ?? 0)) < 1e-6 && Math.abs(amount - sum(b, (m) => m.amount)) <= amount * 0.01;
+  };
+  const fromSheet = (rows: Movement[]) => rows.every((m) => m.pluggyId?.startsWith(IMPORT_PREFIX));
+  const repeats: Movement[] = [];
+  for (const type of ["buy", "sell"] as const) {
+    const byDay = new Map<string, Movement[]>();
+    for (const m of own) if (m.type === type && m.pluggyId) byDay.set(m.date, [...(byDay.get(m.date) ?? []), m]);
+    const dates = [...byDay.keys()].sort();
+    const paired = new Set<string>();
+    for (const first of dates) {
+      if (paired.has(first)) continue;
+      const a = byDay.get(first) as Movement[];
+      const second = dates.find((d) => d > first && !paired.has(d) && days(first, d) <= SETTLEMENT_DAYS && sameTotals(a, byDay.get(d) as Movement[]));
+      if (!second) continue;
+      paired.add(first).add(second);
+      const b = byDay.get(second) as Movement[];
+      repeats.push(...(fromSheet(a) && !fromSheet(b) ? a : b));
+    }
+  }
+  if (repeats.length && netShares(repeats) <= surplus + 1e-6) for (const m of repeats) setAsideMovement(ledger, m);
+}
+
+/** Delete a bank or spreadsheet movement at the user's request. Manual ones go through `removeManualMovement`, which also undoes their effect. */
+export function dismissMovement(ledger: Ledger, id: string, today: string) {
+  const m = ledger.investments.movements.find((x) => x.id === id);
+  if (!m?.pluggyId) return;
+  setAsideMovement(ledger, m);
+  recordSnapshot(ledger, today);
+}
+
 /** Add what the preview found. Mutates the ledger. */
 export function applyImport(ledger: Ledger, preview: ImportPreview) {
   const touched = new Set<string>();
@@ -199,5 +272,9 @@ export function applyImport(ledger: Ledger, preview: ImportPreview) {
     ledger.investments.movements.push(m);
     touched.add(trade.assetId);
   }
-  for (const a of ledger.investments.assets) if (touched.has(a.id)) setCostFromTrades(ledger, a);
+  for (const a of ledger.investments.assets) {
+    if (!touched.has(a.id)) continue;
+    setAsideSettlementRepeats(ledger, a);
+    setCostFromTrades(ledger, a);
+  }
 }
