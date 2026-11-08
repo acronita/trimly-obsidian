@@ -145,7 +145,8 @@ passphrase that never leaves your device.
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution; a weight or score per
-  asset takes that split down to each position inside the class. Positions are imported by bank sync; net worth in the accounts view includes them.
+  asset takes that split down to each position inside the class. Classes include Exterior (foreign currency too), Ouro and Cripto, and a position can count under any class
+  while keeping its own for income tax; ETFs take no target of their own and count by what they expose you to. The emergency fund can be set apart with an amount and the positions holding it: targets and contributions then apply to the rest. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Hide values** — the eye button in the header masks every amount on screen; click again to show
   them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
@@ -193,7 +194,7 @@ passphrase that never leaves your device.
   `www.infomoney.com.br`, `www.seudinheiro.com` and `conteudos.xpi.com.br`, at most once a day, requesting only the feed's address:
   your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.
   With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
-  category, bill, recurring and future transaction names, goals and debts, positions, the portfolio's history and movements, income
+  category, bill, recurring and future transaction names, goals and debts, positions with their products and rates, the emergency fund, the portfolio's history and movements, income
   and the tax estimate) go to `api.anthropic.com` with your key, only when you ask something; the key is stored inside the encrypted ledger.
   With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside

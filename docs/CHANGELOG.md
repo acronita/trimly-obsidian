@@ -7,6 +7,22 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.2.0 — 2026-11-08
+
+- 2026-11-08 — Allocation targets gain the classes Exterior (foreign currency included), Ouro and Cripto, and ETF no
+  longer takes a target, since it names a product and overlapped with them; a saved ETF target is dropped on load, and
+  the other targets rescale. A position counts under another class in the targets through the new optional `targetClass`
+  field (*Conta nas metas como*), so an IVVB11 counts as Exterior and stays an ETF for income tax; ETFs not yet
+  classified are listed in *Metas*. New optional ledger field `investments.reserve` (amount and positions)
+  separates the emergency fund: up to the amount leaves the portfolio, proportionally across the marked positions, and
+  targets, contribution plan, by-asset weights and the allocation chart's percentages look at the rest. The investments
+  assistant gets the `emergency_reserve` tool, and `portfolio_summary` now reports each position's product, index, rate
+  and share in the reserve, so it can judge whether those positions work as a reserve. Why: the targets had no room for
+  those classes, and the reserve inflated the fixed income share. Files touched: `src/ledger.ts`, `src/view.ts`,
+  `src/modals.ts`, `src/assistant.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`,
+  `test/assistant.test.ts`, `README.md`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`, `docs/AI-ASSISTANT.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 1.1.0 — 2026-11-08
 
 - 2026-11-08 — Movements from the bank or a spreadsheet can be deleted (trash icon on the row) and stay deleted across

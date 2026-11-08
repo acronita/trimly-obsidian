@@ -40,7 +40,7 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
   | Assistant | Tools | Existing code |
   |---|---|---|
   | Accounts | balances, month summary, spending by category over a period, subscriptions, balance forecast, debts | `accountBalance`, `buildReport`, `balanceForecast`, `debtPayoff` |
-  | Investments | allocation against targets, returns, contribution plan, proventos, income tax estimate | `allocationByClass`, `rebalance`, `assetTargets`, `taxMonths` |
+  | Investments | allocation against targets, emergency reserve, returns, contribution plan, proventos, income tax estimate | `allocationByClass`, `reserveStatus`, `rebalance`, `assetTargets`, `taxMonths` |
 
 - **Two assistants, two prompts**, each with only its own tools, in its own mode of the panel.
 - **Show what is sent.** Each tool result can be opened in the chat. It is shown as it goes, with no step to
