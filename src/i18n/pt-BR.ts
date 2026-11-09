@@ -1197,7 +1197,7 @@ export const ptBR = {
     assistantRemove: "Apagar a chave",
     assistantNoKey: "Coloque a chave de API.",
     feeds: "Notícias e carteiras",
-    feedsDesc: "Busca no RSS público dos sites abaixo as reportagens da aba Notícias, quando ela é aberta e no máximo uma vez por dia. Só o endereço do feed é pedido: nada sobre você ou sua carteira é enviado.",
+    feedsDesc: "Busca no RSS público dos sites abaixo as reportagens da aba Notícias, quando ela é aberta e no máximo uma vez por dia. Só o endereço do feed é pedido: nada sobre você ou sua carteira é enviado. Com o assistente ligado, ele também baixa, quando precisa, as listas públicas completas do Status Invest e do XP e filtra aqui os ativos que procura.",
     feedSource: (name: string) => `Fonte: ${name}`,
     segments: "Segmentos dos ativos",
     segmentsDesc:

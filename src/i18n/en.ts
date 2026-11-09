@@ -1190,7 +1190,7 @@ export const en: Strings = {
     assistantRemove: "Delete the key",
     assistantNoKey: "Enter the API key.",
     feeds: "News and portfolios",
-    feedsDesc: "Fetches the News tab's articles from the public RSS of the sites below, when the tab opens and at most once a day. Only the feed's address is requested: nothing about you or your portfolio is sent.",
+    feedsDesc: "Fetches the News tab's articles from the public RSS of the sites below, when the tab opens and at most once a day. Only the feed's address is requested: nothing about you or your portfolio is sent. With the assistant on, it also downloads, when needed, the full public lists from Status Invest and XP and filters the assets it wants here.",
     feedSource: (name: string) => `Source: ${name}`,
     segments: "Position segments",
     segmentsDesc:
