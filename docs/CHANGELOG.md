@@ -7,6 +7,19 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.6.0 — 2026-11-08
+
+- 2026-11-08 — *Carteira* shows every class as a table sortable by column (asset, segment, price and quantity, or rate
+  and maturity for Tesouro and renda fixa, or value and cost without a price; % of the class, % of the portfolio), under
+  bars with how much of the class each segment holds. Segments come monthly from B3 (stocks) and the CVM monthly report
+  (FIIs: the balance sheet tells Papéis and Fundo de Fundos, specific labels are kept, vague ones stay blank); Tesouro
+  groups by product and renda fixa by indexer, without fetching; the position form edits them. New `segment?`, `segmentEdited?` on positions and
+  `segmentsCheckedOn?` on the ledger, version unchanged; new *Segmentos dos ativos* switch. Why: to see what kind of asset
+  each position is and how a class is split. Files touched: `src/segments.ts`, `src/cvm.ts`, `src/b3.ts`,
+  `src/spreadsheet.ts`, `src/ledger.ts`, `src/main.ts`, `src/modals.ts`, `src/view.ts`, `src/styles/index.css`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/segments.test.ts`, `test/encryption-rule.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.5.0 — 2026-11-08
 
 - 2026-11-08 — With an emergency reserve set, the dashboard's allocation card shows two charts: with the reserve as a

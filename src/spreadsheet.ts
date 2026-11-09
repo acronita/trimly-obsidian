@@ -17,7 +17,7 @@ async function inflate(data: Uint8Array): Promise<Uint8Array> {
 }
 
 /** The files of a zip, from its central directory. */
-async function unzip(bytes: Uint8Array, wanted: (name: string) => boolean): Promise<Map<string, string>> {
+export async function unzip(bytes: Uint8Array, wanted: (name: string) => boolean, encoding = "utf-8"): Promise<Map<string, string>> {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   let end = bytes.length - 22;
   while (end >= 0 && view.getUint32(end, true) !== 0x06054b50) end--;
@@ -26,6 +26,7 @@ async function unzip(bytes: Uint8Array, wanted: (name: string) => boolean): Prom
   let at = view.getUint32(end + 16, true);
   const out = new Map<string, string>();
   const decoder = new TextDecoder();
+  const content = new TextDecoder(encoding);
   for (let i = 0; i < count; i++) {
     if (view.getUint32(at, true) !== 0x02014b50) throw new Error("bad zip");
     const method = view.getUint16(at + 10, true);
@@ -38,7 +39,7 @@ async function unzip(bytes: Uint8Array, wanted: (name: string) => boolean): Prom
     if (wanted(name)) {
       const start = local + 30 + view.getUint16(local + 26, true) + view.getUint16(local + 28, true);
       const data = bytes.subarray(start, start + size);
-      out.set(name, decoder.decode(method === 0 ? data : await inflate(data)));
+      out.set(name, content.decode(method === 0 ? data : await inflate(data)));
     }
     at += 46 + nameLength + extraLength + commentLength;
   }

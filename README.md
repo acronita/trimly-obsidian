@@ -65,6 +65,11 @@ passphrase that never leaves your device.
 - **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
   everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
   go in. It is not encrypted, so never save it inside the vault; there is no import back.
+- **Segments** — *Carteira* lists every class in a sortable table with each position's segment, and bars with
+  how much of the class each segment holds. Stocks get it from B3 and FIIs from the CVM monthly report, once a month;
+  Tesouro Direto groups by product (IPCA+, Selic, Prefixado) and renda fixa by indexer (CDI, IPCA, Prefixado).
+  The CVM labels many funds only "Multicategoria" or "Outros": credit funds and funds of funds are told from their
+  balance sheet, the rest stay blank, and other classes have no source, so type those in the position's form. What you type stays.
 - **Tesouro Direto prices** — manual Tesouro Direto positions are revalued once a day from the Tesouro
   Transparente open data, with no token: price (what selling pays, before tax) × quantity. Name the
   position with its type and year, like *Tesouro IPCA+ 2035*, or fill in the maturity; Renda+ and Educa+
@@ -173,10 +178,10 @@ passphrase that never leaves your device.
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
 - The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle,
-  the benchmarks, proventos calendar, Tesouro Direto prices, news and AI assistants toggles, which news sources are off,
+  the benchmarks, proventos calendar, Tesouro Direto prices, segments, news and AI assistants toggles, which news sources are off,
   the hide-values toggle and how obligation reminders are shown.
 - **Network:** Bank sync, quotes and the AI assistants stay off until you set them up. The public data below (indices,
-  proventos, Tesouro Direto prices, news) is fetched by default, and each has its own switch in settings. With bank sync on, it
+  proventos, Tesouro Direto prices, segments, news) is fetched by default, and each has its own switch in settings. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With
   investments that have history, the investments view also fetches the public CDI, IPCA and
@@ -190,6 +195,9 @@ passphrase that never leaves your device.
   the vault. Turn off *Agenda de proventos* to stop it. With manual Tesouro Direto positions, Trimly
   downloads the public price file (about 15 MB) from `www.tesourotransparente.gov.br`, at most once a
   day; it has every bond, so nothing about yours is sent. Turn off *Preços do Tesouro Direto* to stop it.
+  With FIIs or stocks that have a B3 ticker, once a month Trimly downloads the public FII report (about 1.3 MB) from
+  `dados.cvm.gov.br`, which has every fund, and asks the B3 website for each stock's segment, sending only the four-letter
+  issuer code. Turn off *Segmentos dos ativos* to stop it.
   The News tab reads public RSS feeds from `www.moneytimes.com.br`, `investnews.com.br`,
   `www.infomoney.com.br`, `www.seudinheiro.com` and `conteudos.xpi.com.br`, at most once a day, requesting only the feed's address:
   your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.

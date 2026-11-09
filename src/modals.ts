@@ -778,6 +778,10 @@ export class AssetModal extends Modal {
         .onChange((v) => (d.assetClass = v as AssetClass))
     );
     new Setting(contentEl)
+      .setName(a.segment)
+      .setDesc(a.segmentDesc)
+      .addText((text) => text.setPlaceholder(a.segmentPlaceholder).setValue(d.segment ?? "").onChange((v) => (d.segment = v.trim() || undefined)));
+    new Setting(contentEl)
       .setName(a.targetClass)
       .setDesc(a.targetClassDesc)
       .addDropdown((dd) =>
