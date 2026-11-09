@@ -116,6 +116,7 @@ import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
 import { HOUSE_PAGES, NEWS_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, portfolioGroups, portfolioHouses, recentItems } from "./feeds";
 import { fetchArticle, fetchFeeds } from "./feeds-fetch";
+import { fetchMarketData } from "./market-data-fetch";
 import type { FeedItem } from "./feeds";
 import { MAX_CONVERSATION_TOKENS, askAssistant } from "./assistant";
 import type { AssistantKind } from "./assistant";
@@ -3092,7 +3093,7 @@ export class TrimlyView extends ItemView {
         history: chat.messages,
         tokensUsed: chat.tokens,
         question,
-        web: feeds ? { portfolios: async () => (await fetchFeeds(PORTFOLIO_SOURCES.filter((s) => !disabledFeeds.includes(s.id)))).items, article: fetchArticle } : undefined,
+        web: feeds ? { portfolios: async () => (await fetchFeeds(PORTFOLIO_SOURCES.filter((s) => !disabledFeeds.includes(s.id)))).items, article: fetchArticle, market: (tickers) => fetchMarketData(tickers, !disabledFeeds.includes("xp")) } : undefined,
       });
       chat.messages = turn.messages;
       chat.tokens += turn.tokens;

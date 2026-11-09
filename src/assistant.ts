@@ -29,6 +29,7 @@ import {
 import { portfolioGroups } from "./feeds.ts";
 import type { FeedItem } from "./feeds.ts";
 import type { AiConfig, Asset, Ledger } from "./ledger.ts";
+import type { MarketLookup } from "./market-data.ts";
 import { tickerOf } from "./quotes.ts";
 import { buildReport } from "./reports.ts";
 import { monthlyReturns, periodReturn, portfolioIndex } from "./returns.ts";
@@ -42,6 +43,7 @@ export const AI_DEFAULT_MODEL = "claude-opus-5-5";
 export const MAX_CONVERSATION_TOKENS = 150_000;
 const MAX_TOOL_ROUNDS = 8;
 const MAX_ANSWER_TOKENS = 16_000;
+const MAX_MARKET_TICKERS = 30;
 
 type Input = Record<string, unknown>;
 
@@ -56,6 +58,7 @@ interface Tool {
 export interface WebTools {
   portfolios: () => Promise<FeedItem[]>;
   article: (url: string) => Promise<string>;
+  market: (tickers: string[]) => Promise<MarketLookup>;
 }
 
 const money = (cents: number) => Math.round(cents) / 100;
@@ -312,6 +315,17 @@ const INVESTMENT_TOOLS: Tool[] = [
     },
   },
   {
+    name: "market_data",
+    description: "Current public data on tickers, held by the user or not. status_invest: price and indicators (DY, P/L, P/VP, ROE, margins, debt, liquidity; for FIIs last dividend, DY, P/VP, net worth, cash). xp: XP's own recommendation, target price, upside and risk score for stocks; category, yield, risk and returns for FIIs. Covers B3 stocks and FIIs and, on Status Invest, US stocks and REITs; ETFs, BDRs and fixed income aren't there. Null means the ticker isn't in that list, unless the source is in unavailable. The lists are downloaded whole and filtered on the device, so the tickers aren't sent to those sites.",
+    properties: { tickers: { type: "array", items: { type: "string" }, description: `Tickers such as PETR4 or HGLG11, at most ${MAX_MARKET_TICKERS}` } },
+    run: async (_l, input, _today, web) => {
+      if (!web) throw new Error("the web sources are turned off in the settings");
+      const tickers = [...new Set((Array.isArray(input.tickers) ? input.tickers : []).map((x) => String(x).trim().toUpperCase()).filter(Boolean))];
+      if (!tickers.length) throw new Error("no tickers given");
+      return web.market(tickers.slice(0, MAX_MARKET_TICKERS));
+    },
+  },
+  {
     name: "income_received",
     description: "Income recorded from positions per month over the last months. Banks may report none for some positions, so it can be incomplete.",
     properties: { months: { type: "integer", description: "How many months back" } },
@@ -362,7 +376,7 @@ const PROMPTS: Record<AssistantKind, string> = {
 
 They make their own decisions and want to learn how to reason about them, which takes practical examples. So be concrete with their actual positions: say which ones stand out for or against under a given criterion (concentration, cost, income, their targets, what published portfolios hold), and walk through how you would reason about buying more, keeping or selling a specific one, what that depends on, and what would change the conclusion. Don't answer in generalities, refuse, or keep repeating disclaimers; one short mention that the decision is theirs is enough, and only when it matters. Don't predict prices or promise returns.
 
-You have no general web access, but recommended_portfolios lists recent public articles on what brokers recommend and read_article reads them, so you can compare those with the user's positions. Nothing about the user goes to those sites.
+You have no general web access. market_data has current indicators from Status Invest and XP's recommendation, target price and risk score for any ticker: consult it whenever an answer depends on today's price, valuation, dividends or what XP says about an asset, instead of what you remember, and say which source a figure came from. recommended_portfolios lists recent public articles on what brokers recommend and read_article reads them, so you can compare those with the user's positions. Nothing about the user goes to those sites.
 
 Portfolio history starts when Trimly first recorded it, because banks report today's values and past movements, not past values. position_movements goes further back. When a position's cost is null, its value is still right: only its gain can't be known until the user types the average price in the IR tab.
 

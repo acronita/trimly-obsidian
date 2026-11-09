@@ -7,6 +7,17 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.7.0 — 2026-11-08
+
+- 2026-11-08 — The investments assistant gets `market_data`: current indicators from Status Invest and XP's
+  recommendation, target price and risk score, for any ticker, held or not. The full public lists are downloaded when it
+  is called, kept in memory for an hour and filtered on the device, so no ticker goes to those sites. It follows
+  *Notícias e carteiras*, and XP's part also follows XP's switch. Why: asked, so answers use today's data instead of what
+  the model remembers. BTG has no public list with content, and product shelves need a login, so neither is read. Files
+  touched: `src/market-data.ts`, `src/market-data-fetch.ts`, `src/assistant.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/market-data.test.ts`, `test/assistant.test.ts`, `README.md`, `docs/ARCHITECTURE.md`,
+  `docs/AI-ASSISTANT.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.6.0 — 2026-11-08
 
 - 2026-11-08 — *Carteira* shows every class as a table sortable by column (asset, segment, price and quantity, or rate

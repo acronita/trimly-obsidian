@@ -24,7 +24,7 @@ function setup(): Ledger {
   return l;
 }
 
-const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A", kind: "stocks" as const }], article: async () => "texto" };
+const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A", kind: "stocks" as const }], article: async () => "texto", market: async (tickers: string[]) => ({ results: tickers.map((ticker) => ({ ticker, status_invest: { TICKER: ticker, DY: 8 }, xp: null })), unavailable: ["XP"] }) };
 
 const reply = (content: ClaudeResponse["content"], stop_reason: string, tokens = 10): ClaudeResponse => ({ content, stop_reason, usage: { input_tokens: tokens, output_tokens: tokens } });
 const say = (text: string) => reply([{ type: "text", text }], "end_turn");
@@ -108,7 +108,7 @@ test("no tool can change the ledger", async () => {
 test("every tool answers with its documented arguments", async () => {
   for (const kind of ["accounts", "investments"] as const) {
     for (const { name } of toolDefinitions(kind)) {
-      const r = await runTool(kind, setup(), name, { month: "2026-11", from: "2026-01-01", to: TODAY, account_id: "main", days: 30, amount: 100, position: null, months: 12, url: "https://x" }, TODAY, WEB);
+      const r = await runTool(kind, setup(), name, { month: "2026-11", from: "2026-01-01", to: TODAY, account_id: "main", days: 30, amount: 100, position: null, months: 12, url: "https://x", tickers: ["PETR4"] }, TODAY, WEB);
       assert.equal(r.isError, false, `${name}: ${r.result}`);
     }
   }
@@ -235,5 +235,13 @@ test("the web tools say so when the sources are off, and answer when they are on
 });
 
 test("only the investments assistant reads the web", () => {
-  assert.ok(!toolDefinitions("accounts").some((t) => t.name === "read_article"));
+  assert.ok(!toolDefinitions("accounts").some((t) => t.name === "read_article" || t.name === "market_data"));
+});
+
+test("market data respects the sources' switch, and asks once per ticker however the model writes it", async () => {
+  assert.equal((await runTool("investments", setup(), "market_data", { tickers: ["PETR4"] }, TODAY)).isError, true);
+  const on = JSON.parse((await runTool("investments", setup(), "market_data", { tickers: [" petr4", "PETR4", "hglg11"] }, TODAY, WEB)).result) as { results: { ticker: string }[]; unavailable: string[] };
+  assert.deepEqual(on.results.map((r) => r.ticker), ["PETR4", "HGLG11"]);
+  assert.deepEqual(on.unavailable, ["XP"]);
+  assert.equal((await runTool("investments", setup(), "market_data", { tickers: [] }, TODAY, WEB)).isError, true);
 });

@@ -57,7 +57,7 @@ passphrase that never leaves your device.
   which warn that your data goes to Anthropic) — ask about your spending or your
   portfolio, with your own Anthropic API key and at your cost. Trimly does the math and sends only your question and
   the results asked for, which you can open in the chat; the whole ledger is never sent. Past conversations are listed to open again, and stay encrypted on
-  this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
+  this device, outside the vault. It can read public articles on recommended portfolios and consult Status Invest's indicators and XP's recommendations and target prices, sending nothing about you to those sites.
   Answers can be wrong, and the decisions are yours.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
   articles from the last year on the portfolios brokers publish, by type (diversified, stocks, FIIs, fixed income, funds, ETFs, abroad, crypto) and filterable by house, from public RSS feeds including XP's own, plus links to the pages of houses with no feed and the classic allocation models. Trimly only gathers the links: not a
@@ -204,6 +204,8 @@ passphrase that never leaves your device.
   With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
   category, bill, recurring and future transaction names, goals and debts, positions with their products and rates, the emergency fund, the portfolio's history and movements, income
   and the tax estimate) go to `api.anthropic.com` with your key, only when you ask something; the key is stored inside the encrypted ledger.
+  When the investments assistant needs current market data, Trimly downloads the full public lists from `statusinvest.com.br` and `conteudos.xpi.com.br`, at most once an hour,
+  and picks the tickers on the device, so they aren't sent to those sites (they do go to Anthropic with the tool's result). *Notícias e carteiras* turns it off, and XP's switch turns off XP's part.
   With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
