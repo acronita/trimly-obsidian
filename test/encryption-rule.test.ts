@@ -58,5 +58,5 @@ test("settings (data.json, inside the vault) never hold the passphrase or financ
   const settings = main.slice(main.indexOf("export interface TrimlySettings"), main.indexOf("const DEFAULT_SETTINGS"));
   assert.ok(settings.length > 0);
   const fields = [...settings.matchAll(/^\s*(\w+)\s*:/gm)].map((m) => m[1]);
-  assert.deepEqual(fields.sort(), ["assistant", "benchmarks", "currency", "disabledFeeds", "feeds", "folder", "hideValues", "language", "proventos", "rememberPassphrase", "reminders", "treasuryPrices"]);
+  assert.deepEqual(fields.sort(), ["assistant", "benchmarks", "currency", "disabledFeeds", "feeds", "folder", "hideValues", "language", "proventos", "rememberPassphrase", "reminders", "segments", "treasuryPrices"]);
 });

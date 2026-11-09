@@ -129,6 +129,7 @@ import type { ReportFilter, ReportPreset } from "./reports";
 import { estimatedPayouts, lastPaidProventos, proventoIssuers, upcomingProventos } from "./proventos";
 import type { EstimatedPayout } from "./proventos";
 import { averagePrice, institutionOf, quoteTickers, tickerOf } from "./quotes";
+import { segmentOf, segmentShares } from "./segments";
 import { Benchmarks, IndexPoint, cdiReturn, closeReturn, monthlyRateReturn, monthlyReturns, periodReturn, portfolioIndex } from "./returns";
 
 export const VIEW_TYPE_TRIMLY = "trimly-dashboard";
@@ -250,6 +251,8 @@ export class TrimlyView extends ItemView {
   private chatBusy = false;
   /** house the recommended portfolios are narrowed to; "" = all */
   private portfolioHouse = "";
+  /** column the portfolio tables are sorted by; null = largest position first */
+  private portfolioSort: { column: number; desc: boolean } | null = null;
   /** what-if extra per month typed on each debt; kept while the view is open, never saved */
   private debtExtra = new Map<string, number>();
   /** what was typed in the calculators, by field; kept while the view is open, never saved */
@@ -2244,6 +2247,7 @@ export class TrimlyView extends ItemView {
     const q = a.quote;
     const avg = averagePrice(a);
     item(t.details.company, q?.longName);
+    item(t.details.segment, segmentOf(a));
     if (q) {
       const change = q.changePct !== undefined ? this.signedPct(q.changePct / 100) : "—";
       const when = q.time ? this.plugin.formatDateTime(q.time) : "";
@@ -3759,7 +3763,8 @@ export class TrimlyView extends ItemView {
       const list = (byClass.get(c) ?? []).sort((x, y) => y.value - x.value);
       body.createDiv({ cls: "trimly-section-title", text: `${t.labels.assetClass[c]} · ${this.money(value)} · ${this.pct((value / total) * 100, 0)}` });
       const card = body.createDiv("trimly-card");
-      for (const a of list) this.assetRow(card, a);
+      this.segmentBars(card, list);
+      this.assetTable(card, list, c, value, total);
     }
     // the allocation leaves out positions worth nothing, but they are still held
     const zero = assets.filter((a) => a.value <= 0);
@@ -3772,6 +3777,87 @@ export class TrimlyView extends ItemView {
       body.createDiv({ cls: "trimly-section-title", text: t.inv.closed(closed.length) });
       const card = body.createDiv("trimly-card");
       for (const a of closed) this.assetRow(card, a);
+    }
+  }
+
+  /** How the class splits by segment; nothing to say while no position has one. */
+  private segmentBars(parent: HTMLElement, assets: Asset[]) {
+    const shares = segmentShares(assets.map((a) => ({ segment: segmentOf(a), value: a.value })));
+    if (shares.every((s) => !s.segment)) return;
+    const el = parent.createDiv("trimly-segment-bars");
+    for (const s of shares) {
+      const row = el.createDiv("trimly-segment-bar");
+      row.createDiv({ cls: "trimly-segment-name", text: s.segment || t.inv.table.noSegment });
+      row.createDiv("trimly-segment-track").createDiv("trimly-segment-fill").setCssProps({ "--trimly-share": `${s.share * 100}%` });
+      row.createDiv({ cls: "trimly-perf-cell", text: this.pct(s.share * 100) });
+      row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.money(s.value) });
+    }
+  }
+
+  /** Positions as a table sorted by any column; the sort is shared by the classes and lasts while the view is open. */
+  private assetTable(parent: HTMLElement, assets: Asset[], c: AssetClass, classValue: number, total: number) {
+    const price = (a: Asset) => a.quote?.price ?? (a.quantity ? Math.round(a.value / a.quantity) : undefined);
+    const label = (a: Asset) => tickerOf(a) ?? a.name;
+    const table = t.inv.table;
+    type Column = { label: string; sort: (a: Asset) => string | number | undefined; text: (a: Asset) => string };
+    const moneyOrDash = (v: number | undefined) => (v === undefined ? "—" : this.money(v));
+    const byRate = c === "treasury" || c === "fixed_income";
+    // bonds are read by rate and maturity; what has neither price nor quantity, by how much is in it
+    const middle: Column[] = byRate
+      ? [
+          { label: table.rate, sort: (a) => a.fixedRate ?? a.rate, text: (a) => this.rateLabel(a) || "—" },
+          { label: table.due, sort: (a) => a.dueDate, text: (a) => (a.dueDate ? this.longDate(a.dueDate) : "—") },
+        ]
+      : assets.some((a) => price(a) !== undefined)
+        ? [
+            { label: table.price, sort: price, text: (a) => moneyOrDash(price(a)) },
+            { label: table.quantity, sort: (a) => a.quantity, text: (a) => (a.quantity === undefined ? "—" : String(a.quantity)) },
+          ]
+        : [
+            { label: table.value, sort: (a) => a.value, text: (a) => this.money(a.value) },
+            { label: table.invested, sort: (a) => a.invested, text: (a) => moneyOrDash(a.invested) },
+          ];
+    const columns: Column[] = [
+      { label: table.asset, sort: label, text: label },
+      { label: byRate ? table.type : table.segment, sort: segmentOf, text: (a) => segmentOf(a) || "—" },
+      ...middle,
+      { label: table.pctClass(t.labels.assetClass[c]), sort: (a) => a.value, text: (a) => this.pct((a.value / classValue) * 100, 2) },
+      { label: table.pctPortfolio, sort: (a) => a.value, text: (a) => this.pct((a.value / total) * 100, 2) },
+    ];
+    const sort = this.portfolioSort;
+    const rows = !sort
+      ? assets
+      : [...assets].sort((x, y) => {
+          const [a, b] = [columns[sort.column].sort(x), columns[sort.column].sort(y)];
+          // positions without the value stay at the bottom either way
+          if (a === undefined || a === "") return b === undefined || b === "" ? 0 : 1;
+          if (b === undefined || b === "") return -1;
+          const order = typeof a === "number" && typeof b === "number" ? a - b : String(a).localeCompare(String(b), this.plugin.locale());
+          return sort.desc ? -order : order;
+        });
+
+    const el = parent.createDiv("trimly-perf-table trimly-asset-table");
+    const head = el.createDiv("trimly-perf-row is-head");
+    columns.forEach((col, i) => {
+      const cell = head.createDiv(i > 1 ? "trimly-perf-cell" : "");
+      const button = cell.createEl("button", { cls: "trimly-sort", text: col.label });
+      const active = sort?.column === i;
+      setIcon(button.createSpan(), active ? (sort.desc ? "chevron-down" : "chevron-up") : "chevrons-up-down");
+      button.addEventListener("click", () => {
+        // numbers start from the largest, text from A
+        this.portfolioSort = { column: i, desc: active ? !sort.desc : i > 1 };
+        this.render();
+      });
+    });
+    for (const a of rows) {
+      const row = el.createDiv("trimly-perf-row is-clickable");
+      row.addEventListener("click", () => this.showAsset(a.id));
+      const name = row.createDiv("trimly-asset-name");
+      if (a.quote?.logo) name.createEl("img", { cls: "trimly-asset-logo", attr: { src: a.quote.logo, alt: "" } });
+      else this.iconTile(name, ASSET_CLASS_ICONS[a.assetClass], ASSET_CLASS_COLORS[a.assetClass]);
+      name.createSpan({ text: columns[0].text(a), attr: { title: a.name } });
+      row.createDiv({ cls: "trimly-asset-segment trimly-muted", text: columns[1].text(a) });
+      columns.slice(2).forEach((col) => row.createDiv({ cls: "trimly-perf-cell trimly-amount", text: col.text(a) }));
     }
   }
 

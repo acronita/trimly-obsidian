@@ -327,6 +327,10 @@ export interface Asset {
   renamed?: boolean;
   /** the user set the institution of a synced position, so sync stops replacing it */
   institutionEdited?: boolean;
+  /** what it invests in ("Logística", "Bancos"); "" = looked up and not found */
+  segment?: string;
+  /** the user typed the segment, so the lookup keeps it */
+  segmentEdited?: boolean;
   /** last brapi quote, for positions with a B3 ticker */
   quote?: Quote;
 }
@@ -475,6 +479,7 @@ export interface Ledger {
   brapi?: BrapiConfig;
   /** day the Tesouro Direto prices were last fetched; the file is big, so once a day */
   treasuryCheckedOn?: string;
+  segmentsCheckedOn?: string;
   /** set when the AI assistants are turned on */
   ai?: AiConfig;
   /** exchange rates, set when some account or transaction is in another currency */
@@ -571,6 +576,7 @@ export function parseLedger(json: string): Ledger {
     pluggy: raw.pluggy,
     brapi: raw.brapi,
     treasuryCheckedOn: raw.treasuryCheckedOn,
+    segmentsCheckedOn: raw.segmentsCheckedOn,
     ai: raw.ai,
     fx: raw.fx,
   };
@@ -1431,6 +1437,14 @@ export function saveAsset(ledger: Ledger, asset: Asset, today: string) {
   } else {
     if (before.name !== asset.name) asset.renamed = true;
     if (asset.pluggyId && (before.institution ?? "") !== (asset.institution ?? "")) asset.institutionEdited = true;
+    if ((before.segment ?? "") !== (asset.segment ?? "")) {
+      // emptied by hand: back to the lookup
+      if (asset.segment) asset.segmentEdited = true;
+      else {
+        delete asset.segment;
+        delete asset.segmentEdited;
+      }
+    }
     if (!before.closed && asset.closed) untracked = -before.value;
     else if (before.closed && !asset.closed) untracked = asset.value;
     assets[i] = asset;

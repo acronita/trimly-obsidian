@@ -4,7 +4,9 @@ import { fetchQuotes } from "./brapi";
 import { InvalidEnvelopeError, WrongPassphraseError } from "./crypto";
 import { AI_DEFAULT_MODEL, AI_MODELS } from "./assistant";
 import { ChatStore } from "./chat-store";
-import { fetchProventos } from "./b3";
+import { fetchCompanySegments, fetchProventos } from "./b3";
+import { fetchFiiSegments } from "./cvm";
+import { applySegments, segmentLookups, segmentsDue } from "./segments";
 import { ledgerJson, movementsCsv, positionsCsv, transactionsCsv } from "./export";
 import { fetchBenchmarks } from "./bcb";
 import { fetchRates } from "./fx";
@@ -58,6 +60,7 @@ export interface TrimlySettings {
   proventos: boolean;
   /** fetch Tesouro Direto prices for manual positions */
   treasuryPrices: boolean;
+  segments: boolean;
   /** fetch public news feeds for the News tab */
   feeds: boolean;
   /** ids of the feed sources turned off */
@@ -98,6 +101,7 @@ const DEFAULT_SETTINGS: TrimlySettings = {
   benchmarks: true,
   proventos: true,
   treasuryPrices: true,
+  segments: true,
   feeds: true,
   disabledFeeds: [],
   language: "pt-BR",
@@ -127,6 +131,7 @@ export default class TrimlyPlugin extends Plugin {
   private proventoLoading = false;
   /** day a fetch of the Tesouro Direto prices was tried, whether or not it worked */
   private treasuryTriedOn = "";
+  private segmentsTriedOn = "";
   /** the assistants' conversations, on this device and outside the vault */
   chatStore!: ChatStore;
   private feedCache: Record<"portfolios" | "news", { day: string; data: FeedItem[] } | null> = { portfolios: null, news: null };
@@ -435,7 +440,7 @@ export default class TrimlyPlugin extends Plugin {
     const bankDue = !!l.pluggy && (l.investments.snapshots.length === 0 || olderThan(l.pluggy.lastSync, AUTO_SYNC_INTERVAL_MS));
     const quotesDue = !!l.brapi && olderThan(l.brapi.lastUpdate, QUOTES_INTERVAL_MS);
     if (bankDue || quotesDue) void this.sync(true, bankDue);
-    void (this.syncing ?? Promise.resolve()).then(() => this.refreshTreasury());
+    void (this.syncing ?? Promise.resolve()).then(() => this.refreshTreasury()).then(() => this.refreshSegments());
   }
 
   /**
@@ -534,6 +539,28 @@ export default class TrimlyPlugin extends Plugin {
     if (summary) new Notice(summary);
     // investments are optional per item, but a failure must not pass silently
     if (data.investments.errors.length) new Notice(t.notices.investmentErrors(data.investments.errors.join("; ")));
+  }
+
+  /** Segments of the held FIIs (CVM) and stocks (B3), monthly. A failed day isn't retried until the next, so it warns only once. */
+  private async refreshSegments() {
+    const today = todayISO();
+    const l = this.ledger;
+    if (!l || !this.settings.segments || this.segmentsTriedOn === today || !segmentsDue(l, today)) return;
+    this.segmentsTriedOn = today;
+    const { fiis, issuers } = segmentLookups(l);
+    let data;
+    try {
+      data = await Promise.all([fiis ? fetchFiiSegments(Number(today.slice(0, 4))) : new Map<string, string>(), fetchCompanySegments(issuers)]);
+    } catch (e) {
+      new Notice(t.notices.segmentsFailed((e as Error).message));
+      return;
+    }
+    const [fiiSegments, companies] = data;
+    await this.mutate((ledger) => {
+      applySegments(ledger, fiiSegments, companies.segments);
+      ledger.segmentsCheckedOn = today;
+    });
+    if (companies.errors.length) new Notice(t.notices.segmentsFailed(companies.errors.join("; ")));
   }
 
   /** Quote every open position with a B3 ticker. */
@@ -829,6 +856,15 @@ class TrimlySettingTab extends PluginSettingTab {
       .addToggle((tg) =>
         tg.setValue(p.settings.treasuryPrices).onChange(async (v) => {
           p.settings.treasuryPrices = v;
+          await p.saveSettings();
+        })
+      );
+    new Setting(containerEl)
+      .setName(s.segments)
+      .setDesc(s.segmentsDesc)
+      .addToggle((tg) =>
+        tg.setValue(p.settings.segments).onChange(async (v) => {
+          p.settings.segments = v;
           await p.saveSettings();
         })
       );
