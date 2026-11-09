@@ -766,6 +766,96 @@ button.trimly-add.is-icon {
 .trimly-perf-table.is-bench .trimly-perf-row {
   grid-template-columns: minmax(5.5em, 1.4fr) repeat(6, minmax(4.4em, 1fr));
 }
+.trimly-asset-table {
+  overflow-x: auto;
+}
+.trimly-asset-table .trimly-perf-row {
+  grid-template-columns: minmax(8em, 1.2fr) minmax(9em, 1.6fr) repeat(4, minmax(6.5em, 1fr));
+  align-items: center;
+}
+.trimly-asset-table .trimly-perf-row.is-clickable {
+  cursor: pointer;
+}
+.trimly-asset-table .trimly-perf-row.is-clickable:hover {
+  background: var(--background-modifier-hover);
+}
+.trimly-asset-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: var(--font-semibold);
+}
+.trimly-asset-name span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trimly-asset-logo,
+.trimly-asset-name .trimly-icon-tile {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  flex-shrink: 0;
+}
+.trimly-asset-name .trimly-icon-tile svg {
+  width: 14px;
+  height: 14px;
+}
+.trimly-asset-segment {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trimly-view .trimly-sort {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: auto;
+  padding: 0;
+  border: none;
+  background: none;
+  box-shadow: none;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.trimly-sort svg {
+  width: 12px;
+  height: 12px;
+}
+.trimly-segment-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-bottom: 12px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--trimly-card-border);
+  font-size: var(--font-ui-small);
+}
+.trimly-segment-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 2fr) 4em minmax(5.5em, auto);
+  gap: 8px;
+  align-items: center;
+}
+.trimly-segment-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.trimly-segment-track {
+  height: 6px;
+  border-radius: 3px;
+  background: var(--background-modifier-border);
+  overflow: hidden;
+}
+.trimly-segment-fill {
+  width: var(--trimly-share);
+  height: 100%;
+  background: var(--interactive-accent);
+}
 .trimly-perf-row.is-head {
   font-size: var(--font-ui-smaller);
   color: var(--text-muted);
@@ -1422,6 +1512,20 @@ input.trimly-amount-input:focus {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
+}
+.trimly-detail-copies {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+.trimly-detail-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: auto;
+  height: auto;
+  font-size: var(--font-ui-smaller);
 }
 .trimly-detail-grid {
   display: grid;

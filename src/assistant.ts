@@ -21,11 +21,15 @@ import {
   openAssets,
   portfolioValue,
   rebalance,
+  reservedByAsset,
+  reserveStatus,
   shiftMonth,
+  takesTarget,
 } from "./ledger.ts";
 import { portfolioGroups } from "./feeds.ts";
 import type { FeedItem } from "./feeds.ts";
-import type { AiConfig, Ledger } from "./ledger.ts";
+import type { AiConfig, Asset, Ledger } from "./ledger.ts";
+import type { MarketLookup } from "./market-data.ts";
 import { tickerOf } from "./quotes.ts";
 import { buildReport } from "./reports.ts";
 import { monthlyReturns, periodReturn, portfolioIndex } from "./returns.ts";
@@ -39,6 +43,7 @@ export const AI_DEFAULT_MODEL = "claude-opus-5-5";
 export const MAX_CONVERSATION_TOKENS = 150_000;
 const MAX_TOOL_ROUNDS = 8;
 const MAX_ANSWER_TOKENS = 16_000;
+const MAX_MARKET_TICKERS = 30;
 
 type Input = Record<string, unknown>;
 
@@ -53,6 +58,7 @@ interface Tool {
 export interface WebTools {
   portfolios: () => Promise<FeedItem[]>;
   article: (url: string) => Promise<string>;
+  market: (tickers: string[]) => Promise<MarketLookup>;
 }
 
 const money = (cents: number) => Math.round(cents) / 100;
@@ -173,29 +179,68 @@ const ACCOUNT_TOOLS: Tool[] = [
   },
 ];
 
+/** What says how safe and how liquid a position is. */
+const productFacts = (a: Asset) => ({
+  product: a.subtype ?? null,
+  index: a.rateType ?? null,
+  index_pct: a.rate ?? null,
+  fixed_rate_pct: a.fixedRate ?? null,
+  due_date: a.dueDate ?? null,
+});
+
 const INVESTMENT_TOOLS: Tool[] = [
   {
     name: "portfolio_summary",
-    description: "Total value and every open position with class, value and cost. A null invested means the bank doesn't report the cost and the user hasn't typed the average price in the IR tab; the value is still real.",
+    description: "Total value, emergency reserve included, and every open position with class, product, rate, value, cost and how much of it is in the reserve. counts_as is the class it counts under in the targets, when not its own. A null invested means the bank doesn't report the cost and the user hasn't typed the average price in the IR tab; the value is still real.",
     properties: {},
-    run: (l) => ({
-      total: money(portfolioValue(l)),
-      positions: openAssets(l).map((a) => ({
-        name: a.name,
-        ticker: tickerOf(a),
-        class: a.assetClass,
-        institution: a.institution ?? null,
-        quantity: a.quantity ?? null,
-        value: money(a.value),
-        invested: a.invested === undefined ? null : money(a.invested),
-        due_date: a.dueDate ?? null,
-        weight: a.weight ?? null,
-      })),
-    }),
+    run: (l) => {
+      const reserved = reservedByAsset(l);
+      return {
+        total: money(portfolioValue(l)),
+        positions: openAssets(l).map((a) => ({
+          name: a.name,
+          ticker: tickerOf(a),
+          class: a.assetClass,
+          counts_as: a.targetClass ?? null,
+          institution: a.institution ?? null,
+          quantity: a.quantity ?? null,
+          value: money(a.value),
+          in_reserve: money(reserved.get(a.id) ?? 0),
+          invested: a.invested === undefined ? null : money(a.invested),
+          weight: a.weight ?? null,
+          ...productFacts(a),
+        })),
+      };
+    },
+  },
+  {
+    name: "emergency_reserve",
+    description: "The emergency reserve the user set apart from the portfolio: the amount wanted, what the positions they marked cover, what is missing, what those positions hold above it (it stays in the portfolio), and each marked position's institution, product, rate and due date. Null when none is set.",
+    properties: {},
+    run: (l) => {
+      const status = reserveStatus(l);
+      return (
+        status && {
+          amount: money(status.amount),
+          held: money(status.held),
+          missing: money(status.missing),
+          above_amount: money(status.surplus),
+          positions: status.lines.map(({ asset, reserved }) => ({
+            name: asset.name,
+            ticker: tickerOf(asset),
+            class: asset.assetClass,
+            institution: asset.institution ?? null,
+            value: money(asset.value),
+            in_reserve: money(reserved),
+            ...productFacts(asset),
+          })),
+        }
+      );
+    },
   },
   {
     name: "contribution_plan",
-    description: "Allocation against the user's own targets per class, and how a contribution would split without selling. Use amount 0 for the allocation alone.",
+    description: "Allocation against the user's own targets per class, and how a contribution would split without selling. The emergency reserve is left out: targets are shares of the rest. Lines for etf, fund, retirement and other hold positions not yet classified; they take no target, so to_target is null. Use amount 0 for the allocation alone.",
     properties: { amount: { type: "number", description: "Contribution, in currency units" } },
     run: (l, input) => {
       const amount = typeof input.amount === "number" ? Math.max(0, Math.round(input.amount * 100)) : 0;
@@ -204,7 +249,7 @@ const INVESTMENT_TOOLS: Tool[] = [
         value: money(x.value),
         share_pct: Math.round(x.pct * 10) / 10,
         target_pct: Math.round(x.target * 10) / 10,
-        to_target: money(x.gap),
+        to_target: takesTarget(x.assetClass) ? money(x.gap) : null,
         contribute: money(x.contribute),
       }));
     },
@@ -270,6 +315,17 @@ const INVESTMENT_TOOLS: Tool[] = [
     },
   },
   {
+    name: "market_data",
+    description: "Current public data on tickers, held by the user or not. status_invest: price and indicators (DY, P/L, P/VP, ROE, margins, debt, liquidity; for FIIs last dividend, DY, P/VP, net worth, cash). xp: XP's own recommendation, target price, upside and risk score for stocks; category, yield, risk and returns for FIIs. Covers B3 stocks and FIIs and, on Status Invest, US stocks and REITs; ETFs, BDRs and fixed income aren't there. Null means the ticker isn't in that list, unless the source is in unavailable. The lists are downloaded whole and filtered on the device, so the tickers aren't sent to those sites.",
+    properties: { tickers: { type: "array", items: { type: "string" }, description: `Tickers such as PETR4 or HGLG11, at most ${MAX_MARKET_TICKERS}` } },
+    run: async (_l, input, _today, web) => {
+      if (!web) throw new Error("the web sources are turned off in the settings");
+      const tickers = [...new Set((Array.isArray(input.tickers) ? input.tickers : []).map((x) => String(x).trim().toUpperCase()).filter(Boolean))];
+      if (!tickers.length) throw new Error("no tickers given");
+      return web.market(tickers.slice(0, MAX_MARKET_TICKERS));
+    },
+  },
+  {
     name: "income_received",
     description: "Income recorded from positions per month over the last months. Banks may report none for some positions, so it can be incomplete.",
     properties: { months: { type: "integer", description: "How many months back" } },
@@ -320,9 +376,13 @@ const PROMPTS: Record<AssistantKind, string> = {
 
 They make their own decisions and want to learn how to reason about them, which takes practical examples. So be concrete with their actual positions: say which ones stand out for or against under a given criterion (concentration, cost, income, their targets, what published portfolios hold), and walk through how you would reason about buying more, keeping or selling a specific one, what that depends on, and what would change the conclusion. Don't answer in generalities, refuse, or keep repeating disclaimers; one short mention that the decision is theirs is enough, and only when it matters. Don't predict prices or promise returns.
 
-You have no general web access, but recommended_portfolios lists recent public articles on what brokers recommend and read_article reads them, so you can compare those with the user's positions. Nothing about the user goes to those sites.
+You have no general web access. market_data has current indicators from Status Invest and XP's recommendation, target price and risk score for any ticker: consult it whenever an answer depends on today's price, valuation, dividends or what XP says about an asset, instead of what you remember, and say which source a figure came from. recommended_portfolios lists recent public articles on what brokers recommend and read_article reads them, so you can compare those with the user's positions. Nothing about the user goes to those sites.
 
-Portfolio history starts when Trimly first recorded it, because banks report today's values and past movements, not past values. position_movements goes further back. When a position's cost is null, its value is still right: only its gain can't be known until the user types the average price in the IR tab.`,
+Portfolio history starts when Trimly first recorded it, because banks report today's values and past movements, not past values. position_movements goes further back. When a position's cost is null, its value is still right: only its gain can't be known until the user types the average price in the IR tab.
+
+Each position counts under one class only in the targets: counts_as when set, otherwise its class, so classes never double count. Targets exist only for treasury, fixed_income, reit, stock, international, gold and crypto. etf, fund, retirement and other name a product, so they take no target: a position in one of those with no counts_as is waiting for the user to pick what it exposes them to in "Conta nas metas como" on the position. International covers everything outside Brazil or the real, foreign currency included.
+
+The user can set apart an emergency reserve (emergency_reserve). When asked whether a position works for it or what would work better, weigh redemption without waiting, not losing value if redeemed in a hurry, and who stands behind the money (the Treasury, or FGC coverage up to its limit), compare net of income tax, and consider what else they hold and products commonly used for this, such as Tesouro Selic or a CDB with daily liquidity from a solid bank. Trimly doesn't record whether a product allows daily redemption and a due date doesn't settle it, so ask when the answer depends on it.`,
 };
 
 export function systemPrompt(kind: AssistantKind, language: string, today: string): string {

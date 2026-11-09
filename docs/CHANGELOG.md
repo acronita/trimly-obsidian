@@ -7,6 +7,67 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.7.0 — 2026-11-08
+
+- 2026-11-08 — The investments assistant gets `market_data`: current indicators from Status Invest and XP's
+  recommendation, target price and risk score, for any ticker, held or not. The full public lists are downloaded when it
+  is called, kept in memory for an hour and filtered on the device, so no ticker goes to those sites. It follows
+  *Notícias e carteiras*, and XP's part also follows XP's switch. Why: asked, so answers use today's data instead of what
+  the model remembers. BTG has no public list with content, and product shelves need a login, so neither is read. Files
+  touched: `src/market-data.ts`, `src/market-data-fetch.ts`, `src/assistant.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/market-data.test.ts`, `test/assistant.test.ts`, `README.md`, `docs/ARCHITECTURE.md`,
+  `docs/AI-ASSISTANT.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.6.0 — 2026-11-08
+
+- 2026-11-08 — *Carteira* shows every class as a table sortable by column (asset, segment, price and quantity, or rate
+  and maturity for Tesouro and renda fixa, or value and cost without a price; % of the class, % of the portfolio), under
+  bars with how much of the class each segment holds. Segments come monthly from B3 (stocks) and the CVM monthly report
+  (FIIs: the balance sheet tells Papéis and Fundo de Fundos, specific labels are kept, vague ones stay blank); Tesouro
+  groups by product and renda fixa by indexer, without fetching; the position form edits them. New `segment?`, `segmentEdited?` on positions and
+  `segmentsCheckedOn?` on the ledger, version unchanged; new *Segmentos dos ativos* switch. Why: to see what kind of asset
+  each position is and how a class is split. Files touched: `src/segments.ts`, `src/cvm.ts`, `src/b3.ts`,
+  `src/spreadsheet.ts`, `src/ledger.ts`, `src/main.ts`, `src/modals.ts`, `src/view.ts`, `src/styles/index.css`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/segments.test.ts`, `test/encryption-rule.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.5.0 — 2026-11-08
+
+- 2026-11-08 — With an emergency reserve set, the dashboard's allocation card shows two charts: with the reserve as a
+  slice, and without it, where the shares sit next to the targets. Why: to see the portfolio on its own. Files touched:
+  `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.4.0 — 2026-11-08
+
+- 2026-11-08 — A position's details have clipboard buttons to copy its name and, when it has one, its code. Why: asked
+  for while looking up positions elsewhere. Files touched: `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.3.0 — 2026-11-08
+
+- 2026-11-08 — Allocation targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto. Fundos,
+  Previdência and Outros join ETF as product classes: saved targets for them are dropped on load, the others rescale, and
+  their positions are listed in *Metas* until *Conta nas metas como* says what they expose you to. Why: a fund target
+  tracks the wrapper and hides what is inside it. Files touched: `src/ledger.ts`, `src/view.ts`, `src/modals.ts`,
+  `src/assistant.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`, `test/assistant.test.ts`,
+  `README.md`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.2.0 — 2026-11-08
+
+- 2026-11-08 — Allocation targets gain the classes Exterior (foreign currency included), Ouro and Cripto, and ETF no
+  longer takes a target, since it names a product and overlapped with them; a saved ETF target is dropped on load, and
+  the other targets rescale. A position counts under another class in the targets through the new optional `targetClass`
+  field (*Conta nas metas como*), so an IVVB11 counts as Exterior and stays an ETF for income tax; ETFs not yet
+  classified are listed in *Metas*. New optional ledger field `investments.reserve` (amount and positions)
+  separates the emergency fund: up to the amount leaves the portfolio, proportionally across the marked positions, and
+  targets, contribution plan, by-asset weights and the allocation chart's percentages look at the rest. The investments
+  assistant gets the `emergency_reserve` tool, and `portfolio_summary` now reports each position's product, index, rate
+  and share in the reserve, so it can judge whether those positions work as a reserve. Why: the targets had no room for
+  those classes, and the reserve inflated the fixed income share. Files touched: `src/ledger.ts`, `src/view.ts`,
+  `src/modals.ts`, `src/assistant.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`,
+  `test/assistant.test.ts`, `README.md`, `docs/FAQ.md`, `docs/ARCHITECTURE.md`, `docs/AI-ASSISTANT.md`, `package.json`,
+  `manifest.json`, `versions.json`.
+
 ## 1.1.0 — 2026-11-08
 
 - 2026-11-08 — Movements from the bank or a spreadsheet can be deleted (trash icon on the row) and stay deleted across

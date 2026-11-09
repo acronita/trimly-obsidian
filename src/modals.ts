@@ -11,6 +11,8 @@ import {
   CategoryKind,
   Debt,
   DueObligation,
+  EmergencyReserve,
+  TARGET_CLASSES,
   Frequency,
   Ledger,
   Movement,
@@ -775,6 +777,19 @@ export class AssetModal extends Modal {
         .setValue(d.assetClass)
         .onChange((v) => (d.assetClass = v as AssetClass))
     );
+    new Setting(contentEl)
+      .setName(a.segment)
+      .setDesc(a.segmentDesc)
+      .addText((text) => text.setPlaceholder(a.segmentPlaceholder).setValue(d.segment ?? "").onChange((v) => (d.segment = v.trim() || undefined)));
+    new Setting(contentEl)
+      .setName(a.targetClass)
+      .setDesc(a.targetClassDesc)
+      .addDropdown((dd) =>
+        dd
+          .addOptions({ "": a.sameClass, ...Object.fromEntries(TARGET_CLASSES.map((c) => [c, t.labels.assetClass[c]])) })
+          .setValue(d.targetClass ?? "")
+          .onChange((v) => (d.targetClass = (v as AssetClass) || undefined))
+      );
     const institution = () =>
       new Setting(contentEl)
         .setName(a.institution)
@@ -1182,6 +1197,69 @@ export class GoalModal extends Modal {
         return null;
       },
       this.onDelete ? () => this.onDelete?.(d) : null,
+      () => this.close()
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+export class ReserveModal extends Modal {
+  private amount: string;
+  private assetIds: string[];
+
+  constructor(
+    app: App,
+    private ledger: Ledger,
+    private existing: EmergencyReserve | undefined,
+    private onSave: (r: EmergencyReserve) => void,
+    private onDelete: () => void
+  ) {
+    super(app);
+    this.amount = existing ? centsToInput(existing.amount) : "";
+    this.assetIds = [...(existing?.assetIds ?? [])];
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const r = t.modals.reserve;
+    this.setTitle(r.title);
+    new Setting(contentEl)
+      .setName(r.amount)
+      .setDesc(r.amountDesc)
+      .addText((text) => {
+        text.inputEl.inputMode = "decimal";
+        text.setValue(this.amount).onChange((v) => (this.amount = v));
+      });
+    new Setting(contentEl).setName(r.assets).setHeading();
+    const assets = openAssets(this.ledger);
+    for (const a of assets) {
+      new Setting(contentEl)
+        .setName(a.name)
+        .setDesc(t.labels.assetClass[a.assetClass])
+        .addToggle((tg) =>
+          tg.setValue(this.assetIds.includes(a.id)).onChange((on) => {
+            this.assetIds = on ? [...this.assetIds, a.id] : this.assetIds.filter((id) => id !== a.id);
+          })
+        );
+    }
+    const errorEl = contentEl.createEl("p", { cls: "trimly-error" });
+    footer(
+      contentEl,
+      errorEl,
+      () => {
+        const cents = parseAmount(this.amount);
+        if (cents === null || cents <= 0) return t.common.amountPositive;
+        // what was deleted or closed since can't be picked again, so it doesn't stay in the list
+        const assetIds = this.assetIds.filter((id) => assets.some((a) => a.id === id));
+        if (assetIds.length === 0) return r.noAssets;
+        this.onSave({ amount: cents, assetIds });
+        return null;
+      },
+      this.existing ? () => this.onDelete() : null,
       () => this.close()
     );
   }

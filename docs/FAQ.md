@@ -58,6 +58,19 @@ It never sells. Classes below their target get the money first, in proportion to
 they are once the contribution is counted; whatever is left is split by target weight. Classes
 without a target count as 0%, so they never get new money.
 
+**How do I separate my emergency fund from the portfolio?**
+In *Metas*, *Reserva de emergência → Definir*: type the amount and mark the positions holding it. Up to that amount
+leaves the portfolio, and the targets and contribution plan apply to the rest. What the marked positions hold above
+the amount stays in the portfolio, each giving up the same proportion. If they hold less, the card shows what is
+missing; the contribution plan doesn't fill it for you.
+
+**Why can't I set a target for ETFs, funds or Previdência?**
+Those name the product, not what it exposes you to, and would overlap with Exterior, Ações or Renda fixa. Targets exist
+only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto. Open each position (*Metas* lists the ones left)
+and set *Conta nas metas como*: IVVB11 as Exterior, BOVA11 as Ações, GOLD11 as Ouro, a DI fund as Renda fixa. Keep its
+class: the class is what income tax looks at, so changing an ETF's class would take it out of the IR tab.
+Dollars have no class of their own either: they count as Exterior.
+
 **How are investment returns calculated?**
 Time-weighted, from the daily snapshots each sync records: deposits and withdrawals don't count as
 gains or losses, and dividends, JCP, interest and coupons paid out do count as gains. The money

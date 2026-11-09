@@ -40,7 +40,7 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
   | Assistant | Tools | Existing code |
   |---|---|---|
   | Accounts | balances, month summary, spending by category over a period, subscriptions, balance forecast, debts | `accountBalance`, `buildReport`, `balanceForecast`, `debtPayoff` |
-  | Investments | allocation against targets, returns, contribution plan, proventos, income tax estimate | `allocationByClass`, `rebalance`, `assetTargets`, `taxMonths` |
+  | Investments | allocation against targets, emergency reserve, returns, contribution plan, proventos, income tax estimate | `allocationByClass`, `reserveStatus`, `rebalance`, `assetTargets`, `taxMonths` |
 
 - **Two assistants, two prompts**, each with only its own tools, in its own mode of the panel.
 - **Show what is sent.** Each tool result can be opened in the chat. It is shown as it goes, with no step to
@@ -48,7 +48,11 @@ Sources: [Monarch's assistant](https://getfinny.app/blog/monarch-money-ai-assist
 - **Nothing in plaintext in the vault.** Conversations are kept on the device, in localStorage and outside the vault,
   encrypted with the ledger's key. Changing the passphrase makes older ones unreadable.
 - **The web without the user.** The model reads recommended portfolios through tools that run on the device, only from
-  the sites of the feeds. There is no general search: Anthropic's web tools would let the model put tickers in a query.
+  the sites of the feeds. `market_data` reads Status Invest's CSV exports and the JSON behind XP's *lista-de-acoes* and
+  *lista-de-fundos*, whole, and filters them on the device; neither is a documented API, so a source that fails comes back
+  in `unavailable` and the other still answers. XP's per-ticker pages have the analyst's reasoning but would tell XP the
+  ticker, so they aren't offered. BTG's research page loads no content without a login. There is no general search:
+  Anthropic's web tools would let the model put tickers in a query.
 - **Text from outside is data.** Transaction descriptions come from banks and stores, so a description could
   carry instructions to the model. Tools return them as data, the prompt says so, and no tool writes to the
   ledger or moves money.

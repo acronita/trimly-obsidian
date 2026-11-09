@@ -24,7 +24,7 @@ function setup(): Ledger {
   return l;
 }
 
-const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A", kind: "stocks" as const }], article: async () => "texto" };
+const WEB = { portfolios: async () => [{ title: "Carteira de novembro", link: "https://a/1", date: "2026-11-05", source: "A", kind: "stocks" as const }], article: async () => "texto", market: async (tickers: string[]) => ({ results: tickers.map((ticker) => ({ ticker, status_invest: { TICKER: ticker, DY: 8 }, xp: null })), unavailable: ["XP"] }) };
 
 const reply = (content: ClaudeResponse["content"], stop_reason: string, tokens = 10): ClaudeResponse => ({ content, stop_reason, usage: { input_tokens: tokens, output_tokens: tokens } });
 const say = (text: string) => reply([{ type: "text", text }], "end_turn");
@@ -108,7 +108,7 @@ test("no tool can change the ledger", async () => {
 test("every tool answers with its documented arguments", async () => {
   for (const kind of ["accounts", "investments"] as const) {
     for (const { name } of toolDefinitions(kind)) {
-      const r = await runTool(kind, setup(), name, { month: "2026-11", from: "2026-01-01", to: TODAY, account_id: "main", days: 30, amount: 100, position: null, months: 12, url: "https://x" }, TODAY, WEB);
+      const r = await runTool(kind, setup(), name, { month: "2026-11", from: "2026-01-01", to: TODAY, account_id: "main", days: 30, amount: 100, position: null, months: 12, url: "https://x", tickers: ["PETR4"] }, TODAY, WEB);
       assert.equal(r.isError, false, `${name}: ${r.result}`);
     }
   }
@@ -192,6 +192,29 @@ test("a position with no known cost is still reported, with what it is worth", a
   assert.deepEqual([positions[0].invested, positions[0].value], [null, 3000]);
 });
 
+test("an ETF not yet classified is not reported as something to sell", async () => {
+  const l = setup();
+  l.investments.assets.push({ id: "e", name: "BOVA11", code: "BOVA11", assetClass: "etf", value: 1000_00, updatedAt: TODAY });
+  l.investments.targets = [{ assetClass: "reit", pct: 100 }];
+  const lines = JSON.parse((await runTool("investments", l, "contribution_plan", { amount: 0 }, TODAY)).result) as { class: string; to_target: number | null }[];
+  assert.equal(lines.find((x) => x.class === "etf")?.to_target, null);
+  l.investments.assets.push({ id: "f", name: "Fundo", assetClass: "fund", value: 1000_00, updatedAt: TODAY });
+  const withFund = JSON.parse((await runTool("investments", l, "contribution_plan", { amount: 0 }, TODAY)).result) as { class: string; to_target: number | null }[];
+  assert.equal(withFund.find((x) => x.class === "fund")?.to_target, null);
+  assert.notEqual(lines.find((x) => x.class === "reit")?.to_target, null);
+});
+
+test("the reserve tool gives the assistant what it needs to judge each marked position", async () => {
+  const l = setup();
+  assert.equal(JSON.parse((await runTool("investments", l, "emergency_reserve", {}, TODAY)).result), null);
+  l.investments.assets[0] = { ...l.investments.assets[0], subtype: "CDB", rateType: "CDI", rate: 100, dueDate: "2028-01-01" };
+  l.investments.reserve = { amount: 2000_00, assetIds: ["fii"] };
+  const r = JSON.parse((await runTool("investments", l, "emergency_reserve", {}, TODAY)).result) as { held: number; above_amount: number; positions: { in_reserve: number; product: string; index: string; index_pct: number; due_date: string }[] };
+  assert.deepEqual([r.held, r.above_amount], [2000, 1000]);
+  const [p] = r.positions;
+  assert.deepEqual([p.in_reserve, p.product, p.index, p.index_pct, p.due_date], [2000, "CDB", "CDI", 100, "2028-01-01"]);
+});
+
 test("the history tool gives each month, and movements go back further than the snapshots", async () => {
   const l = setup();
   l.investments.snapshots = [{ date: "2026-10-25", value: 2900_00, invested: 2500_00 }, { date: "2026-11-06", value: 3000_00, invested: 2500_00 }];
@@ -212,5 +235,13 @@ test("the web tools say so when the sources are off, and answer when they are on
 });
 
 test("only the investments assistant reads the web", () => {
-  assert.ok(!toolDefinitions("accounts").some((t) => t.name === "read_article"));
+  assert.ok(!toolDefinitions("accounts").some((t) => t.name === "read_article" || t.name === "market_data"));
+});
+
+test("market data respects the sources' switch, and asks once per ticker however the model writes it", async () => {
+  assert.equal((await runTool("investments", setup(), "market_data", { tickers: ["PETR4"] }, TODAY)).isError, true);
+  const on = JSON.parse((await runTool("investments", setup(), "market_data", { tickers: [" petr4", "PETR4", "hglg11"] }, TODAY, WEB)).result) as { results: { ticker: string }[]; unavailable: string[] };
+  assert.deepEqual(on.results.map((r) => r.ticker), ["PETR4", "HGLG11"]);
+  assert.deepEqual(on.unavailable, ["XP"]);
+  assert.equal((await runTool("investments", setup(), "market_data", { tickers: [] }, TODAY, WEB)).isError, true);
 });

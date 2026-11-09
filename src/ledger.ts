@@ -17,7 +17,7 @@ export type CategoryKind = "expense" | "income";
 export type TxType = "expense" | "income" | "transfer";
 export type Frequency = "weekly" | "monthly" | "yearly";
 export type MovementType = "buy" | "sell" | "income" | "tax" | "amortization" | "transfer";
-export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "other";
+export type AssetClass = "fixed_income" | "treasury" | "stock" | "reit" | "etf" | "fund" | "retirement" | "international" | "gold" | "crypto" | "other";
 export type ObligationKind = "payment" | "document";
 export type ObligationFrequency = "monthly" | "yearly";
 
@@ -38,8 +38,21 @@ export const ASSET_CLASS_COLORS: Record<AssetClass, string> = {
   etf: "#45818e",
   fund: "#8e7cc3",
   retirement: "#c27ba0",
+  international: "#16a3b8",
+  gold: "#d4a017",
+  crypto: "#cc4125",
   other: "#999999",
 };
+
+/** The classes that take allocation targets: what a position exposes you to. The others name a product. */
+export const TARGET_CLASSES: AssetClass[] = ["treasury", "fixed_income", "reit", "stock", "international", "gold", "crypto"];
+
+export function takesTarget(c: AssetClass): boolean {
+  return TARGET_CLASSES.includes(c);
+}
+
+/** The emergency reserve's slice in the allocation chart. */
+export const RESERVE_COLOR = "#a2c4c9";
 
 export const ASSET_CLASS_ICONS: Record<AssetClass, string> = {
   fixed_income: "landmark",
@@ -49,6 +62,9 @@ export const ASSET_CLASS_ICONS: Record<AssetClass, string> = {
   etf: "layers",
   fund: "briefcase",
   retirement: "umbrella",
+  international: "globe",
+  gold: "gem",
+  crypto: "bitcoin",
   other: "coins",
 };
 
@@ -267,6 +283,8 @@ export interface Asset {
   id: string;
   name: string;
   assetClass: AssetClass;
+  /** the class it counts under in the allocation and targets, when not its own; `assetClass` still decides income tax, so an IVVB11 can count as international and stay an ETF */
+  targetClass?: AssetClass;
   /** ticker or product code, e.g. "PETR4" */
   code?: string;
   issuer?: string;
@@ -309,6 +327,10 @@ export interface Asset {
   renamed?: boolean;
   /** the user set the institution of a synced position, so sync stops replacing it */
   institutionEdited?: boolean;
+  /** what it invests in ("Logística", "Bancos"); "" = looked up and not found */
+  segment?: string;
+  /** the user typed the segment, so the lookup keeps it */
+  segmentEdited?: boolean;
   /** last brapi quote, for positions with a B3 ticker */
   quote?: Quote;
 }
@@ -384,6 +406,13 @@ export interface AllocationTarget {
   pct: number;
 }
 
+/** Money set apart from the portfolio: up to `amount` of what the marked positions hold. */
+export interface EmergencyReserve {
+  /** cents */
+  amount: number;
+  assetIds: string[];
+}
+
 export interface Investments {
   assets: Asset[];
   /** oldest first, at most one per day */
@@ -392,6 +421,7 @@ export interface Investments {
   /** bank or spreadsheet movements taken out as repeats: kept only so sync and import don't bring them back */
   dismissedMovements: Movement[];
   targets: AllocationTarget[];
+  reserve?: EmergencyReserve;
 }
 
 /** brapi.dev token for quotes. Kept inside the encrypted ledger, never in data.json. */
@@ -449,6 +479,7 @@ export interface Ledger {
   brapi?: BrapiConfig;
   /** day the Tesouro Direto prices were last fetched; the file is big, so once a day */
   treasuryCheckedOn?: string;
+  segmentsCheckedOn?: string;
   /** set when the AI assistants are turned on */
   ai?: AiConfig;
   /** exchange rates, set when some account or transaction is in another currency */
@@ -531,11 +562,12 @@ export function parseLedger(json: string): Ledger {
     obligations: (raw.obligations ?? []).map(migrateObligation),
     investments: {
       // positions could belong to a portfolio until 0.34.0
-      assets: (raw.investments?.assets ?? []).map(({ portfolioId: _dropped, ...a }: Asset & { portfolioId?: string }) => a),
+      assets: (raw.investments?.assets ?? []).map(migrateAsset),
       snapshots: raw.investments?.snapshots ?? [],
       movements: raw.investments?.movements ?? [],
       dismissedMovements: raw.investments?.dismissedMovements ?? [],
-      targets: raw.investments?.targets ?? [],
+      targets: migrateTargets(raw.investments?.targets ?? []),
+      ...(raw.investments?.reserve && { reserve: raw.investments.reserve }),
     },
     plans: raw.plans,
     goals: raw.goals?.map(migrateGoal),
@@ -544,9 +576,36 @@ export function parseLedger(json: string): Ledger {
     pluggy: raw.pluggy,
     brapi: raw.brapi,
     treasuryCheckedOn: raw.treasuryCheckedOn,
+    segmentsCheckedOn: raw.segmentsCheckedOn,
     ai: raw.ai,
     fx: raw.fx,
   };
+}
+
+/** "dollar" was a class in the first builds of 1.2.0; dollars count as international now. */
+type LegacyClass = AssetClass | "dollar";
+const currentClass = (c: LegacyClass): AssetClass => (c === "dollar" ? "international" : c);
+
+type LegacyAsset = Omit<Asset, "assetClass" | "targetClass"> & { portfolioId?: string; assetClass: LegacyClass; targetClass?: LegacyClass };
+
+function migrateAsset({ portfolioId: _dropped, ...a }: LegacyAsset): Asset {
+  const out = { ...a, assetClass: currentClass(a.assetClass) } as Asset;
+  if (a.targetClass) {
+    const c = currentClass(a.targetClass);
+    if (takesTarget(c)) out.targetClass = c;
+    else delete out.targetClass;
+  }
+  return out;
+}
+
+/** Only exposure classes keep their targets; dollars add to international. */
+function migrateTargets(targets: { assetClass: LegacyClass; pct: number }[]): AllocationTarget[] {
+  const out = new Map<AssetClass, number>();
+  for (const t of targets) {
+    const c = currentClass(t.assetClass);
+    if (takesTarget(c)) out.set(c, (out.get(c) ?? 0) + t.pct);
+  }
+  return [...out].map(([assetClass, pct]) => ({ assetClass, pct }));
 }
 
 /** A goal as saved up to 0.34.0, with one account or position. */
@@ -1104,11 +1163,77 @@ export function contributionsInMonth(ledger: Ledger, month: string): number {
   return ledger.investments.movements.filter((m) => m.type === "buy" && monthOf(m.date) === month).reduce((s, m) => s + m.amount, 0);
 }
 
-/** Current value per asset class, largest first. */
-export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
+/** The class a position counts under in the allocation and the targets. */
+export function allocationClass(a: Pick<Asset, "assetClass" | "targetClass">): AssetClass {
+  return a.targetClass ?? a.assetClass;
+}
+
+function valueByClass(ledger: Ledger, valueOf: (a: Asset) => number): [AssetClass, number][] {
   const out = new Map<AssetClass, number>();
-  for (const a of openAssets(ledger)) out.set(a.assetClass, (out.get(a.assetClass) ?? 0) + a.value);
+  for (const a of openAssets(ledger)) out.set(allocationClass(a), (out.get(allocationClass(a)) ?? 0) + valueOf(a));
   return [...out.entries()].filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]);
+}
+
+/** Current value per asset class, reserve included, largest first. */
+export function allocationByClass(ledger: Ledger): [AssetClass, number][] {
+  return valueByClass(ledger, (a) => a.value);
+}
+
+// ---- emergency reserve ----
+
+/**
+ * Cents of each marked position that belong to the reserve. When they hold more than
+ * the reserve's amount, each gives up the same proportion and the rest stays in the portfolio.
+ */
+export function reservedByAsset(ledger: Ledger): Map<string, number> {
+  const reserve = ledger.investments.reserve;
+  if (!reserve) return new Map();
+  const assets = openAssets(ledger).filter((a) => reserve.assetIds.includes(a.id) && a.value > 0);
+  const total = assets.reduce((s, a) => s + a.value, 0);
+  const split = splitCents(Math.min(reserve.amount, total), assets.map((a) => a.value));
+  return new Map(assets.map((a, i) => [a.id, split[i]]));
+}
+
+export interface ReserveStatus {
+  amount: number;
+  /** what the marked positions cover of `amount` */
+  held: number;
+  missing: number;
+  /** what the marked positions hold above `amount`; it stays in the portfolio */
+  surplus: number;
+  lines: { asset: Asset; reserved: number }[];
+}
+
+/** Null when no reserve is set. */
+export function reserveStatus(ledger: Ledger): ReserveStatus | null {
+  const reserve = ledger.investments.reserve;
+  if (!reserve) return null;
+  const assets = openAssets(ledger).filter((a) => reserve.assetIds.includes(a.id));
+  const reserved = reservedByAsset(ledger);
+  const held = [...reserved.values()].reduce((s, v) => s + v, 0);
+  return {
+    amount: reserve.amount,
+    held,
+    missing: reserve.amount - held,
+    surplus: assets.reduce((s, a) => s + a.value, 0) - held,
+    lines: assets.map((asset) => ({ asset, reserved: reserved.get(asset.id) ?? 0 })).sort((a, b) => b.reserved - a.reserved),
+  };
+}
+
+/** What a position has outside the reserve: the part the targets and contributions look at. */
+export function investableValue(ledger: Ledger, a: Asset): number {
+  return a.value - (reservedByAsset(ledger).get(a.id) ?? 0);
+}
+
+/** Value per class without the reserve, largest first. */
+export function investableByClass(ledger: Ledger): [AssetClass, number][] {
+  const reserved = reservedByAsset(ledger);
+  return valueByClass(ledger, (a) => a.value - (reserved.get(a.id) ?? 0));
+}
+
+/** The portfolio without the reserve. */
+export function investableTotal(ledger: Ledger): number {
+  return investableByClass(ledger).reduce((s, [, v]) => s + v, 0);
 }
 
 /** Date of the last snapshot before `today`: flows on today's snapshot count from the day after it. */
@@ -1187,14 +1312,15 @@ function splitCents(cents: number, weights: number[]): number[] {
  * `contribution` to get closer without selling: underweight classes first, in
  * proportion to how far behind they are, then any rest by target weight.
  * Classes without a target count as a 0% target. Empty when there are no targets.
+ * The emergency reserve is left out: targets are shares of the rest.
  */
 export function rebalance(ledger: Ledger, contribution: number): RebalanceLine[] {
   const targets = ledger.investments.targets.filter((t) => t.pct > 0);
   const sum = targets.reduce((s, t) => s + t.pct, 0);
   if (sum <= 0) return [];
-  const current = new Map(allocationByClass(ledger));
+  const current = new Map(investableByClass(ledger));
   const classes = [...new Set<AssetClass>([...targets.map((t) => t.assetClass), ...current.keys()])];
-  const total = portfolioValue(ledger);
+  const total = investableTotal(ledger);
   const after = total + Math.max(0, contribution);
   const lines: RebalanceLine[] = classes.map((c) => {
     const value = current.get(c) ?? 0;
@@ -1217,6 +1343,8 @@ function splitContribution(cents: number, after: number, parts: { value: number;
 
 export interface AssetTargetLine {
   asset: Asset;
+  /** what it has outside the reserve, cents */
+  value: number;
   /** share of its class today, percent */
   pct: number;
   /** share of its class by weight, percent */
@@ -1225,9 +1353,15 @@ export interface AssetTargetLine {
   contribute: number;
 }
 
-/** A class's open positions: what the weights apply to. */
+/** A class's open positions, except those entirely in the reserve: what the weights apply to. */
 export function classAssets(ledger: Ledger, assetClass: AssetClass): Asset[] {
-  return openAssets(ledger).filter((a) => a.assetClass === assetClass);
+  const reserved = reservedByAsset(ledger);
+  return openAssets(ledger).filter((a) => allocationClass(a) === assetClass && !(a.value > 0 && reserved.get(a.id) === a.value));
+}
+
+/** Positions still under a product class: outside any target until the user says what they expose them to. */
+export function unclassifiedAssets(ledger: Ledger): Asset[] {
+  return (Object.keys(ASSET_CLASS_ICONS) as AssetClass[]).filter((c) => !takesTarget(c)).flatMap((c) => classAssets(ledger, c));
 }
 
 /**
@@ -1239,16 +1373,18 @@ export function assetTargets(ledger: Ledger, assetClass: AssetClass, contribute:
   const assets = classAssets(ledger, assetClass);
   const sum = assets.reduce((s, a) => s + (a.weight ?? 0), 0);
   if (sum <= 0) return [];
-  const total = assets.reduce((s, a) => s + a.value, 0);
-  const lines: AssetTargetLine[] = assets.map((asset) => ({
+  const values = assets.map((a) => investableValue(ledger, a));
+  const total = values.reduce((s, v) => s + v, 0);
+  const lines: AssetTargetLine[] = assets.map((asset, i) => ({
     asset,
-    pct: total > 0 ? (asset.value / total) * 100 : 0,
+    value: values[i],
+    pct: total > 0 ? (values[i] / total) * 100 : 0,
     target: ((asset.weight ?? 0) / sum) * 100,
     contribute: 0,
   }));
-  const split = splitContribution(contribute, total + contribute, lines.map((l) => ({ value: l.asset.value, target: l.target })));
+  const split = splitContribution(contribute, total + contribute, lines.map((l) => ({ value: l.value, target: l.target })));
   lines.forEach((l, i) => (l.contribute = split[i]));
-  return lines.sort((a, b) => b.target - a.target || b.asset.value - a.asset.value);
+  return lines.sort((a, b) => b.target - a.target || b.value - a.value);
 }
 
 // ---- manual investments ----
@@ -1301,6 +1437,14 @@ export function saveAsset(ledger: Ledger, asset: Asset, today: string) {
   } else {
     if (before.name !== asset.name) asset.renamed = true;
     if (asset.pluggyId && (before.institution ?? "") !== (asset.institution ?? "")) asset.institutionEdited = true;
+    if ((before.segment ?? "") !== (asset.segment ?? "")) {
+      // emptied by hand: back to the lookup
+      if (asset.segment) asset.segmentEdited = true;
+      else {
+        delete asset.segment;
+        delete asset.segmentEdited;
+      }
+    }
     if (!before.closed && asset.closed) untracked = -before.value;
     else if (before.closed && !asset.closed) untracked = asset.value;
     assets[i] = asset;

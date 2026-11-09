@@ -57,7 +57,7 @@ passphrase that never leaves your device.
   which warn that your data goes to Anthropic) — ask about your spending or your
   portfolio, with your own Anthropic API key and at your cost. Trimly does the math and sends only your question and
   the results asked for, which you can open in the chat; the whole ledger is never sent. Past conversations are listed to open again, and stay encrypted on
-  this device, outside the vault. It can read public articles on recommended portfolios, sending nothing about you.
+  this device, outside the vault. It can read public articles on recommended portfolios and consult Status Invest's indicators and XP's recommendations and target prices, sending nothing about you to those sites.
   Answers can be wrong, and the decisions are yours.
 - **News** (*Notícias*, in the investments mode) — headlines naming your tickers, filtered on the device, and
   articles from the last year on the portfolios brokers publish, by type (diversified, stocks, FIIs, fixed income, funds, ETFs, abroad, crypto) and filterable by house, from public RSS feeds including XP's own, plus links to the pages of houses with no feed and the classic allocation models. Trimly only gathers the links: not a
@@ -65,6 +65,11 @@ passphrase that never leaves your device.
 - **Export** (*Exportar dados*, in the settings, desktop only) — a readable copy to keep outside the vault:
   everything as JSON, and transactions, positions and movements as CSV for Excel. No credentials or tokens
   go in. It is not encrypted, so never save it inside the vault; there is no import back.
+- **Segments** — *Carteira* lists every class in a sortable table with each position's segment, and bars with
+  how much of the class each segment holds. Stocks get it from B3 and FIIs from the CVM monthly report, once a month;
+  Tesouro Direto groups by product (IPCA+, Selic, Prefixado) and renda fixa by indexer (CDI, IPCA, Prefixado).
+  The CVM labels many funds only "Multicategoria" or "Outros": credit funds and funds of funds are told from their
+  balance sheet, the rest stay blank, and other classes have no source, so type those in the position's form. What you type stays.
 - **Tesouro Direto prices** — manual Tesouro Direto positions are revalued once a day from the Tesouro
   Transparente open data, with no token: price (what selling pays, before tax) × quantity. Name the
   position with its type and year, like *Tesouro IPCA+ 2035*, or fill in the maturity; Renda+ and Educa+
@@ -145,7 +150,8 @@ passphrase that never leaves your device.
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution; a weight or score per
-  asset takes that split down to each position inside the class. Positions are imported by bank sync; net worth in the accounts view includes them.
+  asset takes that split down to each position inside the class. Classes include Exterior (foreign currency too), Ouro and Cripto, and a position can count under any class
+  while keeping its own for income tax; targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto, so ETFs, funds and retirement plans count by what they expose you to. The emergency fund can be set apart with an amount and the positions holding it: targets and contributions then apply to the rest. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Hide values** — the eye button in the header masks every amount on screen; click again to show
   them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
@@ -172,10 +178,10 @@ passphrase that never leaves your device.
   (default), it is kept in Obsidian's local storage for this vault on this device (app data, outside
   the vault folder). Turn it off to be asked once per session.
 - The plugin's `data.json` (inside the vault) only holds the folder, currency, language, that toggle,
-  the benchmarks, proventos calendar, Tesouro Direto prices, news and AI assistants toggles, which news sources are off,
+  the benchmarks, proventos calendar, Tesouro Direto prices, segments, news and AI assistants toggles, which news sources are off,
   the hide-values toggle and how obligation reminders are shown.
 - **Network:** Bank sync, quotes and the AI assistants stay off until you set them up. The public data below (indices,
-  proventos, Tesouro Direto prices, news) is fetched by default, and each has its own switch in settings. With bank sync on, it
+  proventos, Tesouro Direto prices, segments, news) is fetched by default, and each has its own switch in settings. With bank sync on, it
   contacts `api.pluggy.ai` to fetch your accounts and transactions; your banking data then also
   passes through Pluggy. The Pluggy credentials are stored inside the encrypted ledger. With
   investments that have history, the investments view also fetches the public CDI, IPCA and
@@ -189,12 +195,17 @@ passphrase that never leaves your device.
   the vault. Turn off *Agenda de proventos* to stop it. With manual Tesouro Direto positions, Trimly
   downloads the public price file (about 15 MB) from `www.tesourotransparente.gov.br`, at most once a
   day; it has every bond, so nothing about yours is sent. Turn off *Preços do Tesouro Direto* to stop it.
+  With FIIs or stocks that have a B3 ticker, once a month Trimly downloads the public FII report (about 1.3 MB) from
+  `dados.cvm.gov.br`, which has every fund, and asks the B3 website for each stock's segment, sending only the four-letter
+  issuer code. Turn off *Segmentos dos ativos* to stop it.
   The News tab reads public RSS feeds from `www.moneytimes.com.br`, `investnews.com.br`,
   `www.infomoney.com.br`, `www.seudinheiro.com` and `conteudos.xpi.com.br`, at most once a day, requesting only the feed's address:
   your tickers are never sent, since it filters on the device. Each source can be turned off, and *Notícias e carteiras* turns them all off.
   With the AI assistants turned on, your questions and the results of the tools they call (balances, totals by
-  category, bill, recurring and future transaction names, goals and debts, positions, the portfolio's history and movements, income
+  category, bill, recurring and future transaction names, goals and debts, positions with their products and rates, the emergency fund, the portfolio's history and movements, income
   and the tax estimate) go to `api.anthropic.com` with your key, only when you ask something; the key is stored inside the encrypted ledger.
+  When the investments assistant needs current market data, Trimly downloads the full public lists from `statusinvest.com.br` and `conteudos.xpi.com.br`, at most once an hour,
+  and picks the tickers on the device, so they aren't sent to those sites (they do go to Anthropic with the tool's result). *Notícias e carteiras* turns it off, and XP's switch turns off XP's part.
   With a brapi token, Trimly sends the
   tickers of your positions (nothing else) to `brapi.dev` to fetch quotes; the token is stored inside
   the encrypted ledger. When an account or purchase is in another currency, Trimly fetches that day's
