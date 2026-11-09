@@ -7,6 +7,14 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.7.1 — 2026-11-09
+
+- 2026-11-09 — Money passing through an account (Nubank -> Rico Conta -> investment account) pairs each hop whatever
+  order the bank lists the movements in: bank debits with the fewest possible credits pair first. Why: the first debit
+  could take the last hop's credit, leaving the middle debit with no partner, so the same amount became a transfer, a
+  false income and a false expense. Ledgers already affected are corrected by the next sync. Files touched:
+  `src/bank-sync.ts`, `test/bank-sync.test.ts`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.7.0 — 2026-11-08
 
 - 2026-11-08 — The investments assistant gets `market_data`: current indicators from Status Invest and XP's
