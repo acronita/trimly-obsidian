@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { taxKind } from "../src/income-tax.ts";
-import { assetTargets, classAssets, defaultLedger, investableByClass, investableTotal, newId, parseLedger, portfolioValue, rebalance, reservedByAsset, reserveStatus, unclassifiedAssets } from "../src/ledger.ts";
+import { assetTargets, classAssets, defaultLedger, investableByClass, investableTotal, newId, parseLedger, pensionAssets, pensionSlice, portfolioValue, rebalance, reservedByAsset, reserveStatus, unclassifiedAssets } from "../src/ledger.ts";
 import type { AllocationTarget, Asset, AssetClass, Ledger } from "../src/ledger.ts";
 
 function ledger(values: Partial<Record<AssetClass, number>>, targets: AllocationTarget[]): Ledger {
@@ -224,7 +224,8 @@ test("targets stay on what positions expose you to: product classes lose theirs 
   const parsed = parseLedger(JSON.stringify(l));
   assert.deepEqual(parsed.investments.targets, [{ assetClass: "gold", pct: 10 }]);
   assert.equal(parsed.investments.assets[3].targetClass, undefined);
-  assert.deepEqual(unclassifiedAssets(parsed).map((a) => a.id), ["f", "p"]);
+  // previdência is not waiting: it has its own place, apart from the targets
+  assert.deepEqual(unclassifiedAssets(parsed).map((a) => a.id), ["f"]);
 });
 
 test("a fund entirely in the reserve is not waiting to be classified", () => {
@@ -240,4 +241,40 @@ test("an ETF counted as international moves in the targets but stays an ETF for 
   assert.deepEqual(classAssets(l, "etf"), []);
   assert.equal(classAssets(l, "international").length, 1);
   assert.equal(taxKind(l.investments.assets[0]), "etf");
+});
+
+function withPension(): Ledger {
+  const l = defaultLedger();
+  l.investments.assets.push(
+    { id: "renda", name: "Tesouro Renda+ 2065", assetClass: "treasury", targetClass: "retirement", value: 2000_00, updatedAt: "2026-11-12" },
+    { id: "vgbl", name: "VGBL", assetClass: "retirement", value: 1000_00, updatedAt: "2026-11-12" },
+    { id: "selic", name: "Tesouro Selic", assetClass: "treasury", value: 6000_00, updatedAt: "2026-11-12" },
+    { id: "hgre", name: "HGRE11", assetClass: "reit", value: 4000_00, updatedAt: "2026-11-12" }
+  );
+  l.investments.targets = [{ assetClass: "treasury", pct: 50 }, { assetClass: "reit", pct: 50 }];
+  return l;
+}
+
+test("previdência stays apart from the targets: a Renda+ counted as previdência is not treasury in the allocation", () => {
+  const l = parseLedger(JSON.stringify(withPension()));
+  assert.deepEqual(pensionAssets(l).map((a) => a.id), ["renda", "vgbl"]);
+  assert.deepEqual(new Map(investableByClass(l)), new Map([["treasury", 6000_00], ["reit", 4000_00]]));
+  assert.equal(investableTotal(l), 10000_00);
+  // still part of what the user owns
+  assert.equal(portfolioValue(l), 13000_00);
+  assert.deepEqual(unclassifiedAssets(l), []);
+});
+
+test("previdência takes its slice of the aporte first, as a percent or a fixed amount, and the targets split the rest", () => {
+  const l = withPension();
+  assert.equal(pensionSlice(l, 1500_00), 0);
+  l.investments.pensionShare = { value: 20, unit: "pct" };
+  assert.equal(pensionSlice(l, 1500_00), 300_00);
+  l.investments.pensionShare = { value: 300_00, unit: "cents" };
+  assert.equal(pensionSlice(l, 1500_00), 300_00);
+  // a fixed amount never takes more than the aporte
+  assert.equal(pensionSlice(l, 200_00), 200_00);
+  const rest = rebalance(l, 1500_00 - pensionSlice(l, 1500_00));
+  assert.equal(rest.reduce((s, x) => s + x.contribute, 0), 1200_00);
+  assert.equal(parseLedger(JSON.stringify(l)).investments.pensionShare?.value, 300_00);
 });

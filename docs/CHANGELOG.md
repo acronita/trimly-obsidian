@@ -7,6 +7,32 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.8.0 — 2026-11-12
+
+- 2026-11-12 — Money into or out of investments from a bank account (a brokerage note settled, "OPERAÇÕES EM BOLSA",
+  an application, a redemption, or anything Pluggy puts under *Investments* except dividends) syncs as a transfer with
+  the new `PORTFOLIO` side ("Carteira de investimentos") instead of an expense or income; the transaction editor offers
+  it as a transfer side too. Ledgers already synced are corrected by the next sync. Why: paying for a purchase of
+  investments showed as uncategorized spending, while the aporte was already counted from the positions. Files
+  touched: `src/bank-sync.ts`, `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/export.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/bank-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
+- 2026-11-12 — The *Investir* goal counts net aportes: buys minus sells of the month. Why: a brokerage note that sells
+  FIIs to buy ETFs counted the whole purchase as new money. The calculators' default monthly contribution follows.
+  Files touched: `src/ledger.ts`, `src/view.ts`, `test/ledger.test.ts`, `README.md`.
+- 2026-11-12 — Previdência stays apart from the allocation targets, like the emergency reserve: PGBL/VGBL and any
+  position with *Conta nas metas como: Previdência* (now an option, e.g. a Tesouro Renda+). *Metas* gets a
+  *Previdência* card with its positions and *Parte de cada aporte*, a percent or a fixed amount, which the contribution
+  planner sends to previdência before splitting the rest by the targets. The planner starts from what is left of the
+  month's *Investir* goal. New optional `investments.pensionShare`, version unchanged. Why: asked, to keep previdência
+  separate and fund it with a fixed slice. Files touched: `src/ledger.ts`, `src/view.ts`, `src/modals.ts`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+- 2026-11-12 — A fund's, FII's or stock's issuer (the product itself, e.g. "CSHG RENDA URBANA - FDO INV IMOB - FII") no
+  longer stands in for a missing institution; only a fixed income issuer, a bank, does. Such an institution already
+  saved, even spread to the whole connection, goes back to sync. Empty "SAIDA" redemptions (no money, no shares) are
+  no longer kept, and old ones are removed by the next sync. Why: *Por instituição* showed an FII as the institution
+  of 84% of the portfolio, and *Movimentações* listed R$ 0,00 redemptions. Files touched: `src/investment-sync.ts`,
+  `test/investment-sync.test.ts`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.7.1 — 2026-11-09
 
 - 2026-11-09 — Money passing through an account (Nubank -> Rico Conta -> investment account) pairs each hop whatever

@@ -181,6 +181,7 @@ export const ptBR = {
     received: (v: string) => `${v} recebidos`,
     purchasedIn: (currency: string) => `Compra feita em ${currency}; abaixo, o valor cobrado na conta`,
     recurring: "Recorrente",
+    portfolio: "Carteira de investimentos",
     categoryApplied: (n: number) => (n === 1 ? "Categoria aplicada a mais 1 transação igual e às próximas" : `Categoria aplicada a mais ${n} transações iguais e às próximas`),
     installment: (n: number, total: number) => `${n}/${total}`,
     installmentOf: (n: number, total: number) => `Parcela ${n} de ${total}`,
@@ -854,6 +855,17 @@ export const ptBR = {
       partOf: (v: string) => `Parte de ${v}`,
       rest: (v: string) => `Carteira sem a reserva: ${v}. As metas abaixo valem sobre esse valor.`,
     },
+    pension: {
+      title: "Previdência",
+      none: "PGBL, VGBL e o que você marcar em “Conta nas metas como: Previdência” (um Tesouro Renda+, por exemplo) ficam aqui, fora das metas por classe, e recebem uma parte fixa de cada aporte.",
+      share: "Parte de cada aporte",
+      shareDesc: "Uma porcentagem (20%) ou um valor fixo (300). Sai do aporte antes da divisão pelas metas.",
+      invalidShare: "Digite uma porcentagem entre 0 e 100 (ex.: 20%) ou um valor (ex.: 300).",
+    },
+    fromPlan: (month: string) => `Valor que falta da meta Investir de ${month}. Mude se quiser simular outro.`,
+    toPension: "Previdência",
+    toPensionSub: (names: string) => names,
+    toTargets: (v: string) => `${v} divididos pelas metas`,
   },
 
   modals: {
@@ -1044,7 +1056,7 @@ export const ptBR = {
       namePlaceholder: "Nome do investimento",
       class: "Classe",
       targetClass: "Conta nas metas como",
-      targetClassDesc: "A que o ativo te expõe, como Exterior, Ações ou Ouro. Um ETF, fundo ou previdência precisa disso para entrar nas metas. A classe acima continua valendo para o IR.",
+      targetClassDesc: "A que o ativo te expõe, como Exterior, Ações ou Ouro. Um ETF ou fundo precisa disso para entrar nas metas. Previdência fica separada das metas e recebe uma parte fixa do aporte. A classe acima continua valendo para o IR.",
       sameClass: "A própria classe",
       syncedNote:
         "Este ativo vem da sincronização bancária: valores e movimentações são atualizados a cada sincronização. " +

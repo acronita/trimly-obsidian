@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyBankData } from "../src/bank-sync.ts";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "../src/bank-sync.ts";
-import { accountBalance, defaultLedger, monthSummary, parseLedger, postDueRecurring, translateDefaults } from "../src/ledger.ts";
+import { PORTFOLIO, accountBalance, defaultLedger, monthSummary, parseLedger, postDueRecurring, translateDefaults } from "../src/ledger.ts";
 import { LANGUAGES } from "../src/i18n/index.ts";
 import type { Ledger, Recurring } from "../src/ledger.ts";
 
@@ -413,4 +413,58 @@ test("a category the user taught wins over the bank's for new synced transaction
   l.categoryRules = [{ key: "ifood", categoryId: taught.id }];
   applyBankData(l, ifood(), WINDOW, TODAY);
   assert.equal(l.transactions[0].categoryId, taught.id);
+});
+
+const INVESTMENT_CATEGORIES: PluggyCategory[] = [
+  { id: "03000000", description: "Investments" },
+  { id: "03030000", description: "Variable income", parentId: "03000000" },
+  { id: "03060000", description: "Proceeds interests and dividends", parentId: "03000000" },
+];
+
+function withInvestments(transactions: PluggyTransaction[]): BankData {
+  return { accounts: [checking], transactions, categories: [...CATEGORIES, ...INVESTMENT_CATEGORIES] };
+}
+
+test("settling a brokerage note moves money to the portfolio: not spending, and the account still matches the bank", () => {
+  const l = fresh();
+  applyBankData(l, withInvestments([tx("OPERAÇÕES EM BOLSA PR 09/11/2026 NOTA Nº 148541559", "p-chk", "2026-11-11", 261.96, "DEBIT")]), WINDOW, TODAY);
+  const [note] = l.transactions;
+  // the aportes are counted from the positions; an expense here would make the same money spending too
+  assert.equal(note.type, "transfer");
+  assert.equal(note.accountId, synced(l, "p-chk").id);
+  assert.equal(note.toAccountId, PORTFOLIO);
+  assert.equal(monthSummary(l, "2026-11").expense, 0);
+  assert.equal(accountBalance(l, synced(l, "p-chk").id, TODAY), 1000_00);
+});
+
+test("money back from investments is not income, but dividends are", () => {
+  const l = fresh();
+  applyBankData(
+    l,
+    withInvestments([
+      tx("Venda de ações", "p-chk", "2026-10-10", 500, "CREDIT", { categoryId: "03030000" }),
+      tx("Dividendos BBAS3", "p-chk", "2026-10-12", 30, "CREDIT", { categoryId: "03060000" }),
+      tx("Resgate RDB", "p-chk", "2026-10-14", 200, "CREDIT"),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  const byId = (pid: string) => l.transactions.find((t) => t.pluggyIds?.includes(pid))!;
+  assert.equal(byId("Venda de ações").type, "transfer");
+  assert.equal(byId("Venda de ações").accountId, PORTFOLIO);
+  assert.equal(byId("Resgate RDB").type, "transfer");
+  assert.equal(byId("Dividendos BBAS3").type, "income");
+  assert.equal(monthSummary(l, "2026-10").income, 30_00);
+});
+
+test("a brokerage note already imported as an expense turns into a transfer to the portfolio on the next sync", () => {
+  const l = fresh();
+  const note = tx("OPERACOES EM BOLSA", "p-chk", "2026-11-11", 100, "DEBIT");
+  applyBankData(l, data([note], [checking]), WINDOW, TODAY);
+  l.transactions[0].type = "expense";
+  delete l.transactions[0].toAccountId;
+  applyBankData(l, data([note], [checking]), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 1);
+  assert.equal(l.transactions[0].type, "transfer");
+  assert.equal(l.transactions[0].toAccountId, PORTFOLIO);
 });

@@ -25,6 +25,8 @@ import {
   Settlement,
   Transaction,
   TxType,
+  PORTFOLIO,
+  PENSION_CLASS,
   accountCurrency,
   centsToInput,
   convert,
@@ -169,9 +171,11 @@ function dateSetting(container: HTMLElement, name: string, initial: string, onCh
   });
 }
 
-function accountOptions(ledger: Ledger, current?: string): Record<string, string> {
+/** `portfolio`: a transfer's side can also be the investment portfolio. */
+function accountOptions(ledger: Ledger, current?: string, portfolio = false): Record<string, string> {
   const out: Record<string, string> = {};
   for (const a of ledger.accounts) if (!a.archived || a.id === current) out[a.id] = a.name;
+  if (portfolio) out[PORTFOLIO] = t.tx.portfolio;
   return out;
 }
 
@@ -256,7 +260,7 @@ function renderTxLikeFields(container: HTMLElement, ledger: Ledger, draft: TxLik
   );
   new Setting(container).setName(draft.type === "transfer" ? t.modals.tx.fromAccount : t.modals.tx.account).addDropdown((d) =>
     d
-      .addOptions(accountOptions(ledger, draft.accountId))
+      .addOptions(accountOptions(ledger, draft.accountId, draft.type === "transfer"))
       .setValue(draft.accountId)
       .onChange((v) => {
         draft.accountId = v;
@@ -268,7 +272,7 @@ function renderTxLikeFields(container: HTMLElement, ledger: Ledger, draft: TxLik
     if (!draft.toAccountId) draft.toAccountId = ledger.accounts.find((a) => a.id !== draft.accountId && !a.archived)?.id;
     new Setting(container).setName(t.modals.tx.toAccount).addDropdown((d) =>
       d
-        .addOptions(accountOptions(ledger, draft.toAccountId))
+        .addOptions(accountOptions(ledger, draft.toAccountId, true))
         .setValue(draft.toAccountId ?? "")
         .onChange((v) => {
           draft.toAccountId = v;
@@ -786,7 +790,7 @@ export class AssetModal extends Modal {
       .setDesc(a.targetClassDesc)
       .addDropdown((dd) =>
         dd
-          .addOptions({ "": a.sameClass, ...Object.fromEntries(TARGET_CLASSES.map((c) => [c, t.labels.assetClass[c]])) })
+          .addOptions({ "": a.sameClass, ...Object.fromEntries([...TARGET_CLASSES, PENSION_CLASS].map((c) => [c, t.labels.assetClass[c]])) })
           .setValue(d.targetClass ?? "")
           .onChange((v) => (d.targetClass = (v as AssetClass) || undefined))
       );
