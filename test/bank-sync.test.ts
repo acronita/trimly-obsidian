@@ -150,6 +150,45 @@ test("equal amounts between two banks only pair when Pluggy says it is a same-pe
   assert.equal(own.transactions.filter((t) => t.type === "transfer").length, 1);
 });
 
+const nubank: PluggyAccount = { id: "p-nu", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Nubank", balance: 0 };
+const rico: PluggyAccount = { id: "p-rico", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Rico Conta", balance: 0 };
+const ricoInv: PluggyAccount = { id: "p-inv", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Rico Conta Investimentos", balance: 500 };
+const chain = [nubank, rico, ricoInv];
+const own = { categoryId: "04000000" };
+const nuOut = tx("nu-out", "p-nu", "2026-10-10", -500, "DEBIT", own);
+const pixIn = tx("pix-in", "p-rico", "2026-10-10", 500, "CREDIT", own);
+const ricoOut = tx("rico-out", "p-rico", "2026-10-10", -500, "DEBIT", own);
+const invIn = tx("inv-in", "p-inv", "2026-10-10", 500, "CREDIT", own);
+
+test("money passing through an account pairs each hop, whatever order the bank lists the legs in", () => {
+  // Nubank -> Rico -> investment account: if Nubank's debit takes the last credit, Rico's debit has no partner
+  // left and the same R$ 500 shows up as a false expense and a false income
+  const l = fresh();
+  applyBankData(l, data([nuOut, invIn, pixIn, ricoOut], chain), WINDOW, TODAY);
+  const hops = l.transactions.filter((t) => t.type === "transfer").map((t) => [t.accountId, t.toAccountId]);
+  assert.deepEqual(hops.sort(), [[synced(l, "p-nu").id, synced(l, "p-rico").id], [synced(l, "p-rico").id, synced(l, "p-inv").id]].sort());
+  assert.deepEqual(monthSummary(l, "2026-10"), { ...monthSummary(l, "2026-10"), income: 0, expense: 0 });
+});
+
+test("a Pix shown as income while the sender's bank lags becomes a transfer when its debit arrives", () => {
+  const l = fresh();
+  applyBankData(l, data([pixIn, ricoOut, invIn], chain), WINDOW, TODAY);
+  assert.equal(monthSummary(l, "2026-10").income, 500_00);
+  applyBankData(l, data([nuOut, invIn, pixIn, ricoOut], chain), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 2);
+  assert.equal(monthSummary(l, "2026-10").income, 0);
+});
+
+test("a ledger holding a hop paired to the wrong account is corrected by the next sync", () => {
+  // without Rico's debit, Nubank's can only guess: it takes the investment account's credit
+  const l = fresh();
+  applyBankData(l, data([nuOut, invIn, pixIn], chain), WINDOW, TODAY);
+  assert.equal(l.transactions.find((t) => t.type === "transfer")?.toAccountId, synced(l, "p-inv").id);
+  applyBankData(l, data([nuOut, invIn, pixIn, ricoOut], chain), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 2);
+  assert.equal(l.transactions.filter((t) => t.type === "transfer").length, 2);
+});
+
 test("a card transaction restated with a new id keeps the user's category and is not duplicated", () => {
   const l = fresh();
   applyBankData(l, data([tx("old-id", "p-card", "2026-10-10", 80, "DEBIT", { status: "PENDING" })]), WINDOW, TODAY);
