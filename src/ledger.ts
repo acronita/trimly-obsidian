@@ -51,6 +51,12 @@ export function takesTarget(c: AssetClass): boolean {
   return TARGET_CLASSES.includes(c);
 }
 
+/**
+ * Previdência is kept apart from the allocation targets, like the emergency reserve: PGBL/VGBL,
+ * and anything the user counts as previdência (a Tesouro Renda+). It gets a fixed slice of each aporte instead.
+ */
+export const PENSION_CLASS: AssetClass = "retirement";
+
 /** The emergency reserve's slice in the allocation chart. */
 export const RESERVE_COLOR = "#a2c4c9";
 
@@ -413,6 +419,13 @@ export interface EmergencyReserve {
   assetIds: string[];
 }
 
+/** The slice of each aporte that goes to previdência before the targets split the rest. */
+export interface PensionShare {
+  /** percent of the aporte, or cents per month */
+  value: number;
+  unit: "pct" | "cents";
+}
+
 export interface Investments {
   assets: Asset[];
   /** oldest first, at most one per day */
@@ -422,6 +435,7 @@ export interface Investments {
   dismissedMovements: Movement[];
   targets: AllocationTarget[];
   reserve?: EmergencyReserve;
+  pensionShare?: PensionShare;
 }
 
 /** brapi.dev token for quotes. Kept inside the encrypted ledger, never in data.json. */
@@ -568,6 +582,7 @@ export function parseLedger(json: string): Ledger {
       dismissedMovements: raw.investments?.dismissedMovements ?? [],
       targets: migrateTargets(raw.investments?.targets ?? []),
       ...(raw.investments?.reserve && { reserve: raw.investments.reserve }),
+      ...(raw.investments?.pensionShare && { pensionShare: raw.investments.pensionShare }),
     },
     plans: raw.plans,
     goals: raw.goals?.map(migrateGoal),
@@ -592,7 +607,7 @@ function migrateAsset({ portfolioId: _dropped, ...a }: LegacyAsset): Asset {
   const out = { ...a, assetClass: currentClass(a.assetClass) } as Asset;
   if (a.targetClass) {
     const c = currentClass(a.targetClass);
-    if (takesTarget(c)) out.targetClass = c;
+    if (takesTarget(c) || c === PENSION_CLASS) out.targetClass = c;
     else delete out.targetClass;
   }
   return out;
@@ -768,6 +783,18 @@ export function foreignCurrencies(ledger: Ledger, base: string): string[] {
 }
 
 // ---- computations ----
+
+/**
+ * Stands for the investment portfolio as one side of a transfer: money that left an account
+ * to buy investments, or came back from them. It is not an account and has no balance here;
+ * the positions hold that money.
+ */
+export const PORTFOLIO = "portfolio";
+
+/** An account's name, or the portfolio's; undefined for an unknown id. */
+export function accountName(ledger: Ledger, id?: string): string | undefined {
+  return id === PORTFOLIO ? t.tx.portfolio : ledger.accounts.find((a) => a.id === id)?.name;
+}
 
 /** Signed effect of a transaction on one account, in cents. */
 export function effectOn(tx: Transaction, accountId: string): number {
@@ -1158,9 +1185,18 @@ export function removeDebt(ledger: Ledger, id: string) {
   ledger.debts = debts.length ? debts : undefined;
 }
 
-/** Aportes (buy movements) made in `month`, in cents. */
+/**
+ * Net aportes of `month`, in cents: buys minus sells. Swapping one asset for another (selling to buy)
+ * is not new money, and a broker's cash fund going in and out cancels; negative when more came out.
+ */
 export function contributionsInMonth(ledger: Ledger, month: string): number {
-  return ledger.investments.movements.filter((m) => m.type === "buy" && monthOf(m.date) === month).reduce((s, m) => s + m.amount, 0);
+  let net = 0;
+  for (const m of ledger.investments.movements) {
+    if (monthOf(m.date) !== month) continue;
+    if (m.type === "buy") net += m.amount;
+    else if (m.type === "sell") net -= m.amount;
+  }
+  return net;
 }
 
 /** The class a position counts under in the allocation and the targets. */
@@ -1225,13 +1261,29 @@ export function investableValue(ledger: Ledger, a: Asset): number {
   return a.value - (reservedByAsset(ledger).get(a.id) ?? 0);
 }
 
-/** Value per class without the reserve, largest first. */
+/** Value per class without the reserve and previdência, largest first. */
 export function investableByClass(ledger: Ledger): [AssetClass, number][] {
   const reserved = reservedByAsset(ledger);
-  return valueByClass(ledger, (a) => a.value - (reserved.get(a.id) ?? 0));
+  return valueByClass(ledger, (a) => (allocationClass(a) === PENSION_CLASS ? 0 : a.value - (reserved.get(a.id) ?? 0)));
 }
 
-/** The portfolio without the reserve. */
+// ---- previdência ----
+
+/** Open positions counted as previdência, largest first. */
+export function pensionAssets(ledger: Ledger): Asset[] {
+  return openAssets(ledger)
+    .filter((a) => allocationClass(a) === PENSION_CLASS)
+    .sort((x, y) => y.value - x.value);
+}
+
+/** How much of an aporte of `cents` goes to previdência: a percent of it, or a fixed amount capped at it. */
+export function pensionSlice(ledger: Ledger, cents: number): number {
+  const share = ledger.investments.pensionShare;
+  if (!share || cents <= 0) return 0;
+  return share.unit === "pct" ? Math.round((cents * Math.min(100, share.value)) / 100) : Math.min(cents, share.value);
+}
+
+/** The portfolio without the reserve and previdência. */
 export function investableTotal(ledger: Ledger): number {
   return investableByClass(ledger).reduce((s, [, v]) => s + v, 0);
 }
@@ -1312,7 +1364,7 @@ function splitCents(cents: number, weights: number[]): number[] {
  * `contribution` to get closer without selling: underweight classes first, in
  * proportion to how far behind they are, then any rest by target weight.
  * Classes without a target count as a 0% target. Empty when there are no targets.
- * The emergency reserve is left out: targets are shares of the rest.
+ * The emergency reserve and previdência are left out: targets are shares of the rest.
  */
 export function rebalance(ledger: Ledger, contribution: number): RebalanceLine[] {
   const targets = ledger.investments.targets.filter((t) => t.pct > 0);
@@ -1361,7 +1413,7 @@ export function classAssets(ledger: Ledger, assetClass: AssetClass): Asset[] {
 
 /** Positions still under a product class: outside any target until the user says what they expose them to. */
 export function unclassifiedAssets(ledger: Ledger): Asset[] {
-  return (Object.keys(ASSET_CLASS_ICONS) as AssetClass[]).filter((c) => !takesTarget(c)).flatMap((c) => classAssets(ledger, c));
+  return (Object.keys(ASSET_CLASS_ICONS) as AssetClass[]).filter((c) => !takesTarget(c) && c !== PENSION_CLASS).flatMap((c) => classAssets(ledger, c));
 }
 
 /**

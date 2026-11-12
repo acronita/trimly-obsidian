@@ -438,3 +438,38 @@ test("a profit of zero says nothing about the cost, and the original amount wins
   assert.equal(asset(l, "a").invested, undefined);
   assert.equal(asset(l, "b").invested, 700_00);
 });
+
+test("an FII's issuer is the fund itself, so it never becomes the institution where it is held", () => {
+  const l = defaultLedger();
+  const fii = { type: "EQUITY", subtype: "REAL_ESTATE_FUND", institution: null, issuer: "CSHG RENDA URBANA - FDO INV IMOB - FII" };
+  applyInvestments(l, [inv("hgre", fii)], ["item-1"], TODAY);
+  assert.equal(asset(l, "hgre").institution, undefined);
+});
+
+test("an FII's name spread as the institution of a whole connection goes back to sync", () => {
+  const l = defaultLedger();
+  const fii = { type: "EQUITY", subtype: "REAL_ESTATE_FUND", institution: null, issuer: "CSHG RENDA URBANA - FDO INV IMOB - FII" };
+  applyInvestments(l, [inv("hgre", fii), inv("cdb", { institution: null, issuer: null })], ["item-1"], "2026-10-24");
+  // how 1.7.1 ledgers got there: the fund's name saved as institution, then applied to the connection
+  saveAsset(l, { ...asset(l, "hgre"), institution: "CSHG RENDA URBANA - FDO INV IMOB - FII" }, "2026-10-24");
+  applyInstitutionToConnection(l, asset(l, "hgre"));
+  assert.equal(asset(l, "cdb").institution, "CSHG RENDA URBANA - FDO INV IMOB - FII");
+  applyInvestments(l, [inv("hgre", fii), inv("cdb", { institution: { name: "Rico" }, issuer: null })], ["item-1"], TODAY);
+  assert.equal(asset(l, "hgre").institution, "Rico");
+  assert.equal(asset(l, "cdb").institution, "Rico");
+});
+
+test("a broker's empty SAIDA line is not kept as a R$ 0 redemption", () => {
+  const l = defaultLedger();
+  const empty = { ...mov("empty", "SELL", "2026-10-20", 0), description: "SAIDA" };
+  applyInvestments(l, [inv("a", { transactions: [mov("buy", "BUY", "2026-10-20", 500), empty] })], ["item-1"], TODAY);
+  assert.deepEqual(l.investments.movements.map((m) => m.pluggyId), ["buy"]);
+});
+
+test("a R$ 0 redemption kept by an earlier version is removed on the next sync", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a")], ["item-1"], "2026-10-24");
+  l.investments.movements.push({ id: "old", assetId: asset(l, "a").id, date: "2026-10-20", type: "sell", amount: 0, pluggyId: "empty" });
+  applyInvestments(l, [inv("a", { transactions: [{ ...mov("empty", "SELL", "2026-10-20", 0), description: "SAIDA" }] })], ["item-1"], TODAY);
+  assert.equal(l.investments.movements.length, 0);
+});

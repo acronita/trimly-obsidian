@@ -176,6 +176,7 @@ export const en: Strings = {
     received: (v: string) => `${v} received`,
     purchasedIn: (currency: string) => `Purchase made in ${currency}; below, the amount charged to the account`,
     recurring: "Recurring",
+    portfolio: "Investment portfolio",
     categoryApplied: (n: number) => (n === 1 ? "Category applied to 1 more matching transaction and the next ones" : `Category applied to ${n} more matching transactions and the next ones`),
     installment: (n: number, total: number) => `${n}/${total}`,
     installmentOf: (n: number, total: number) => `Installment ${n} of ${total}`,
@@ -848,6 +849,17 @@ export const en: Strings = {
       partOf: (v: string) => `Part of ${v}`,
       rest: (v: string) => `Portfolio without the fund: ${v}. The targets below apply to this amount.`,
     },
+    pension: {
+      title: "Retirement",
+      none: "PGBL, VGBL and whatever you mark as “Counts in the targets as: Retirement” (a Tesouro Renda+, for instance) stay here, outside the class targets, and get a fixed slice of each contribution.",
+      share: "Slice of each contribution",
+      shareDesc: "A percentage (20%) or a fixed amount (300). Taken from the contribution before the targets split it.",
+      invalidShare: "Type a percentage from 0 to 100 (e.g. 20%) or an amount (e.g. 300).",
+    },
+    fromPlan: (month: string) => `What is left of the Invest goal for ${month}. Change it to simulate another amount.`,
+    toPension: "Retirement",
+    toPensionSub: (names: string) => names,
+    toTargets: (v: string) => `${v} split by the targets`,
   },
 
   modals: {
@@ -1037,7 +1049,7 @@ export const en: Strings = {
       namePlaceholder: "Name of the investment",
       class: "Class",
       targetClass: "Counts in targets as",
-      targetClassDesc: "What the position exposes you to, such as International, Stocks or Gold. An ETF, fund or retirement position needs this to enter the targets. The class above still applies to income tax.",
+      targetClassDesc: "What the position exposes you to, such as International, Stocks or Gold. An ETF or fund needs this to enter the targets. Retirement stays apart from the targets and gets a fixed slice of each contribution. The class above still applies to income tax.",
       sameClass: "Its own class",
       syncedNote:
         "This position comes from bank sync: its values and movements are updated on every sync. " +
