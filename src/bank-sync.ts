@@ -9,7 +9,7 @@
  *
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
-import { accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId, ruleCategory, shiftMonth } from "./ledger.ts";
+import { PORTFOLIO, accountBalance, convert, daysBetween, defaultCategoryKey, installmentFromDescription, newId, ruleCategory, shiftMonth } from "./ledger.ts";
 import type { Account, AccountType, DefaultCategory, Ledger, Transaction, TxType } from "./ledger.ts";
 
 /** How far back each sync reconciles: synced transactions in it that Pluggy no longer returns are removed. */
@@ -114,6 +114,23 @@ const CATEGORY_MAP: Record<string, DefaultCategory> = {
 /** Categories marking money moved between the user's own accounts. */
 const OWN_TRANSFER = ["Same person transfer", "Credit card payment"];
 
+/** Pluggy categories of money put into or taken out of investments; dividends are income, so they are not here. */
+const INVESTMENT_CATEGORIES = ["Investments", "Automatic investment", "Fixed income", "Mutual funds", "Variable income", "Margin", "Pension"];
+const DIVIDENDS = "Proceeds interests and dividends";
+
+/** Bank wording for the same, accents removed: a brokerage note settled, an application, a redemption. */
+const INVESTMENT_WORDS = /\bOPERACOES EM BOLSA\b|\bNOTA DE CORRETAGEM\b|\bAPLICACAO\b|\bRESGATE\b/i;
+
+/**
+ * A bank movement that buys or sells investments: money changing form, not spent or earned.
+ * Card charges never are.
+ */
+function isInvestmentMove(leg: Leg): boolean {
+  if (leg.onCard || leg.path.includes(DIVIDENDS)) return false;
+  if (leg.path.some((d) => INVESTMENT_CATEGORIES.includes(d))) return true;
+  return INVESTMENT_WORDS.test(leg.description.normalize("NFD").replace(/[\u0300-\u036f]/g, ""));
+}
+
 /** One side of a bank movement, from the Trimly account's point of view. */
 interface Leg {
   pid: string;
@@ -187,23 +204,31 @@ function isOwnTransfer(leg: Leg): boolean {
  * same-person transfer, since equal amounts between banks are often unrelated.
  * Some banks (C6, Nubank) report a paid bill on the card a second time, under
  * another name and any category; that copy is dropped, or it would count as income.
+ * Debits with the fewest possible credits pair first: when money passes through
+ * an account (A -> B -> C), A's debit could also take C's credit, which would
+ * leave B's debit, barred from B's own credit, with no partner.
  */
 function pairTransfers(legs: Leg[]): Rec[] {
   const ins = legs.filter((l) => l.cents > 0);
+  const canPair = (out: Leg, inn: Leg): boolean => {
+    if (inn.accountId === out.accountId || inn.cents !== -out.cents) return false;
+    if (daysBetween(inn.date, out.date) > TRANSFER_MATCH_DAYS) return false;
+    const ownTransfer = isOwnTransfer(out) || isOwnTransfer(inn);
+    return inn.onCard
+      ? ownTransfer || inn.path.includes("Transfers") || (out.path.length === 0 && inn.path.length === 0)
+      : ownTransfer;
+  };
+  const debits = legs
+    .filter((l) => l.cents < 0 && !l.onCard)
+    .map((out) => ({ out, options: ins.filter((inn) => canPair(out, inn)) }))
+    .sort((a, b) => a.options.length - b.options.length);
   const used = new Set<Leg>();
   const payments: Leg[] = [];
   const recs: Rec[] = [];
-  for (const out of legs) {
-    if (out.cents >= 0 || out.onCard) continue;
+  for (const { out, options } of debits) {
     let best: Leg | null = null;
-    for (const inn of ins) {
-      if (used.has(inn) || inn.accountId === out.accountId || inn.cents !== -out.cents) continue;
-      if (daysBetween(inn.date, out.date) > TRANSFER_MATCH_DAYS) continue;
-      const ownTransfer = isOwnTransfer(out) || isOwnTransfer(inn);
-      const allowed = inn.onCard
-        ? ownTransfer || inn.path.includes("Transfers") || (out.path.length === 0 && inn.path.length === 0)
-        : ownTransfer;
-      if (!allowed) continue;
+    for (const inn of options) {
+      if (used.has(inn)) continue;
       if (!best || daysBetween(inn.date, out.date) < daysBetween(best.date, out.date)) best = inn;
     }
     if (!best) continue;
@@ -232,6 +257,21 @@ function pairTransfers(legs: Leg[]): Rec[] {
         copied.add(paid);
         continue;
       }
+    }
+    // money between the account and the portfolio: a transfer with the portfolio on the other side
+    if (isInvestmentMove(l)) {
+      recs.push({
+        pids: [l.pid],
+        type: "transfer",
+        amount: Math.abs(l.cents),
+        accountId: l.cents > 0 ? PORTFOLIO : l.accountId,
+        toAccountId: l.cents > 0 ? l.accountId : PORTFOLIO,
+        date: l.date,
+        description: l.description,
+        pending: l.pending,
+        path: [],
+      });
+      continue;
     }
     recs.push({
       pids: [l.pid],

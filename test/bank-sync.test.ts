@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { applyBankData } from "../src/bank-sync.ts";
 import type { BankData, PluggyAccount, PluggyCategory, PluggyTransaction } from "../src/bank-sync.ts";
-import { accountBalance, defaultLedger, monthSummary, parseLedger, postDueRecurring, translateDefaults } from "../src/ledger.ts";
+import { PORTFOLIO, accountBalance, defaultLedger, monthSummary, parseLedger, postDueRecurring, translateDefaults } from "../src/ledger.ts";
 import { LANGUAGES } from "../src/i18n/index.ts";
 import type { Ledger, Recurring } from "../src/ledger.ts";
 
@@ -148,6 +148,45 @@ test("equal amounts between two banks only pair when Pluggy says it is a same-pe
     TODAY
   );
   assert.equal(own.transactions.filter((t) => t.type === "transfer").length, 1);
+});
+
+const nubank: PluggyAccount = { id: "p-nu", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Nubank", balance: 0 };
+const rico: PluggyAccount = { id: "p-rico", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Rico Conta", balance: 0 };
+const ricoInv: PluggyAccount = { id: "p-inv", type: "BANK", subtype: "CHECKING_ACCOUNT", name: "Rico Conta Investimentos", balance: 500 };
+const chain = [nubank, rico, ricoInv];
+const own = { categoryId: "04000000" };
+const nuOut = tx("nu-out", "p-nu", "2026-10-10", -500, "DEBIT", own);
+const pixIn = tx("pix-in", "p-rico", "2026-10-10", 500, "CREDIT", own);
+const ricoOut = tx("rico-out", "p-rico", "2026-10-10", -500, "DEBIT", own);
+const invIn = tx("inv-in", "p-inv", "2026-10-10", 500, "CREDIT", own);
+
+test("money passing through an account pairs each hop, whatever order the bank lists the legs in", () => {
+  // Nubank -> Rico -> investment account: if Nubank's debit takes the last credit, Rico's debit has no partner
+  // left and the same R$ 500 shows up as a false expense and a false income
+  const l = fresh();
+  applyBankData(l, data([nuOut, invIn, pixIn, ricoOut], chain), WINDOW, TODAY);
+  const hops = l.transactions.filter((t) => t.type === "transfer").map((t) => [t.accountId, t.toAccountId]);
+  assert.deepEqual(hops.sort(), [[synced(l, "p-nu").id, synced(l, "p-rico").id], [synced(l, "p-rico").id, synced(l, "p-inv").id]].sort());
+  assert.deepEqual(monthSummary(l, "2026-10"), { ...monthSummary(l, "2026-10"), income: 0, expense: 0 });
+});
+
+test("a Pix shown as income while the sender's bank lags becomes a transfer when its debit arrives", () => {
+  const l = fresh();
+  applyBankData(l, data([pixIn, ricoOut, invIn], chain), WINDOW, TODAY);
+  assert.equal(monthSummary(l, "2026-10").income, 500_00);
+  applyBankData(l, data([nuOut, invIn, pixIn, ricoOut], chain), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 2);
+  assert.equal(monthSummary(l, "2026-10").income, 0);
+});
+
+test("a ledger holding a hop paired to the wrong account is corrected by the next sync", () => {
+  // without Rico's debit, Nubank's can only guess: it takes the investment account's credit
+  const l = fresh();
+  applyBankData(l, data([nuOut, invIn, pixIn], chain), WINDOW, TODAY);
+  assert.equal(l.transactions.find((t) => t.type === "transfer")?.toAccountId, synced(l, "p-inv").id);
+  applyBankData(l, data([nuOut, invIn, pixIn, ricoOut], chain), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 2);
+  assert.equal(l.transactions.filter((t) => t.type === "transfer").length, 2);
 });
 
 test("a card transaction restated with a new id keeps the user's category and is not duplicated", () => {
@@ -374,4 +413,58 @@ test("a category the user taught wins over the bank's for new synced transaction
   l.categoryRules = [{ key: "ifood", categoryId: taught.id }];
   applyBankData(l, ifood(), WINDOW, TODAY);
   assert.equal(l.transactions[0].categoryId, taught.id);
+});
+
+const INVESTMENT_CATEGORIES: PluggyCategory[] = [
+  { id: "03000000", description: "Investments" },
+  { id: "03030000", description: "Variable income", parentId: "03000000" },
+  { id: "03060000", description: "Proceeds interests and dividends", parentId: "03000000" },
+];
+
+function withInvestments(transactions: PluggyTransaction[]): BankData {
+  return { accounts: [checking], transactions, categories: [...CATEGORIES, ...INVESTMENT_CATEGORIES] };
+}
+
+test("settling a brokerage note moves money to the portfolio: not spending, and the account still matches the bank", () => {
+  const l = fresh();
+  applyBankData(l, withInvestments([tx("OPERAÇÕES EM BOLSA PR 09/11/2026 NOTA Nº 148541559", "p-chk", "2026-11-11", 261.96, "DEBIT")]), WINDOW, TODAY);
+  const [note] = l.transactions;
+  // the aportes are counted from the positions; an expense here would make the same money spending too
+  assert.equal(note.type, "transfer");
+  assert.equal(note.accountId, synced(l, "p-chk").id);
+  assert.equal(note.toAccountId, PORTFOLIO);
+  assert.equal(monthSummary(l, "2026-11").expense, 0);
+  assert.equal(accountBalance(l, synced(l, "p-chk").id, TODAY), 1000_00);
+});
+
+test("money back from investments is not income, but dividends are", () => {
+  const l = fresh();
+  applyBankData(
+    l,
+    withInvestments([
+      tx("Venda de ações", "p-chk", "2026-10-10", 500, "CREDIT", { categoryId: "03030000" }),
+      tx("Dividendos BBAS3", "p-chk", "2026-10-12", 30, "CREDIT", { categoryId: "03060000" }),
+      tx("Resgate RDB", "p-chk", "2026-10-14", 200, "CREDIT"),
+    ]),
+    WINDOW,
+    TODAY
+  );
+  const byId = (pid: string) => l.transactions.find((t) => t.pluggyIds?.includes(pid))!;
+  assert.equal(byId("Venda de ações").type, "transfer");
+  assert.equal(byId("Venda de ações").accountId, PORTFOLIO);
+  assert.equal(byId("Resgate RDB").type, "transfer");
+  assert.equal(byId("Dividendos BBAS3").type, "income");
+  assert.equal(monthSummary(l, "2026-10").income, 30_00);
+});
+
+test("a brokerage note already imported as an expense turns into a transfer to the portfolio on the next sync", () => {
+  const l = fresh();
+  const note = tx("OPERACOES EM BOLSA", "p-chk", "2026-11-11", 100, "DEBIT");
+  applyBankData(l, data([note], [checking]), WINDOW, TODAY);
+  l.transactions[0].type = "expense";
+  delete l.transactions[0].toAccountId;
+  applyBankData(l, data([note], [checking]), WINDOW, TODAY);
+  assert.equal(l.transactions.length, 1);
+  assert.equal(l.transactions[0].type, "transfer");
+  assert.equal(l.transactions[0].toAccountId, PORTFOLIO);
 });

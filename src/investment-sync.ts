@@ -188,8 +188,10 @@ function apply(asset: Asset, p: PluggyInvestment, today: string, itemInstitution
   set("subtype", p.subtype);
   set("pluggyName", p.name);
   // MeuPluggy and some banks leave the institution empty: another position of the same
-  // connection (same bank) may name it, and the issuer is the last stand-in
-  if (!asset.institutionEdited) set("institution", p.institution?.name || itemInstitution || p.issuer);
+  // connection (same bank) may name it, and the issuer is the last stand-in. Only a fixed
+  // income issuer is a bank: a fund's, FII's or stock's issuer is the product itself.
+  const issuer = asset.assetClass === "fixed_income" ? p.issuer : undefined;
+  if (!asset.institutionEdited) set("institution", p.institution?.name || itemInstitution || issuer);
   if (!asset.renamed) asset.name = displayName(p);
   set("rate", p.rate || undefined);
   set("rateType", p.rateType);
@@ -232,6 +234,11 @@ function mergeMovements(ledger: Ledger, asset: Asset, txs: PluggyInvestmentTrans
   for (const t of txs) {
     const type = MOVEMENT_TYPES[t.type];
     if (!type) continue;
+    // some brokers repeat a redemption as an empty "SAIDA" line: no money and no shares moved
+    if (!Math.round(Math.abs(t.netAmount ?? t.amount) * 100) && !t.quantity) {
+      ledger.investments.movements = ledger.investments.movements.filter((x) => x.pluggyId !== t.id);
+      continue;
+    }
     const m: Omit<Movement, "id"> = {
       assetId: asset.id,
       date: t.date.slice(0, 10),
@@ -285,6 +292,21 @@ function setAsideClosedTwins(ledger: Ledger) {
 }
 
 /**
+ * Up to 1.7.1 a fund's, FII's or stock's own name (its issuer) could become its institution,
+ * and from there spread to the whole connection with "apply to the connection". A broker
+ * is never named like one of those products, so such an institution goes back to sync.
+ */
+function forgetProductInstitutions(ledger: Ledger) {
+  const assets = ledger.investments.assets;
+  const products = new Set(assets.filter((a) => a.issuer && a.assetClass !== "fixed_income").map((a) => a.issuer!.trim()));
+  for (const a of assets) {
+    if (!a.pluggyId || !a.institution || !products.has(a.institution.trim())) continue;
+    delete a.institution;
+    delete a.institutionEdited;
+  }
+}
+
+/**
  * Upsert the positions of the items in `itemIds` and their movements, and close
  * the positions those items no longer report. Positions of other items and
  * manual ones are left alone. Records today's snapshot with the flows since the
@@ -308,6 +330,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
     counts.set(p.itemId, byName);
   }
   for (const [item, byName] of counts) itemInstitution.set(item, [...byName.entries()].sort((a, b) => b[1] - a[1])[0][0]);
+  forgetProductInstitutions(ledger);
 
   const seen = new Set<string>();
   for (const p of investments) {

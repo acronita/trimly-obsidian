@@ -7,6 +7,7 @@
  * Kept free of Obsidian imports so it can be unit tested in Node.
  */
 import { t } from "./i18n/index.ts";
+import { accountName } from "./ledger.ts";
 import type { Ledger } from "./ledger.ts";
 
 /** Excel in Brazil opens this as columns: semicolons, decimal commas, and a BOM so accents survive. */
@@ -56,8 +57,8 @@ export function transactionsCsv(ledger: Ledger, baseCurrency: string): string {
       textCell(t.labels.txType[tx.type]),
       moneyCell(tx.amount),
       account(tx.accountId)?.currency ?? baseCurrency,
-      textCell(account(tx.accountId)?.name),
-      textCell(account(tx.toAccountId)?.name),
+      textCell(accountName(ledger, tx.accountId)),
+      textCell(accountName(ledger, tx.toAccountId)),
       textCell(ledger.categories.find((c) => c.id === tx.categoryId)?.name),
       textCell(tx.description),
       textCell(tx.notes),

@@ -7,6 +7,78 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.10.0 — 2026-11-13
+
+- 2026-11-13 — Income tools in the *Proventos* tab. A monthly income goal ("quero R$ X por mês"): the average of the
+  last 12 months against it, what is missing, and how many months of aportes (the month's Invest goal, else the
+  12-month average) reinvesting the income take the portfolio to the value that pays it at today's yield. Per
+  position: yield on cost, current yield and how far it is above or below the CDI net of 15% income tax. Alerts when
+  a regular payer's last provento is 10% or more below its average of the previous 12 months (from B3's proventos,
+  same kind only, at least three earlier payments) and when one position pays 25% or more of the income. A 12-month
+  payment calendar per position. The investments overview gains *Este mês*: what is left of the month's Invest goal,
+  split by the targets (previdência first), and the proventos received. New optional `investments.incomeGoal`. Why:
+  asked, to follow passive income toward a goal and see where to aporte each month. Files touched: `src/income.ts`,
+  `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/income.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.9.0 — 2026-11-12
+
+- 2026-11-13 — The sale calculator moves into *Calculadoras*, behind a *Simuladores | Venda* switch, so the investments
+  tab bar fits a narrow pane again. It also takes fixed income and Tesouro: type the gross amount to redeem and it
+  takes the oldest applications first, each taxed by the regressive table for its days (22,5% to 15%) after IOF under
+  30 days; LCI, LCA, CRI, CRA and LIG pay no income tax. The applications come from the movements (scaled to the
+  position's invested amount); with none, one application dated when Trimly started tracking it. Each application's
+  gain is an estimate, as if all grew alike. The selling-order rule counts a tax-free or loss-making fixed income
+  position of the class as one to redeem first. Why: asked; the extra tab cut the tab bar, and early redemptions
+  are sales too. Files touched: `src/sale.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/sale.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
+- 2026-11-12 — New *Venda* tab in Investments: a sale calculator. Given a stock, BDR, ETF or FII and a quantity it shows
+  the sale value, the average cost from the IR tab, the gross gain, the estimated income tax by class (FII 20% with no
+  exemption, stocks 15% exempt up to R$ 20.000 of sales in the month, ETFs and BDRs 15% with none), the losses offset
+  per group, the costs (B3's 0,03% to start), the net amount, the proventos of the last 12 months given up and the
+  allocation before and after against the targets. It then evaluates the sale against seven rules (rebalancing band,
+  selling order, maximum cost, exempt income, destination below target, emergency reserve, prefer contributing) and
+  says which pass and which fail, without deciding; each can be turned off and its limit changed. *Sem vender* shows
+  how many months of a monthly aporte reach the targets without selling. The tax comes from replaying the IR tab with
+  the sale added, so it matches what the IR tab would show after it. New optional `investments.saleRules`, version
+  unchanged. Why: asked, to weigh rebalancing sales by targets, tax and where the money goes. Files touched:
+  `src/sale.ts`, `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/sale.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.8.0 — 2026-11-12
+
+- 2026-11-12 — Money into or out of investments from a bank account (a brokerage note settled, "OPERAÇÕES EM BOLSA",
+  an application, a redemption, or anything Pluggy puts under *Investments* except dividends) syncs as a transfer with
+  the new `PORTFOLIO` side ("Carteira de investimentos") instead of an expense or income; the transaction editor offers
+  it as a transfer side too. Ledgers already synced are corrected by the next sync. Why: paying for a purchase of
+  investments showed as uncategorized spending, while the aporte was already counted from the positions. Files
+  touched: `src/bank-sync.ts`, `src/ledger.ts`, `src/modals.ts`, `src/view.ts`, `src/export.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `test/bank-sync.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
+- 2026-11-12 — The *Investir* goal counts net aportes: buys minus sells of the month. Why: a brokerage note that sells
+  FIIs to buy ETFs counted the whole purchase as new money. The calculators' default monthly contribution follows.
+  Files touched: `src/ledger.ts`, `src/view.ts`, `test/ledger.test.ts`, `README.md`.
+- 2026-11-12 — Previdência stays apart from the allocation targets, like the emergency reserve: PGBL/VGBL and any
+  position with *Conta nas metas como: Previdência* (now an option, e.g. a Tesouro Renda+). *Metas* gets a
+  *Previdência* card with its positions and *Parte de cada aporte*, a percent or a fixed amount, which the contribution
+  planner sends to previdência before splitting the rest by the targets. The planner starts from what is left of the
+  month's *Investir* goal. New optional `investments.pensionShare`, version unchanged. Why: asked, to keep previdência
+  separate and fund it with a fixed slice. Files touched: `src/ledger.ts`, `src/view.ts`, `src/modals.ts`,
+  `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/rebalance.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `docs/FAQ.md`.
+- 2026-11-12 — A fund's, FII's or stock's issuer (the product itself, e.g. "CSHG RENDA URBANA - FDO INV IMOB - FII") no
+  longer stands in for a missing institution; only a fixed income issuer, a bank, does. Such an institution already
+  saved, even spread to the whole connection, goes back to sync. Empty "SAIDA" redemptions (no money, no shares) are
+  no longer kept, and old ones are removed by the next sync. Why: *Por instituição* showed an FII as the institution
+  of 84% of the portfolio, and *Movimentações* listed R$ 0,00 redemptions. Files touched: `src/investment-sync.ts`,
+  `test/investment-sync.test.ts`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.7.1 — 2026-11-09
+
+- 2026-11-09 — Money passing through an account (Nubank -> Rico Conta -> investment account) pairs each hop whatever
+  order the bank lists the movements in: bank debits with the fewest possible credits pair first. Why: the first debit
+  could take the last hop's credit, leaving the middle debit with no partner, so the same amount became a transfer, a
+  false income and a false expense. Ledgers already affected are corrected by the next sync. Files touched:
+  `src/bank-sync.ts`, `test/bank-sync.test.ts`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.7.0 — 2026-11-08
 
 - 2026-11-08 — The investments assistant gets `market_data`: current indicators from Status Invest and XP's

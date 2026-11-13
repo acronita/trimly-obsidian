@@ -88,6 +88,17 @@ passphrase that never leaves your device.
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,
   not day trades, options, fixed income ETFs, FI-Infra, splits or bonus shares. It issues nothing, and
   lists the positions whose numbers need checking; confirm with the Receita or an accountant.
+- **Sale calculator** (*Calculadoras → Venda*, in the investments mode) — pick a stock, BDR, ETF or FII and a quantity to see the
+  sale value, the average cost from the IR tab, the gross gain, the estimated income tax (FII 20% with no exemption,
+  stocks 15% exempt up to R$ 20.000 of sales in the month, ETFs and BDRs 15% with none), the losses offset by group
+  (common and FII apart), the costs (starting at B3's 0,03%), the net amount, the proventos of the last 12 months you
+  would give up and the allocation before and after against your targets. It then checks the sale against your
+  rules — rebalancing band, selling order (no tax first, then the lowest score), maximum cost, exempt income,
+  destination below target, emergency reserve, prefer contributing — and says which pass and which fail, without
+  deciding. Each rule can be turned off and its limit changed. *Sem vender* shows how many months of your monthly
+  contribution reach the targets without selling. Fixed income and Tesouro redemptions work too: type the amount and
+  it takes the oldest applications first, with IOF under 30 days and the regressive table (22,5% to 15%) by each
+  application's days; LCI, LCA, CRI, CRA and LIG pay no income tax.
 - **Debts** (*Dívidas*, in Planning) — a loan's balance, monthly interest and payment give today's balance,
   when it ends, the interest still to pay, and what paying extra would change. Kept apart from accounts and
   net worth; today's balance assumes the payments were made.
@@ -109,7 +120,8 @@ passphrase that never leaves your device.
   category, e.g. a health plan) plus an *Extra* limit you set for the rest; a category without one
   counts as zero. Limits and the investment goal are kept per month: a new month starts from the last
   one, and changing it leaves earlier months as they were. The *Investir* tile holds the goal,
-  tracked by the month's aportes in Investments; investing never counts as spending.
+  tracked by the month's net aportes in Investments (buys minus sells, so selling one asset to buy another is not new
+  money); investing never counts as spending.
 - **Recurring** — bills, subscriptions and salaries (weekly, monthly, yearly, optional end date),
   posted automatically when their date arrives. On bank-synced accounts nothing is posted: the
   charge imported from the bank is linked to the rule instead, so it is never counted twice.
@@ -146,17 +158,23 @@ passphrase that never leaves your device.
   JCP, interest, coupons) per month and per position, plus the upcoming proventos B3 has announced
   for positions with a B3 ticker (data-com, payment date, value per share and an estimate by your
   quantity), with next month's income forecast for FIIs that haven't announced yet; positions whose
-  bank sends no income get it estimated from B3's proventos. Positions come from bank sync or are added by
+  bank sends no income get it estimated from B3's proventos. The *Proventos* tab also tracks a monthly income goal (how
+  much is missing and how many months of aportes, reinvesting the income, until the portfolio pays it), each
+  position's yield on cost and current yield against the CDI net of income tax, alerts when a regular payer cuts its
+  distribution 10% or more below its own 12-month average or one position pays 25% or more of the income, and a
+  12-month payment calendar per position. The investments overview opens with *Este mês*: what is left of the month's
+  Invest goal and which classes the targets send it to. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution; a weight or score per
   asset takes that split down to each position inside the class. Classes include Exterior (foreign currency too), Ouro and Cripto, and a position can count under any class
-  while keeping its own for income tax; targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto, so ETFs, funds and retirement plans count by what they expose you to. The emergency fund can be set apart with an amount and the positions holding it: targets and contributions then apply to the rest. Positions are imported by bank sync; net worth in the accounts view includes them.
+  while keeping its own for income tax; targets exist only for Tesouro, Renda fixa, FIIs, Ações, Exterior, Ouro and Cripto, so ETFs and funds count by what they expose you to. The emergency fund can be set apart with an amount and the positions holding it: targets and contributions then apply to the rest. Previdência (PGBL/VGBL, and anything counted as Previdência, like a Tesouro Renda+) also stays apart and takes a fixed slice of each contribution, a percent or an amount, before the targets split the rest. The contribution planner starts from what is left of the month's *Investir* goal. Positions are imported by bank sync; net worth in the accounts view includes them.
 - **Hide values** — the eye button in the header masks every amount on screen; click again to show
   them.
 - **Bank sync (optional)** — import accounts and transactions automatically from Brazilian banks
   through [Pluggy](https://pluggy.ai) (Open Finance). Card bill payments are recognized as transfers so
-  purchases aren't counted twice. Off by default; see [Bank sync](#bank-sync-optional).
+  purchases aren't counted twice, and money into or out of investments (a brokerage note, an application, a
+  redemption) as a transfer with the portfolio, never as spending or income. Off by default; see [Bank sync](#bank-sync-optional).
 - **Quotes (optional)** — with a [brapi.dev](https://brapi.dev) token, stocks, real estate funds, ETFs and
   BDRs show their price, daily change and company name, and manual positions with a ticker and
   quantity follow the market.

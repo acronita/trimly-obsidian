@@ -233,7 +233,7 @@ test("fixed income is what active income rules bring in per month, the budget's 
   assert.equal(fixedMonthlyIncome(l), 6000_00 + 100_00);
 });
 
-test("investing toward the monthly goal counts aportes, never spending", () => {
+test("investing toward the monthly goal counts net aportes: a sale that pays for a purchase is not new money", () => {
   const l = ledger();
   l.investments.movements.push(
     { id: "a", assetId: "x", date: "2026-10-05", type: "buy", amount: 500_00 },
@@ -241,7 +241,7 @@ test("investing toward the monthly goal counts aportes, never spending", () => {
     { id: "c", assetId: "x", date: "2026-10-25", type: "sell", amount: 100_00 },
     { id: "d", assetId: "x", date: "2026-09-30", type: "buy", amount: 999_00 }
   );
-  assert.equal(contributionsInMonth(l, "2026-10"), 800_00);
+  assert.equal(contributionsInMonth(l, "2026-10"), 700_00);
   // the budget's spending total is untouched by aportes
   assert.equal([...spendingByCategory(l, "2026-10").values()].reduce((s, v) => s + v, 0), 50_00);
 });
@@ -403,4 +403,16 @@ test("portfolios from before they were removed are dropped when the ledger opens
   const back = parseLedger(JSON.stringify(raw));
   assert.ok(!("portfolios" in back.investments));
   assert.ok(!("portfolioId" in back.investments.assets[0]));
+});
+
+test("rebalancing in one brokerage note counts only the money that came in", () => {
+  const l = ledger();
+  // 9 Nov: bought BOVA11 and SPXB11, paid partly by selling HGRE11 and TGAR11
+  l.investments.movements.push(
+    { id: "bova", assetId: "x", date: "2026-11-09", type: "buy", amount: 499_47 },
+    { id: "spxb", assetId: "x", date: "2026-11-09", type: "buy", amount: 271_80 },
+    { id: "hgre", assetId: "y", date: "2026-11-09", type: "sell", amount: 343_31 },
+    { id: "tgar", assetId: "y", date: "2026-11-09", type: "sell", amount: 166_00 }
+  );
+  assert.equal(contributionsInMonth(l, "2026-11"), 261_96);
 });
