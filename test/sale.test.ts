@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SALE_RULES, monthsToTargets, simulateSale } from "../src/sale.ts";
+import { DEFAULT_SALE_RULES, iofPct, monthsToTargets, simulateSale } from "../src/sale.ts";
 import type { SaleInput, SaleResult } from "../src/sale.ts";
 import { defaultLedger } from "../src/ledger.ts";
 import type { Asset, Ledger, MovementType } from "../src/ledger.ts";
@@ -146,4 +146,66 @@ test("without selling: months of aportes until no class is more than the band ab
   const r = sell(l, { monthly: 4_000_00 });
   assert.equal(r.monthsWithoutSelling, 12);
   assert.equal(rule(r, "preferAporte").status, "fail");
+});
+
+/** A CDB of R$ 16.500 gross: R$ 10.000 applied 680 days ago, R$ 5.000 applied 23 days ago. */
+function cdb(extra: Partial<Asset> = {}): Ledger {
+  const l = defaultLedger();
+  l.investments.assets.push(position("cdb", { name: "CDB Banco X", assetClass: "fixed_income", subtype: "CDB", value: 16_200_00, grossValue: 16_500_00, invested: 15_000_00, ...extra }));
+  move(l, "cdb", "2025-01-01", "buy", 10_000_00);
+  move(l, "cdb", "2026-10-20", "buy", 5_000_00);
+  return l;
+}
+
+const redeem = (l: Ledger, amount?: number) => simulateSale(l, { assetId: "cdb", quantity: 0, price: 0, amount, costs: 0, monthly: 0, today: TODAY })!;
+
+test("a fixed income redemption takes the oldest application first, taxed by the regressive table for its days", () => {
+  const r = redeem(cdb(), 11_000_00);
+  // R$ 11.000 of the old application, which grew 10%: R$ 1.000 of gain at 17,5% (361 to 720 days)
+  assert.equal(r.kind, "fixed");
+  assert.equal(r.fixed!.cost, 10_000_00);
+  assert.equal(r.gain, 1_000_00);
+  assert.equal(r.fixed!.iof, 0);
+  assert.equal(r.tax, 175_00);
+  assert.equal(r.net, 11_000_00 - 175_00);
+  assert.equal(r.fixed!.maxDays, 680);
+});
+
+test("redeeming all of it reaches the new application too, which pays IOF under 30 days and 22,5% on the rest", () => {
+  const r = redeem(cdb());
+  assert.equal(r.gross, 16_500_00);
+  // R$ 500 of gain after 23 days: 23% of IOF, then 22,5% on the R$ 385 left
+  assert.equal(r.fixed!.iof, 115_00);
+  assert.equal(r.fixed!.ir, Math.round(175_00 + 385_00 * 0.225));
+  assert.deepEqual([r.fixed!.minDays, r.fixed!.maxDays], [23, 680]);
+});
+
+test("IOF falls from 96% on the first day to nothing at 30 days", () => {
+  assert.equal(iofPct(1), 96);
+  assert.equal(iofPct(4), 86);
+  assert.equal(iofPct(29), 3);
+  assert.equal(iofPct(30), 0);
+});
+
+test("an LCI pays no income tax, but IOF still applies under 30 days", () => {
+  const r = redeem(cdb({ subtype: "LCI", name: "LCI Banco X" }));
+  assert.equal(r.fixed!.taxFree, true);
+  assert.equal(r.fixed!.ir, 0);
+  assert.equal(r.fixed!.iof, 115_00);
+});
+
+test("a position without movements counts as one application from when Trimly started tracking it", () => {
+  const l = defaultLedger();
+  l.investments.assets.push(position("cdb", { assetClass: "treasury", value: 11_000_00, invested: 10_000_00, addedOn: "2026-06-01" }));
+  const r = redeem(l);
+  assert.equal(r.fixed!.estimated, true);
+  // 164 days: 22,5%
+  assert.equal(r.tax, 225_00);
+});
+
+test("order rule: a taxed redemption fails while a tax-free position of the same class could go first", () => {
+  const l = cdb();
+  l.investments.assets.push(position("lca", { name: "LCA Banco Y", assetClass: "fixed_income", subtype: "LCA", value: 5_000_00, invested: 4_800_00 }));
+  move(l, "lca", "2026-01-05", "buy", 4_800_00);
+  assert.deepEqual(rule(redeem(l, 11_000_00), "order").detail, { first: ["LCA Banco Y"], because: "noTax" });
 });
