@@ -7,6 +7,20 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.10.0 — 2026-11-13
+
+- 2026-11-13 — Income tools in the *Proventos* tab. A monthly income goal ("quero R$ X por mês"): the average of the
+  last 12 months against it, what is missing, and how many months of aportes (the month's Invest goal, else the
+  12-month average) reinvesting the income take the portfolio to the value that pays it at today's yield. Per
+  position: yield on cost, current yield and how far it is above or below the CDI net of 15% income tax. Alerts when
+  a regular payer's last provento is 10% or more below its average of the previous 12 months (from B3's proventos,
+  same kind only, at least three earlier payments) and when one position pays 25% or more of the income. A 12-month
+  payment calendar per position. The investments overview gains *Este mês*: what is left of the month's Invest goal,
+  split by the targets (previdência first), and the proventos received. New optional `investments.incomeGoal`. Why:
+  asked, to follow passive income toward a goal and see where to aporte each month. Files touched: `src/income.ts`,
+  `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/income.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.9.0 — 2026-11-12
 
 - 2026-11-13 — The sale calculator moves into *Calculadoras*, behind a *Simuladores | Venda* switch, so the investments

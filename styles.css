@@ -1670,3 +1670,21 @@ input.trimly-amount-input:focus {
   width: 18px;
   height: 18px;
 }
+.trimly-income-cal {
+  overflow-x: auto;
+}
+.trimly-income-cal .trimly-perf-row {
+  grid-template-columns: minmax(6em, 1.6fr) repeat(12, minmax(2.2em, 1fr));
+  gap: 2px;
+  align-items: center;
+}
+.trimly-income-cal .trimly-perf-cell {
+  text-align: center;
+}
+.trimly-cal-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-green);
+}

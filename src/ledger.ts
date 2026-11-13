@@ -439,6 +439,8 @@ export interface Investments {
   pensionShare?: PensionShare;
   /** the sale calculator's rules, when changed from the defaults */
   saleRules?: SaleRules;
+  /** income wanted a month from proventos, cents */
+  incomeGoal?: number;
 }
 
 /** brapi.dev token for quotes. Kept inside the encrypted ledger, never in data.json. */
@@ -587,6 +589,7 @@ export function parseLedger(json: string): Ledger {
       ...(raw.investments?.reserve && { reserve: raw.investments.reserve }),
       ...(raw.investments?.pensionShare && { pensionShare: raw.investments.pensionShare }),
       ...(raw.investments?.saleRules && { saleRules: raw.investments.saleRules }),
+      ...(raw.investments?.incomeGoal && { incomeGoal: raw.investments.incomeGoal }),
     },
     plans: raw.plans,
     goals: raw.goals?.map(migrateGoal),
