@@ -88,6 +88,15 @@ passphrase that never leaves your device.
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,
   not day trades, options, fixed income ETFs, FI-Infra, splits or bonus shares. It issues nothing, and
   lists the positions whose numbers need checking; confirm with the Receita or an accountant.
+- **Sale calculator** (*Venda*, in the investments mode) — pick a stock, BDR, ETF or FII and a quantity to see the
+  sale value, the average cost from the IR tab, the gross gain, the estimated income tax (FII 20% with no exemption,
+  stocks 15% exempt up to R$ 20.000 of sales in the month, ETFs and BDRs 15% with none), the losses offset by group
+  (common and FII apart), the costs (starting at B3's 0,03%), the net amount, the proventos of the last 12 months you
+  would give up and the allocation before and after against your targets. It then checks the sale against your
+  rules — rebalancing band, selling order (no tax first, then the lowest score), maximum cost, exempt income,
+  destination below target, emergency reserve, prefer contributing — and says which pass and which fail, without
+  deciding. Each rule can be turned off and its limit changed. *Sem vender* shows how many months of your monthly
+  contribution reach the targets without selling.
 - **Debts** (*Dívidas*, in Planning) — a loan's balance, monthly interest and payment give today's balance,
   when it ends, the interest still to pay, and what paying extra would change. Kept apart from accounts and
   net worth; today's balance assumes the payments were made.
