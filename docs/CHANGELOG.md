@@ -7,6 +7,21 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.9.0 — 2026-11-12
+
+- 2026-11-12 — New *Venda* tab in Investments: a sale calculator. Given a stock, BDR, ETF or FII and a quantity it shows
+  the sale value, the average cost from the IR tab, the gross gain, the estimated income tax by class (FII 20% with no
+  exemption, stocks 15% exempt up to R$ 20.000 of sales in the month, ETFs and BDRs 15% with none), the losses offset
+  per group, the costs (B3's 0,03% to start), the net amount, the proventos of the last 12 months given up and the
+  allocation before and after against the targets. It then evaluates the sale against seven rules (rebalancing band,
+  selling order, maximum cost, exempt income, destination below target, emergency reserve, prefer contributing) and
+  says which pass and which fail, without deciding; each can be turned off and its limit changed. *Sem vender* shows
+  how many months of a monthly aporte reach the targets without selling. The tax comes from replaying the IR tab with
+  the sale added, so it matches what the IR tab would show after it. New optional `investments.saleRules`, version
+  unchanged. Why: asked, to weigh rebalancing sales by targets, tax and where the money goes. Files touched:
+  `src/sale.ts`, `src/ledger.ts`, `src/view.ts`, `src/styles/index.css`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/sale.test.ts`, `README.md`, `docs/ARCHITECTURE.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.8.0 — 2026-11-12
 
 - 2026-11-12 — Money into or out of investments from a bank account (a brokerage note settled, "OPERAÇÕES EM BOLSA",

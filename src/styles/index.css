@@ -1842,3 +1842,7 @@ input.trimly-amount-input:focus {
   white-space: normal;
   overflow: visible;
 }
+
+/* sale calculator: pass / fail / not applicable mark before each rule */
+.trimly-view .trimly-rule-icon { display: flex; flex-shrink: 0; margin-right: 10px; }
+.trimly-view .trimly-rule-icon svg { width: 18px; height: 18px; }

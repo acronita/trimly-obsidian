@@ -4,6 +4,7 @@ import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
 import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, ImportModal, MovementModal, ObligationModal, RecurringModal, ReserveModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
+  TARGET_CLASSES,
   accountName,
   ASSET_CLASS_COLORS,
   ASSET_CLASS_ICONS,
@@ -118,6 +119,8 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
+import { DEFAULT_SALE_RULES, SALE_RULE_IDS, defaultCosts, defaultPrice, sellableAssets, simulateSale } from "./sale";
+import type { RuleResult, SaleResult, SaleRuleId, SaleRules } from "./sale";
 import { HOUSE_PAGES, NEWS_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, portfolioGroups, portfolioHouses, recentItems } from "./feeds";
 import { fetchArticle, fetchFeeds } from "./feeds-fetch";
 import { fetchMarketData } from "./market-data-fetch";
@@ -162,7 +165,7 @@ function setTypedCost(l: Ledger, assetId: string, averageCents: number) {
   }
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "news" | "reports" | "assistant-accounts" | "assistant-investments";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "sale" | "calculators" | "news" | "reports" | "assistant-accounts" | "assistant-investments";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -192,6 +195,7 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "income", label: "income", icon: "coins" },
     { id: "targets", label: "targets", icon: "target" },
     { id: "tax", label: "tax", icon: "landmark" },
+    { id: "sale", label: "sale", icon: "scale" },
     { id: "calculators", label: "calculators", icon: "calculator" },
     { id: "news", label: "news", icon: "newspaper" },
     { id: "assistant-investments", label: "assistant", icon: "message-circle" },
@@ -246,6 +250,8 @@ export class TrimlyView extends ItemView {
   /** obligations tab: what is due, or everything registered */
   private obligationsView: "todo" | "registered" = "todo";
   private movementFilter: MovementFilter = { assetId: "", type: "", allTime: false };
+  /** what the sale calculator was given; empty fields take their defaults; not saved */
+  private sale: { assetId?: string; quantity?: number; price?: number; costs?: number; destination?: AssetClass; destinationYield?: number; monthly?: number } = {};
   /** amount typed in the Targets tab to plan a contribution, in cents; null = what is left of this month's Invest goal; not saved */
   private contribution: number | null = null;
   /** the assistants' conversations once unlocked; null until loaded and after locking */
@@ -357,6 +363,9 @@ export class TrimlyView extends ItemView {
         break;
       case "tax":
         this.renderTax(body, ledger);
+        break;
+      case "sale":
+        this.renderSale(body, ledger);
         break;
       case "calculators":
         this.renderCalculators(body, ledger);
@@ -3242,6 +3251,211 @@ export class TrimlyView extends ItemView {
     }
     show();
     if (note) card.createDiv({ cls: "trimly-muted trimly-card-foot", text: note });
+  }
+
+  private renderSale(body: HTMLElement, ledger: Ledger) {
+    const s = t.sale;
+    const assets = sellableAssets(ledger);
+    if (assets.length === 0) return this.empty(body, "scale", s.empty);
+    const input = this.sale;
+    const asset = assets.find((a) => a.id === input.assetId) ?? assets[0];
+    const held = asset.quantity ?? 0;
+    const quantity = Math.min(input.quantity ?? held, held);
+    const price = input.price ?? defaultPrice(asset);
+    const costs = input.costs ?? defaultCosts(Math.round(quantity * price));
+    const month = monthOf(todayISO());
+    const monthly = input.monthly ?? budgetFor(ledger, month).investmentGoal ?? 0;
+    const rules: SaleRules = { ...DEFAULT_SALE_RULES, ...ledger.investments.saleRules };
+    const r = simulateSale(
+      ledger,
+      { assetId: asset.id, quantity, price, costs, destination: input.destination, destinationYield: input.destinationYield, monthly, today: todayISO() },
+      rules
+    );
+    if (!r) return;
+    const qty = (n: number) => new Intl.NumberFormat(this.plugin.locale(), { maximumFractionDigits: 8 }).format(n);
+    const signed = (cents: number) => `${cents < 0 ? "−" : ""}${this.money(Math.abs(cents))}`;
+    const className = (c: AssetClass) => t.labels.assetClass[c];
+
+    const head = body.createDiv("trimly-page-head");
+    const h = head.createDiv();
+    h.createDiv({ cls: "trimly-eyebrow", text: s.title });
+    h.createDiv({ cls: "trimly-page-value", text: this.money(r.net) });
+    h.createDiv({ cls: "trimly-muted", text: s.net });
+    body.createDiv({ cls: "trimly-muted trimly-section-hint", text: s.disclaimer });
+
+    // inputs: a changed field re-renders; emptying one goes back to its default
+    const form = this.card(body, s.inputs);
+    const update = (patch: Partial<typeof this.sale>) => {
+      this.sale = { ...this.sale, ...patch };
+      this.render();
+    };
+    const numberField = (name: string, desc: string, shown: string, set: (v: number | undefined) => void, parse: (raw: string) => number | null) =>
+      new Setting(form)
+        .setName(name)
+        .setDesc(desc)
+        .addText((text) => {
+          text.inputEl.inputMode = "decimal";
+          text.setValue(shown);
+          text.inputEl.addEventListener("change", () => {
+            const raw = text.getValue().trim();
+            if (!raw) return set(undefined);
+            const v = parse(raw);
+            if (v === null || v < 0) return void new Notice(s.invalid);
+            set(v);
+          });
+        });
+    const decimal = (raw: string) => {
+      // "1.000,5" in pt-BR; a plain "15.5" as typed elsewhere
+      const v = Number(raw.includes(",") ? raw.replace(/\./g, "").replace(",", ".") : raw);
+      return Number.isFinite(v) ? v : null;
+    };
+    const percent = (raw: string) => {
+      const v = Number(raw.replace("%", "").trim().replace(",", "."));
+      return Number.isFinite(v) ? v : null;
+    };
+    new Setting(form).setName(s.asset).addDropdown((d) =>
+      d
+        .addOptions(Object.fromEntries(assets.map((a) => [a.id, a.name])))
+        .setValue(asset.id)
+        // another position: its own quantity, price and costs
+        .onChange((v) => update({ assetId: v, quantity: undefined, price: undefined, costs: undefined }))
+    );
+    numberField(s.quantity, s.quantityDesc(qty(held)), qty(quantity), (v) => update({ quantity: v, costs: undefined }), decimal);
+    numberField(s.price, s.priceDesc, centsToInput(price), (v) => update({ price: v, costs: undefined }), parseAmount);
+    numberField(s.costs, s.costsDesc, centsToInput(costs), (v) => update({ costs: v }), parseAmount);
+    new Setting(form).setName(s.destination).addDropdown((d) =>
+      d
+        .addOptions({ "": s.noDestination, ...Object.fromEntries(TARGET_CLASSES.map((c) => [c, className(c)])) })
+        .setValue(input.destination ?? "")
+        .onChange((v) => update({ destination: (v as AssetClass) || undefined }))
+    );
+    numberField(s.destinationYield, s.destinationYieldDesc, input.destinationYield !== undefined ? String(input.destinationYield) : "", (v) => update({ destinationYield: v }), percent);
+    numberField(s.monthly, s.monthlyDesc, monthly ? centsToInput(monthly) : "", (v) => update({ monthly: v }), parseAmount);
+
+    const result = this.card(body, s.result);
+    const row = (label: string, value: string, sub?: string, cls = "") => {
+      const el = result.createDiv("trimly-row");
+      const main = el.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: label });
+      if (sub) main.createDiv({ cls: "trimly-row-sub", text: sub });
+      el.createDiv({ cls: `trimly-amount ${cls}`, text: value });
+    };
+    row(s.gross, this.money(r.gross), `${qty(r.quantity)} × ${this.money(price)}`);
+    row(s.costs, signed(-r.costs));
+    row(
+      s.averageCost,
+      r.averagePrice === null ? s.unknownCost : this.money(Math.round(r.averagePrice * r.quantity)),
+      r.averagePrice === null ? undefined : s.perShare(this.money(r.averagePrice))
+    );
+    row(s.gain, r.gain === null ? "—" : signed(r.gain), undefined, r.gain === null ? "" : r.gain >= 0 ? "is-income" : "is-expense");
+    row(s.lossAvailable(r.kind === "fii" ? s.fii : s.common), this.money(r.lossAvailable), r.lossUsed > 0 ? s.lossUsed(this.money(r.lossUsed)) : undefined);
+    row(s.tax, signed(-r.tax), r.exempt ? s.taxExempt : s.taxRate(r.kind === "fii" ? "20%" : "15%"), r.tax > 0 ? "is-expense" : "");
+    row(s.net, this.money(r.net));
+    if (r.income12m > 0) row(s.income, this.money(r.income12m), s.incomeSub(this.pct(r.incomeYield)));
+    if (r.issues.length) result.createDiv({ cls: "trimly-muted trimly-card-foot", text: s.checkIr });
+
+    const alloc = this.card(body, s.allocation);
+    if (!r.allocation.some((l) => l.target > 0)) alloc.createDiv({ cls: "trimly-muted", text: s.noTargets });
+    else {
+      const table = alloc.createDiv("trimly-perf-table trimly-target-table");
+      const headRow = table.createDiv("trimly-perf-row is-head");
+      for (const label of ["", s.now, s.after, s.target]) headRow.createDiv({ cls: label ? "trimly-perf-cell" : "trimly-perf-label", text: label });
+      for (const l of r.allocation) {
+        const line = table.createDiv("trimly-perf-row");
+        const label = line.createDiv("trimly-perf-label trimly-target-label");
+        label.createSpan("trimly-dot").setCssProps({ "--trimly-color": ASSET_CLASS_COLORS[l.assetClass] });
+        label.createSpan({ text: className(l.assetClass) });
+        line.createDiv({ cls: "trimly-perf-cell trimly-amount", text: this.pct(l.now) });
+        const closer = Math.abs(l.after - l.target) < Math.abs(l.now - l.target);
+        line.createDiv({ cls: `trimly-perf-cell trimly-amount ${l.after === l.now ? "" : closer ? "is-income" : "is-expense"}`, text: this.pct(l.after) });
+        line.createDiv({ cls: "trimly-perf-cell trimly-amount", text: l.target ? this.pct(l.target) : "—" });
+      }
+    }
+
+    const rulesCard = this.card(body, s.rules);
+    for (const rule of r.rules) {
+      const el = rulesCard.createDiv("trimly-row");
+      const tone = rule.status === "pass" ? "is-income" : rule.status === "fail" ? "is-expense" : "trimly-muted";
+      setIcon(el.createDiv(`trimly-rule-icon ${tone}`), rule.status === "pass" ? "check-circle" : rule.status === "fail" ? "x-circle" : "minus-circle");
+      const main = el.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: s.rule[rule.id] });
+      main.createDiv({ cls: "trimly-row-sub", text: this.ruleDetail(rule, r, rules, input.destination) });
+      el.createDiv({ cls: `trimly-amount ${tone}`, text: s[rule.status] });
+    }
+    rulesCard.createDiv({ cls: "trimly-muted trimly-card-foot", text: s.rulesFoot });
+
+    const without = this.card(body, s.withoutSelling);
+    const months = r.monthsWithoutSelling;
+    without.createDiv({ cls: "trimly-tile-value", text: !monthly ? s.noMonthly : months === null ? s.never : s.months(months) });
+    without.createDiv({ cls: "trimly-muted trimly-card-foot", text: s.withoutSellingNote(String(rules.band)) });
+
+    this.renderSaleRules(body, rules);
+  }
+
+  private ruleDetail(rule: RuleResult, r: SaleResult, rules: SaleRules, destination?: AssetClass): string {
+    const d = t.sale.detail;
+    const cls = t.labels.assetClass;
+    switch (rule.id) {
+      case "band":
+        return rule.status === "na" ? d.noTargets : d.band(cls[r.assetClass], this.pct(Math.abs(rule.detail.above ?? 0)), (rule.detail.above ?? 0) >= 0, String(rules.band));
+      case "order":
+        if (rule.status === "pass") return r.tax <= 0 ? d.orderNoTax : d.orderFirst;
+        return rule.detail.because === "noTax" ? d.orderFreeFirst((rule.detail.first ?? []).join(", ")) : d.orderLowerFirst((rule.detail.first ?? []).join(", "));
+      case "cost":
+        return d.cost(this.pct(rule.detail.costPct ?? 0, 2), this.pct(rules.maxCostPct, 2));
+      case "exemptIncome":
+        return rule.status === "na" ? d.noIncome : d.exemptIncome(this.pct(rule.detail.yieldPct ?? 0));
+      case "destination":
+        if (rule.status === "pass") return d.destinationOk(cls[destination!]);
+        return destination ? d.destinationNotBelow(cls[destination]) : d.noDestination;
+      case "reserve":
+        return rule.status === "pass" ? d.reserveOk : d.reserveFail;
+      case "preferAporte": {
+        const months = rule.detail.months;
+        if (rule.status === "na") return d.aporteNa;
+        if (months === null || months === undefined) return d.aporteNever;
+        return rule.status === "fail" ? d.aporteFast(months, rules.aporteMonths) : d.aporteSlow(months, rules.aporteMonths);
+      }
+    }
+  }
+
+  /** Which rules count and their limits, kept in the ledger. */
+  private renderSaleRules(body: HTMLElement, rules: SaleRules) {
+    const s = t.sale;
+    const card = this.card(body, s.configure);
+    const save = (patch: Partial<SaleRules>) =>
+      void this.plugin.mutate((l) => void (l.investments.saleRules = { ...DEFAULT_SALE_RULES, ...l.investments.saleRules, ...patch }));
+    const limits: Partial<Record<SaleRuleId, { label: string; key: "band" | "maxCostPct" | "aporteMonths" }>> = {
+      band: { label: s.band, key: "band" },
+      cost: { label: s.maxCost, key: "maxCostPct" },
+      preferAporte: { label: s.aporteMonths, key: "aporteMonths" },
+    };
+    for (const id of SALE_RULE_IDS) {
+      const off = new Set(rules.off ?? []);
+      const setting = new Setting(card).setName(s.rule[id]).setDesc(s.ruleDesc[id]);
+      const limit = limits[id];
+      if (limit) {
+        setting.addText((text) => {
+          text.inputEl.addClass("trimly-limit-input");
+          text.inputEl.inputMode = "decimal";
+          text.setPlaceholder(limit.label).setValue(String(rules[limit.key]));
+          text.inputEl.setAttr("aria-label", limit.label);
+          text.inputEl.addEventListener("change", () => {
+            const v = Number(text.getValue().trim().replace(",", "."));
+            if (!Number.isFinite(v) || v < 0) return void new Notice(s.invalid);
+            save({ [limit.key]: v });
+          });
+        });
+      }
+      setting.addToggle((toggle) =>
+        toggle.setValue(!off.has(id)).onChange((on) => {
+          const next = new Set(rules.off ?? []);
+          if (on) next.delete(id);
+          else next.add(id);
+          save({ off: next.size ? [...next] : undefined });
+        })
+      );
+    }
   }
 
   private renderCalculators(body: HTMLElement, ledger: Ledger) {
