@@ -735,6 +735,13 @@ export const ptBR = {
   },
 
   inv: {
+    month: {
+      title: (month: string) => `Este mês · ${month}`,
+      left: (v: string) => `Falta aportar ${v}`,
+      done: (done: string, goal: string) => `Aporte do mês feito: ${done} de ${goal}`,
+      noTargets: "Defina metas por classe em Metas para ver onde aportar.",
+      income: (v: string) => `Proventos recebidos no mês: ${v}`,
+    },
     portfolio: "Carteira",
     positionsUpdated: (n: number, date: string) => `${n} ${s(n, "ativo", "ativos")} · atualizado em ${date}`,
     invested: "Aplicado",
@@ -929,6 +936,36 @@ export const ptBR = {
     kind: { dividend: "Dividendo", jcp: "JCP", income: "Rendimento", other: "Provento" },
     upcomingNote:
       "Valores estimados pela quantidade de hoje; só recebe quem tinha o ativo na data-com. JCP já com os 15% de IR retidos.",
+    yieldOnCost: (pct: string) => `YoC ${pct}`,
+    currentYield: (pct: string) => `${pct} sobre o valor atual`,
+    vsCdi: (pp: string, above: boolean) => `${pp} ${above ? "acima" : "abaixo"} do CDI líquido`,
+    cdiNote: (cdi: string) =>
+      `YoC: proventos de 12 meses sobre o que você pagou. CDI líquido de 15% de IR nos últimos 12 meses: ${cdi}. Compara só os proventos, sem a variação de preço.`,
+    calendar: "Calendário de pagamentos · 12 meses",
+    calendarNote: "Meses em que cada ativo pagou proventos. Passe o mouse num ponto para ver o valor.",
+    goal: {
+      title: "Meta de renda mensal",
+      amount: "Quero receber por mês",
+      amountDesc: "Em proventos. Deixe vazio para não acompanhar.",
+      placeholder: "R$ por mês",
+      missing: (v: string) => `Faltam ${v} por mês`,
+      reached: "Meta atingida",
+      now: (v: string, pct: string) => `Média dos últimos 12 meses: ${v} por mês, ${pct} da meta.`,
+      months: (duration: string, aporte: string, wealth: string) =>
+        `Com ${aporte} de aporte por mês e reinvestindo os proventos, a carteira chega aos ${wealth} que pagam a meta em ${duration}.`,
+      never: "Sem proventos ou sem aporte, a meta não chega por estas contas.",
+      note: (yieldPct: string, from: string) =>
+        `Supõe a carteira pagando o yield de hoje (${yieldPct} ao ano) em proventos, todos reinvestidos, sem variação de preço. ${from}`,
+      fromPlan: "Aporte: a meta Investir do mês.",
+      fromAverage: "Aporte: a média dos últimos 12 meses.",
+    },
+    alerts: {
+      title: "Alertas de renda",
+      cut: (ticker: string, drop: string) => `${ticker} cortou ${drop} da distribuição`,
+      cutSub: (last: string, date: string, avg: string) => `Pagou ${last} por cota em ${date}; a média dos 12 meses anteriores era ${avg}.`,
+      concentration: (name: string, pct: string) => `${name} paga ${pct} dos seus proventos`,
+      concentrationSub: "Uma redução nesse ativo pesa na renda toda.",
+    },
   },
 
   targets: {

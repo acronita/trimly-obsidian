@@ -158,7 +158,12 @@ passphrase that never leaves your device.
   JCP, interest, coupons) per month and per position, plus the upcoming proventos B3 has announced
   for positions with a B3 ticker (data-com, payment date, value per share and an estimate by your
   quantity), with next month's income forecast for FIIs that haven't announced yet; positions whose
-  bank sends no income get it estimated from B3's proventos. Positions come from bank sync or are added by
+  bank sends no income get it estimated from B3's proventos. The *Proventos* tab also tracks a monthly income goal (how
+  much is missing and how many months of aportes, reinvesting the income, until the portfolio pays it), each
+  position's yield on cost and current yield against the CDI net of income tax, alerts when a regular payer cuts its
+  distribution 10% or more below its own 12-month average or one position pays 25% or more of the income, and a
+  12-month payment calendar per position. The investments overview opens with *Este mês*: what is left of the month's
+  Invest goal and which classes the targets send it to. Positions come from bank sync or are added by
   hand (crypto, foreign brokers, anything outside Open Finance), with their own contributions,
   withdrawals, income and taxes. Click a position for its details. Set a target share per asset
   class to see how far you are from it and how to split your next contribution; a weight or score per

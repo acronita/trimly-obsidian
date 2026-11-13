@@ -729,6 +729,13 @@ export const en: Strings = {
   },
 
   inv: {
+    month: {
+      title: (month: string) => `This month · ${month}`,
+      left: (v: string) => `${v} left to contribute`,
+      done: (done: string, goal: string) => `Month's contribution done: ${done} of ${goal}`,
+      noTargets: "Set class targets in Targets to see where to contribute.",
+      income: (v: string) => `Income received this month: ${v}`,
+    },
     portfolio: "Portfolio",
     positionsUpdated: (n: number, date: string) => `${n} ${s(n, "position", "positions")} · updated ${date}`,
     invested: "Invested",
@@ -923,6 +930,36 @@ export const en: Strings = {
     kind: { dividend: "Dividend", jcp: "JCP", income: "Income", other: "Provento" },
     upcomingNote:
       "Estimated by today's quantity; only those holding the asset on the record date receive it. JCP net of the 15% tax withheld.",
+    yieldOnCost: (pct: string) => `YoC ${pct}`,
+    currentYield: (pct: string) => `${pct} of today's value`,
+    vsCdi: (pp: string, above: boolean) => `${pp} ${above ? "above" : "below"} the net CDI`,
+    cdiNote: (cdi: string) =>
+      `YoC: 12 months of income over what you paid. CDI net of 15% income tax over the last 12 months: ${cdi}. Compares income alone, not price changes.`,
+    calendar: "Payment calendar · 12 months",
+    calendarNote: "Months in which each position paid. Hover a dot to see the amount.",
+    goal: {
+      title: "Monthly income goal",
+      amount: "I want to receive a month",
+      amountDesc: "From proventos. Leave empty not to track it.",
+      placeholder: "R$ a month",
+      missing: (v: string) => `${v} a month to go`,
+      reached: "Goal reached",
+      now: (v: string, pct: string) => `Average of the last 12 months: ${v} a month, ${pct} of the goal.`,
+      months: (duration: string, aporte: string, wealth: string) =>
+        `With ${aporte} a month of contributions and reinvesting the income, the portfolio reaches the ${wealth} that pays the goal in ${duration}.`,
+      never: "With no income or no contribution, these numbers never reach the goal.",
+      note: (yieldPct: string, from: string) =>
+        `Assumes the portfolio keeps paying today's yield (${yieldPct} a year) in income, all reinvested, with no price change. ${from}`,
+      fromPlan: "Contribution: the month's Invest goal.",
+      fromAverage: "Contribution: the average of the last 12 months.",
+    },
+    alerts: {
+      title: "Income alerts",
+      cut: (ticker: string, drop: string) => `${ticker} cut its distribution by ${drop}`,
+      cutSub: (last: string, date: string, avg: string) => `Paid ${last} a share on ${date}; the average of the previous 12 months was ${avg}.`,
+      concentration: (name: string, pct: string) => `${name} pays ${pct} of your income`,
+      concentrationSub: "A cut in this position weighs on all your income.",
+    },
   },
 
   targets: {
