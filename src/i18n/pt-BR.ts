@@ -282,6 +282,7 @@ export const ptBR = {
   },
 
   calc: {
+    simulators: "Simuladores",
     disclaimer: "Simulações com taxa constante, para ter uma ideia: não são previsão nem recomendação. Os campos já vêm com seus dados quando dá; nada aqui é salvo nem sai do aparelho.",
     fill: "Preencha os campos para ver o resultado.",
     duration: (years: number, months: number) =>
@@ -464,7 +465,7 @@ export const ptBR = {
   sale: {
     title: "Calculadora de venda",
     disclaimer: "Estimativa para avaliar uma venda, não uma recomendação. As regras mostram o que passa e o que falha; a decisão é sua.",
-    empty: "Nenhuma ação, ETF, BDR ou FII com quantidade para simular uma venda.",
+    empty: "Nenhuma ação, ETF, BDR ou FII com quantidade, nem renda fixa ou Tesouro com saldo, para simular uma venda.",
     inputs: "Venda",
     asset: "Ativo",
     quantity: "Quantidade",
@@ -480,6 +481,20 @@ export const ptBR = {
     monthly: "Aporte mensal",
     monthlyDesc: "Para o cenário sem vender. Começa na meta Investir do mês.",
     invalid: "Digite um número válido.",
+    amount: "Valor do resgate",
+    amountDesc: (gross: string) => `Valor bruto, antes do IR. A posição vale ${gross}; começa no resgate total.`,
+    costsFixedDesc: "Renda fixa e Tesouro não cobram taxa no resgate; a custódia do Tesouro já sai do valor da posição.",
+    redemption: "Valor do resgate",
+    grossNote: "Bruto, antes de IOF e IR",
+    invested: "Valor aplicado",
+    investedEstimated: "Sem movimentações: conta como uma só aplicação, na data em que o Trimly começou a acompanhar a posição.",
+    iof: "IOF",
+    iofSub: "Resgate com menos de 30 dias da aplicação",
+    taxFree: "Isento: LCI, LCA, CRI, CRA e LIG não pagam IR",
+    regressive: (rate: string, days: string) => `Tabela regressiva: ${rate} sobre o ganho · ${days}`,
+    days: (n: number) => `aplicação de ${n} ${s(n, "dia", "dias")}`,
+    daysRange: (min: number, max: number) => `aplicações de ${min} a ${max} dias`,
+    fixedFoot: "O banco retém o IR no resgate e tira primeiro das aplicações mais antigas. O ganho de cada aplicação é estimado, supondo que todas renderam igual: confira com o banco.",
     result: "Resultado",
     gross: "Valor de venda",
     averageCost: "Custo médio",

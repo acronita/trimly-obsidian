@@ -9,6 +9,15 @@
 
 ## 1.9.0 — 2026-11-12
 
+- 2026-11-13 — The sale calculator moves into *Calculadoras*, behind a *Simuladores | Venda* switch, so the investments
+  tab bar fits a narrow pane again. It also takes fixed income and Tesouro: type the gross amount to redeem and it
+  takes the oldest applications first, each taxed by the regressive table for its days (22,5% to 15%) after IOF under
+  30 days; LCI, LCA, CRI, CRA and LIG pay no income tax. The applications come from the movements (scaled to the
+  position's invested amount); with none, one application dated when Trimly started tracking it. Each application's
+  gain is an estimate, as if all grew alike. The selling-order rule counts a tax-free or loss-making fixed income
+  position of the class as one to redeem first. Why: asked; the extra tab cut the tab bar, and early redemptions
+  are sales too. Files touched: `src/sale.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `test/sale.test.ts`, `README.md`, `docs/ARCHITECTURE.md`.
 - 2026-11-12 — New *Venda* tab in Investments: a sale calculator. Given a stock, BDR, ETF or FII and a quantity it shows
   the sale value, the average cost from the IR tab, the gross gain, the estimated income tax by class (FII 20% with no
   exemption, stocks 15% exempt up to R$ 20.000 of sales in the month, ETFs and BDRs 15% with none), the losses offset

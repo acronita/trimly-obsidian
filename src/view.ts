@@ -119,7 +119,7 @@ import {
 import { t } from "./i18n";
 import type { Strings } from "./i18n";
 import { STOCK_EXEMPTION, assetCode, taxMonths, taxPositions } from "./income-tax";
-import { DEFAULT_SALE_RULES, SALE_RULE_IDS, defaultCosts, defaultPrice, sellableAssets, simulateSale } from "./sale";
+import { DEFAULT_SALE_RULES, SALE_RULE_IDS, defaultCosts, defaultPrice, grossOf, saleKind, sellableAssets, simulateSale } from "./sale";
 import type { RuleResult, SaleResult, SaleRuleId, SaleRules } from "./sale";
 import { HOUSE_PAGES, NEWS_MAX_DAYS, PORTFOLIO_SOURCES, newsForTickers, portfolioGroups, portfolioHouses, recentItems } from "./feeds";
 import { fetchArticle, fetchFeeds } from "./feeds-fetch";
@@ -165,7 +165,7 @@ function setTypedCost(l: Ledger, assetId: string, averageCents: number) {
   }
 }
 
-type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "sale" | "calculators" | "news" | "reports" | "assistant-accounts" | "assistant-investments";
+type Tab = "overview" | "transactions" | "accounts" | "budgets" | "recurring" | "obligations" | "categories" | "inv-overview" | "portfolio" | "performance" | "movements" | "income" | "targets" | "tax" | "calculators" | "news" | "reports" | "assistant-accounts" | "assistant-investments";
 
 /** How many bills ahead of the open one can be browsed, to see the installments to come. */
 const FUTURE_BILLS = 12;
@@ -195,7 +195,6 @@ const TABS: Record<Mode, { id: Tab; label: keyof Strings["tabs"]; icon: string }
     { id: "income", label: "income", icon: "coins" },
     { id: "targets", label: "targets", icon: "target" },
     { id: "tax", label: "tax", icon: "landmark" },
-    { id: "sale", label: "sale", icon: "scale" },
     { id: "calculators", label: "calculators", icon: "calculator" },
     { id: "news", label: "news", icon: "newspaper" },
     { id: "assistant-investments", label: "assistant", icon: "message-circle" },
@@ -249,9 +248,11 @@ export class TrimlyView extends ItemView {
   private historyOpen = false;
   /** obligations tab: what is due, or everything registered */
   private obligationsView: "todo" | "registered" = "todo";
+  /** which part of the Calculators tab is open; not saved */
+  private calculatorsView: "simulators" | "sale" = "simulators";
   private movementFilter: MovementFilter = { assetId: "", type: "", allTime: false };
   /** what the sale calculator was given; empty fields take their defaults; not saved */
-  private sale: { assetId?: string; quantity?: number; price?: number; costs?: number; destination?: AssetClass; destinationYield?: number; monthly?: number } = {};
+  private sale: { assetId?: string; quantity?: number; amount?: number; price?: number; costs?: number; destination?: AssetClass; destinationYield?: number; monthly?: number } = {};
   /** amount typed in the Targets tab to plan a contribution, in cents; null = what is left of this month's Invest goal; not saved */
   private contribution: number | null = null;
   /** the assistants' conversations once unlocked; null until loaded and after locking */
@@ -364,11 +365,8 @@ export class TrimlyView extends ItemView {
       case "tax":
         this.renderTax(body, ledger);
         break;
-      case "sale":
-        this.renderSale(body, ledger);
-        break;
       case "calculators":
-        this.renderCalculators(body, ledger);
+        this.renderCalculatorsTab(body, ledger);
         break;
       case "news":
         this.renderNews(body, ledger);
@@ -3259,16 +3257,19 @@ export class TrimlyView extends ItemView {
     if (assets.length === 0) return this.empty(body, "scale", s.empty);
     const input = this.sale;
     const asset = assets.find((a) => a.id === input.assetId) ?? assets[0];
-    const held = asset.quantity ?? 0;
-    const quantity = Math.min(input.quantity ?? held, held);
+    // fixed income and Tesouro: an amount redeemed, no B3 fees
+    const fixed = saleKind(asset) === "fixed";
+    const held = fixed ? grossOf(asset) : (asset.quantity ?? 0);
+    const quantity = fixed ? 0 : Math.min(input.quantity ?? held, held);
+    const amount = fixed ? Math.min(input.amount ?? held, held) : 0;
     const price = input.price ?? defaultPrice(asset);
-    const costs = input.costs ?? defaultCosts(Math.round(quantity * price));
+    const costs = input.costs ?? (fixed ? 0 : defaultCosts(Math.round(quantity * price)));
     const month = monthOf(todayISO());
     const monthly = input.monthly ?? budgetFor(ledger, month).investmentGoal ?? 0;
     const rules: SaleRules = { ...DEFAULT_SALE_RULES, ...ledger.investments.saleRules };
     const r = simulateSale(
       ledger,
-      { assetId: asset.id, quantity, price, costs, destination: input.destination, destinationYield: input.destinationYield, monthly, today: todayISO() },
+      { assetId: asset.id, quantity, price, amount, costs, destination: input.destination, destinationYield: input.destinationYield, monthly, today: todayISO() },
       rules
     );
     if (!r) return;
@@ -3318,11 +3319,14 @@ export class TrimlyView extends ItemView {
         .addOptions(Object.fromEntries(assets.map((a) => [a.id, a.name])))
         .setValue(asset.id)
         // another position: its own quantity, price and costs
-        .onChange((v) => update({ assetId: v, quantity: undefined, price: undefined, costs: undefined }))
+        .onChange((v) => update({ assetId: v, quantity: undefined, price: undefined, amount: undefined, costs: undefined }))
     );
-    numberField(s.quantity, s.quantityDesc(qty(held)), qty(quantity), (v) => update({ quantity: v, costs: undefined }), decimal);
-    numberField(s.price, s.priceDesc, centsToInput(price), (v) => update({ price: v, costs: undefined }), parseAmount);
-    numberField(s.costs, s.costsDesc, centsToInput(costs), (v) => update({ costs: v }), parseAmount);
+    if (fixed) numberField(s.amount, s.amountDesc(this.money(held)), centsToInput(amount), (v) => update({ amount: v }), parseAmount);
+    else {
+      numberField(s.quantity, s.quantityDesc(qty(held)), qty(quantity), (v) => update({ quantity: v, costs: undefined }), decimal);
+      numberField(s.price, s.priceDesc, centsToInput(price), (v) => update({ price: v, costs: undefined }), parseAmount);
+    }
+    numberField(s.costs, fixed ? s.costsFixedDesc : s.costsDesc, centsToInput(costs), (v) => update({ costs: v }), parseAmount);
     new Setting(form).setName(s.destination).addDropdown((d) =>
       d
         .addOptions({ "": s.noDestination, ...Object.fromEntries(TARGET_CLASSES.map((c) => [c, className(c)])) })
@@ -3340,19 +3344,33 @@ export class TrimlyView extends ItemView {
       if (sub) main.createDiv({ cls: "trimly-row-sub", text: sub });
       el.createDiv({ cls: `trimly-amount ${cls}`, text: value });
     };
-    row(s.gross, this.money(r.gross), `${qty(r.quantity)} × ${this.money(price)}`);
-    row(s.costs, signed(-r.costs));
-    row(
-      s.averageCost,
-      r.averagePrice === null ? s.unknownCost : this.money(Math.round(r.averagePrice * r.quantity)),
-      r.averagePrice === null ? undefined : s.perShare(this.money(r.averagePrice))
-    );
-    row(s.gain, r.gain === null ? "—" : signed(r.gain), undefined, r.gain === null ? "" : r.gain >= 0 ? "is-income" : "is-expense");
-    row(s.lossAvailable(r.kind === "fii" ? s.fii : s.common), this.money(r.lossAvailable), r.lossUsed > 0 ? s.lossUsed(this.money(r.lossUsed)) : undefined);
-    row(s.tax, signed(-r.tax), r.exempt ? s.taxExempt : s.taxRate(r.kind === "fii" ? "20%" : "15%"), r.tax > 0 ? "is-expense" : "");
-    row(s.net, this.money(r.net));
-    if (r.income12m > 0) row(s.income, this.money(r.income12m), s.incomeSub(this.pct(r.incomeYield)));
-    if (r.issues.length) result.createDiv({ cls: "trimly-muted trimly-card-foot", text: s.checkIr });
+    if (r.fixed) {
+      const f = r.fixed;
+      const days = f.minDays === f.maxDays ? s.days(f.maxDays) : s.daysRange(f.minDays, f.maxDays);
+      row(s.redemption, this.money(r.gross), s.grossNote);
+      row(s.costs, signed(-r.costs));
+      row(s.invested, r.gain === null ? s.unknownCost : this.money(f.cost), f.estimated && r.gain !== null ? s.investedEstimated : undefined);
+      row(s.gain, r.gain === null ? "—" : signed(r.gain), undefined, r.gain === null ? "" : r.gain >= 0 ? "is-income" : "is-expense");
+      if (f.iof > 0) row(s.iof, signed(-f.iof), s.iofSub, "is-expense");
+      row(s.tax, signed(-f.ir), f.taxFree ? s.taxFree : f.ratePct === null ? days : s.regressive(this.pct(f.ratePct, 1), days), f.ir > 0 ? "is-expense" : "");
+      row(s.net, this.money(r.net));
+      if (r.income12m > 0) row(s.income, this.money(r.income12m), s.incomeSub(this.pct(r.incomeYield)));
+      result.createDiv({ cls: "trimly-muted trimly-card-foot", text: s.fixedFoot });
+    } else {
+      row(s.gross, this.money(r.gross), `${qty(r.quantity)} × ${this.money(price)}`);
+      row(s.costs, signed(-r.costs));
+      row(
+        s.averageCost,
+        r.averagePrice === null ? s.unknownCost : this.money(Math.round(r.averagePrice * r.quantity)),
+        r.averagePrice === null ? undefined : s.perShare(this.money(r.averagePrice))
+      );
+      row(s.gain, r.gain === null ? "—" : signed(r.gain), undefined, r.gain === null ? "" : r.gain >= 0 ? "is-income" : "is-expense");
+      row(s.lossAvailable(r.kind === "fii" ? s.fii : s.common), this.money(r.lossAvailable), r.lossUsed > 0 ? s.lossUsed(this.money(r.lossUsed)) : undefined);
+      row(s.tax, signed(-r.tax), r.exempt ? s.taxExempt : s.taxRate(r.kind === "fii" ? "20%" : "15%"), r.tax > 0 ? "is-expense" : "");
+      row(s.net, this.money(r.net));
+      if (r.income12m > 0) row(s.income, this.money(r.income12m), s.incomeSub(this.pct(r.incomeYield)));
+      if (r.issues.length) result.createDiv({ cls: "trimly-muted trimly-card-foot", text: s.checkIr });
+    }
 
     const alloc = this.card(body, s.allocation);
     if (!r.allocation.some((l) => l.target > 0)) alloc.createDiv({ cls: "trimly-muted", text: s.noTargets });
@@ -3456,6 +3474,24 @@ export class TrimlyView extends ItemView {
         })
       );
     }
+  }
+
+  /** The simulators and the sale calculator share one tab, so the tab bar fits a narrow pane. */
+  private renderCalculatorsTab(body: HTMLElement, ledger: Ledger) {
+    const views = body.createDiv("trimly-section-bar").createDiv("trimly-segmented");
+    for (const [id, label] of [
+      ["simulators", t.calc.simulators],
+      ["sale", t.tabs.sale],
+    ] as const) {
+      const b = views.createEl("button", { text: label });
+      if (id === this.calculatorsView) b.addClass("is-active");
+      b.addEventListener("click", () => {
+        this.calculatorsView = id;
+        this.render();
+      });
+    }
+    if (this.calculatorsView === "sale") this.renderSale(body, ledger);
+    else this.renderCalculators(body, ledger);
   }
 
   private renderCalculators(body: HTMLElement, ledger: Ledger) {

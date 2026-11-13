@@ -277,6 +277,7 @@ export const en: Strings = {
   },
 
   calc: {
+    simulators: "Simulators",
     disclaimer: "Simulations at a constant rate, to get an idea: not a forecast or a recommendation. Fields start from your data when possible; nothing here is saved or leaves the device.",
     fill: "Fill in the fields to see the result.",
     duration: (years: number, months: number) =>
@@ -459,7 +460,7 @@ export const en: Strings = {
   sale: {
     title: "Sale calculator",
     disclaimer: "An estimate to weigh a sale, not a recommendation. The rules show what passes and what fails; the decision is yours.",
-    empty: "No stock, ETF, BDR or FII with a quantity to simulate a sale.",
+    empty: "No stock, ETF, BDR or FII with a quantity, nor fixed income or Tesouro with a balance, to simulate a sale.",
     inputs: "Sale",
     asset: "Position",
     quantity: "Quantity",
@@ -475,6 +476,20 @@ export const en: Strings = {
     monthly: "Monthly contribution",
     monthlyDesc: "For the scenario without selling. Starts at the month's Invest goal.",
     invalid: "Type a valid number.",
+    amount: "Amount redeemed",
+    amountDesc: (gross: string) => `Gross, before income tax. The position is worth ${gross}; starts at the whole of it.`,
+    costsFixedDesc: "Fixed income and Tesouro charge no fee to redeem; Tesouro's custody fee already comes out of the position's value.",
+    redemption: "Amount redeemed",
+    grossNote: "Gross, before IOF and income tax",
+    invested: "Amount invested",
+    investedEstimated: "No movements: counted as a single application, dated when Trimly started tracking the position.",
+    iof: "IOF",
+    iofSub: "Redeemed less than 30 days after the application",
+    taxFree: "Exempt: LCI, LCA, CRI, CRA and LIG pay no income tax",
+    regressive: (rate: string, days: string) => `Regressive table: ${rate} of the gain · ${days}`,
+    days: (n: number) => `application held ${n} ${s(n, "day", "days")}`,
+    daysRange: (min: number, max: number) => `applications held ${min} to ${max} days`,
+    fixedFoot: "The bank withholds the tax on redemption and takes the oldest applications first. Each application's gain is estimated, as if all grew alike: check with the bank.",
     result: "Result",
     gross: "Sale value",
     averageCost: "Average cost",
