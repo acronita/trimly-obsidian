@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- 2026-11-14 — *Planejar um aporte* recommends finishing the emergency reserve first: while the reserve holds less than
+  its amount, a row above previdência shows what is missing. The split by the targets is unchanged. Why: asked, so the
+  plan doesn't hide a short reserve. Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `docs/FAQ.md`, `docs/CHANGELOG.md`.
 - 2026-11-08 — README's *Security model* catches up with the code: the full list of `data.json` toggles, public data
   fetched by default instead of "no network requests", and everything the AI assistants' tools send, plus where the
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them

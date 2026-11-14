@@ -1006,6 +1006,8 @@ export const en: Strings = {
       invalidShare: "Type a percentage from 0 to 100 (e.g. 20%) or an amount (e.g. 300).",
     },
     fromPlan: (month: string) => `What is left of the Invest goal for ${month}. Change it to simulate another amount.`,
+    reserveFirst: "Recommended: finish the reserve",
+    reserveFirstSub: "This much is missing from the emergency reserve. Worth completing it before following the split below.",
     toPension: "Retirement",
     toPensionSub: (names: string) => names,
     toTargets: (v: string) => `${v} split by the targets`,

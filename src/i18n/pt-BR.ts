@@ -1012,6 +1012,8 @@ export const ptBR = {
       invalidShare: "Digite uma porcentagem entre 0 e 100 (ex.: 20%) ou um valor (ex.: 300).",
     },
     fromPlan: (month: string) => `Valor que falta da meta Investir de ${month}. Mude se quiser simular outro.`,
+    reserveFirst: "Recomendação: completar a reserva",
+    reserveFirstSub: "Falta este valor na reserva de emergência. Vale completá-la antes de seguir a divisão abaixo.",
     toPension: "Previdência",
     toPensionSub: (names: string) => names,
     toTargets: (v: string) => `${v} divididos pelas metas`,
