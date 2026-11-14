@@ -3960,6 +3960,16 @@ export class TrimlyView extends ItemView {
       this.render();
     });
     if (this.contribution === null && fromPlan > 0) plan.createDiv({ cls: "trimly-muted", text: t.targets.fromPlan(this.monthLabel(month)) });
+    // a recommendation only: the split below still ignores the reserve
+    const reserveMissing = reserveStatus(ledger)?.missing ?? 0;
+    if (reserveMissing > 0) {
+      const row = plan.createDiv("trimly-row");
+      this.iconTile(row, "life-buoy", RESERVE_COLOR);
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: t.targets.reserveFirst });
+      main.createDiv({ cls: "trimly-row-sub", text: t.targets.reserveFirstSub });
+      row.createDiv({ cls: "trimly-amount is-expense", text: this.money(reserveMissing) });
+    }
     if (!contribution) {
       plan.createDiv({ cls: "trimly-muted", text: t.targets.typeAmount });
       return;

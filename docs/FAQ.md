@@ -62,7 +62,8 @@ without a target count as 0%, so they never get new money.
 In *Metas*, *Reserva de emergência → Definir*: type the amount and mark the positions holding it. Up to that amount
 leaves the portfolio, and the targets and contribution plan apply to the rest. What the marked positions hold above
 the amount stays in the portfolio, each giving up the same proportion. If they hold less, the card shows what is
-missing; the contribution plan doesn't fill it for you.
+missing, and the contribution plan recommends finishing it first, showing the amount missing above its split. The
+split itself doesn't fill the reserve for you.
 
 **How do I keep previdência apart and send part of each aporte to it?**
 Open the position (a Tesouro Renda+, say) and set *Conta nas metas como* to *Previdência*; PGBL and VGBL are there
