@@ -1843,10 +1843,18 @@ export function ruleTransactions(ledger: Ledger, ruleId: string): Transaction[] 
   return ledger.transactions.filter((tx) => tx.recurringId === ruleId).sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-/** Wording banks put on any entry of a kind ("Transferência Recebida", "Compra no débito"): it names nobody. */
+/**
+ * Wording that names nobody: what banks put on any entry of a kind
+ * ("Transferência enviada pelo Pix", "Compra no débito"), connectives, and
+ * company-form boilerplate ("Instituição de Pagamento Ltda"). Sharing one of
+ * these is no sign two descriptions are the same payee.
+ */
 const GENERIC_WORDS = new Set([
   "transferencia", "recebida", "recebido", "enviada", "enviado", "pix", "ted", "doc",
-  "pagamento", "compra", "debito", "credito", "deposito", "boleto", "efetuado", "efetuada",
+  "pagamento", "pagamentos", "pagar", "pago", "paga", "compra", "debito", "credito", "deposito",
+  "boleto", "efetuado", "efetuada", "agendado", "agendada",
+  "pelo", "pela", "para", "por", "via", "com", "sem", "dos", "the",
+  "ltda", "eireli", "instituicao", "sociedade", "limitada",
 ]);
 
 function words(s: string): string[] {
@@ -2389,7 +2397,15 @@ export function linkObligationPayments(ledger: Ledger, today: string): number {
       if (due > until) break;
       const s = settlementFor(o, due);
       if (s && (s.status !== "done" || s.transactionId)) continue;
-      const pool = ledger.transactions.filter((tx) => tx.type !== "income" && tx.date <= today && !taken.has(tx.id));
+      // a shared word is not enough on its own: the amount must also be near the usual one
+      const usual = expectedAmount(ledger, o);
+      const pool = ledger.transactions.filter(
+        (tx) =>
+          tx.type !== "income" &&
+          tx.date <= today &&
+          !taken.has(tx.id) &&
+          (!usual || Math.abs(tx.amount - usual) <= usual * LINK_NAMED_AMOUNT_TOLERANCE)
+      );
       const tx = bestMatch(pool, { ...expectedPayment(o, due), text: o.payee, requireName: true });
       if (!tx) continue;
       if (s) {

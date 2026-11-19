@@ -185,6 +185,28 @@ test("linking a payment remembers it, so the next months link themselves", () =>
   assert.equal(linkObligationPayments(l, TODAY), 0); // running again changes nothing
 });
 
+test("a Pix to someone else is not taken for a bill's, by shared bank wording or a far-off amount", () => {
+  const mei = obligation({ id: "mei", name: "MEI pagar", amount: 86_50 });
+  const l = ledgerWith(mei);
+  const acc = l.accounts[0].id;
+  const das: Transaction = { id: "oct", date: "2026-08-10", type: "expense", amount: 86_50, accountId: acc, description: "Transferência enviada pelo Pix|MINISTERIO DA FAZENDA" };
+  l.transactions.push(das);
+  linkPayment(mei, "2026-08-10", das);
+  l.transactions.push(
+    // shares only "enviada pelo Pix" with the bill's payment
+    { id: "pay2all", date: "2026-09-09", type: "expense", amount: 300_00, accountId: acc, description: "Transferência enviada pelo Pix|PAY2ALL INSTITUICAO DE PAGAMENTO LTDA." },
+    // same payee, but nowhere near the usual amount
+    { id: "big", date: "2026-09-11", type: "expense", amount: 900_00, accountId: acc, description: "Transferência enviada pelo Pix|MINISTERIO DA FAZENDA" }
+  );
+  assert.equal(linkObligationPayments(l, TODAY), 0);
+  assert.equal(mei.amount, 86_50);
+  assert.equal(mei.payee, "Transferência enviada pelo Pix|MINISTERIO DA FAZENDA");
+
+  l.transactions.push({ id: "sep", date: "2026-09-10", type: "expense", amount: 86_50, accountId: acc, description: "Transferência enviada pelo Pix|MINISTERIO DA FAZENDA" });
+  assert.equal(linkObligationPayments(l, TODAY), 1);
+  assert.equal(settlementFor(mei, "2026-09-10")?.transactionId, "sep");
+});
+
 test("a bill without a usual amount is projected at its last linked payment, else at an explicit 0", () => {
   const light = obligation({
     settled: [
