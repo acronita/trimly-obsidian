@@ -7,6 +7,15 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.10.2 — 2026-11-19
+
+- 2026-11-19 — Bills no longer link themselves to someone else's Pix. Connectives and company boilerplate ("pelo",
+  "para", "Ltda", "Instituição de Pagamento"…) no longer count as a shared name, and an automatic link also needs the
+  amount within 50% of the bill's usual one. Why: "Transferência enviada pelo Pix|PAY2ALL…" was taken for the MEI
+  bill's "…pelo Pix|MINISTERIO DA FAZENDA" payment, through "pelo", and its R$ 300 became the bill's usual amount.
+  Files touched: `src/ledger.ts`, `test/obligations.test.ts`, `docs/CHANGELOG.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
 ## 1.10.1 — 2026-11-14
 
 - 2026-11-14 — *Planejar um aporte* recommends finishing the emergency reserve first: while the reserve holds less than
