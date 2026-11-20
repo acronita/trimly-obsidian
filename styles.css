@@ -773,6 +773,9 @@ button.trimly-add.is-icon {
   grid-template-columns: minmax(8em, 1.2fr) minmax(9em, 1.6fr) repeat(4, minmax(6.5em, 1fr));
   align-items: center;
 }
+.trimly-asset-table.has-value .trimly-perf-row {
+  grid-template-columns: minmax(8em, 1.2fr) minmax(9em, 1.6fr) repeat(5, minmax(6.5em, 1fr));
+}
 .trimly-asset-table .trimly-perf-row.is-clickable {
   cursor: pointer;
 }
@@ -1687,4 +1690,7 @@ input.trimly-amount-input:focus {
   height: 8px;
   border-radius: 50%;
   background: var(--color-green);
+}
+.trimly-file-picker {
+  display: none;
 }

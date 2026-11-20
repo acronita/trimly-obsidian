@@ -111,18 +111,34 @@ async function fetchInvestments(apiKey: string, itemId: string): Promise<PluggyI
   return out;
 }
 
-/**
- * Name of the institution behind an item, to label positions Pluggy reports
- * without one. Undefined when unknown, or when the item is a MeuPluggy link,
- * whose connector name says nothing about the bank.
- */
-async function connectorName(apiKey: string, itemId: string): Promise<string | undefined> {
+interface PluggyItem {
+  connector?: { name?: string } | null;
+  /** UPDATING, LOGIN_ERROR, OUTDATED, WAITING_USER_INPUT or UPDATED */
+  status?: string | null;
+  statusDetail?: { investments?: { isUpdated?: boolean } | null } | null;
+}
+
+interface ItemInfo {
+  /**
+   * Name of the institution behind the item, to label positions Pluggy reports
+   * without one. Undefined when unknown, or when the item is a MeuPluggy link,
+   * whose connector name says nothing about the bank.
+   */
+  bank?: string;
+  /** false when Pluggy says the last update could not collect the investments */
+  investmentsUpdated: boolean;
+}
+
+/** What the item tells about itself; an item that can't be loaded is assumed fine, as before. */
+async function itemInfo(apiKey: string, itemId: string): Promise<ItemInfo> {
   try {
-    const item = await get<{ connector?: { name?: string } }>(apiKey, `/items/${encodeURIComponent(itemId)}`, {}, t.errors.loadingItem);
+    const item = await get<PluggyItem>(apiKey, `/items/${encodeURIComponent(itemId)}`, {}, t.errors.loadingItem);
     const name = item.connector?.name?.trim();
-    return name && !/meu\s*pluggy/i.test(name) ? name : undefined;
+    // a broken connection or a failed investments product can serve empty or zeroed positions
+    const broken = item.status === "LOGIN_ERROR" || item.status === "OUTDATED" || item.statusDetail?.investments?.isUpdated === false;
+    return { bank: name && !/meu\s*pluggy/i.test(name) ? name : undefined, investmentsUpdated: !broken };
   } catch {
-    return undefined;
+    return { investmentsUpdated: true };
   }
 }
 
@@ -144,7 +160,8 @@ async function fetchInvestmentTransactions(apiKey: string, investment: PluggyInv
 /**
  * Accounts of every configured item plus their transactions dated `dateFrom` or
  * later, the cards' bills, and the items' investment positions. A failure loading investments
- * (e.g. the item has no investments product) does not fail the bank sync.
+ * (e.g. the item has no investments product), or an item whose investments Pluggy could not
+ * update, does not fail the bank sync: that item's positions are left as they were.
  */
 export async function fetchBankData(config: PluggyConfig, dateFrom: string): Promise<SyncData> {
   const apiKey = await authenticate(config);
@@ -159,6 +176,12 @@ export async function fetchBankData(config: PluggyConfig, dateFrom: string): Pro
       transactions.push(...(await fetchTransactions(apiKey, acc.id, dateFrom)));
       if (acc.type === "CREDIT") bills.push(...(await fetchBills(apiKey, acc.id)));
     }
+    const { bank, investmentsUpdated } = await itemInfo(apiKey, itemId);
+    // keep the positions as they were rather than zero or close them on bad data
+    if (!investmentsUpdated) {
+      investments.errors.push(t.errors.investmentsNotUpdated(bank ?? itemId));
+      continue;
+    }
     let positions: PluggyInvestment[];
     try {
       positions = await fetchInvestments(apiKey, itemId);
@@ -167,7 +190,6 @@ export async function fetchBankData(config: PluggyConfig, dateFrom: string): Pro
       investments.errors.push((e as Error).message);
       continue;
     }
-    const bank = positions.some((p) => !p.institution?.name) ? await connectorName(apiKey, itemId) : undefined;
     for (const p of positions) {
       if (!p.institution?.name && bank) p.institution = { name: bank };
       // only the separately fetched list counts: missing movements fall back to estimates

@@ -7,6 +7,53 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.11.0 — 2026-11-20
+
+- 2026-11-20 — *Importar posição da B3* (Settings → *Importar dados*; the Movements import also takes the file): B3's position report
+  puts back the positions a sync zeroed or closed (stocks, FIIs, ETFs, Tesouro Direto, fixed income), matched by
+  ticker, ISIN or issuer and due date, with B3's value, quantity, gross value and cost. When a sync left copies, the
+  oldest one, which carries the history, comes back. A position the bank still reports with a value is left to the
+  bank. One the bank had closed becomes manual (a Tesouro bond is then priced daily), or the next sync would close it
+  again; it keeps its connection, and when the bank reports that product again with a value the sync takes it back
+  instead of adding a second one. Products with no position are only listed. Checked against a real B3 *Posição*
+  file (ETF, FII and Tesouro sheets). The fixed income and Tesouro tables also get a *Valor atual* column. Why: a
+  zeroed Pluggy report closed every Tesouro Direto bond and there was no way to put them back. Files touched:
+  `src/b3-position.ts`, `src/investment-sync.ts`, `src/main.ts`, `src/view.ts`, `src/modals.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `src/styles/index.css`, `styles.css`, `test/b3-position.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `docs/FAQ.md`, `docs/CHANGELOG.md`, `package.json`, `manifest.json`, `versions.json`.
+
+## 1.10.2 — 2026-11-19
+
+- 2026-11-20 — Investment sync no longer zeroes or closes positions on bad data from Pluggy. A connection whose
+  investments Pluggy could not update (item `LOGIN_ERROR`/`OUTDATED`, or `statusDetail.investments.isUpdated` false)
+  is skipped with a warning, and so is a report whose newest reference date is older than the connection's open
+  positions already have. Why: Pluggy re-served an 8 Nov report with every position (Tesouro, FIIs, CDBs, across
+  brokers) zeroed and under new ids, and the sync moved the whole portfolio to *Encerrados* though nothing was sold.
+  Positions already closed this way come back only when Pluggy reports them again. Files touched: `src/pluggy.ts`,
+  `src/investment-sync.ts`, `src/main.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/investment-sync.test.ts`,
+  `docs/CHANGELOG.md`.
+
+- 2026-11-19 — Unlinking a bill's payment undoes what it taught the bill: the description and usual amount go back to
+  the latest payment still linked (with none, the description is forgotten), and a transaction unlinked by hand, or
+  tagged as another bill's, is never linked to it automatically again. Why: after a wrong link, unlinking kept the
+  wrong payee, so the next Pix to it was linked again on reopening and changed the amount. Files touched:
+  `src/ledger.ts`, `src/view.ts`, `test/obligations.test.ts`, `docs/CHANGELOG.md`.
+
+- 2026-11-19 — Bills no longer link themselves to someone else's Pix. Connectives and company boilerplate ("pelo",
+  "para", "Ltda", "Instituição de Pagamento"…) no longer count as a shared name, and an automatic link also needs the
+  amount within 50% of the bill's usual one. Why: "Transferência enviada pelo Pix|PAY2ALL…" was taken for the MEI
+  bill's "…pelo Pix|MINISTERIO DA FAZENDA" payment, through "pelo", and its R$ 300 became the bill's usual amount.
+  Files touched: `src/ledger.ts`, `test/obligations.test.ts`, `docs/CHANGELOG.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
+## 1.10.1 — 2026-11-14
+
+- 2026-11-14 — *Planejar um aporte* recommends finishing the emergency reserve first: while the reserve holds less than
+  its amount, a row above previdência shows what is missing. The split by the targets is unchanged. Why: asked, so the
+  plan doesn't hide a short reserve. Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`,
+  `docs/FAQ.md`, `docs/CHANGELOG.md`, `package.json`, `manifest.json`,
+  `versions.json`.
+
 ## 1.10.0 — 2026-11-13
 
 - 2026-11-13 — Income tools in the *Proventos* tab. A monthly income goal ("quero R$ X por mês"): the average of the

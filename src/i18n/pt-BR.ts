@@ -767,6 +767,7 @@ export const ptBR = {
       type: "Tipo",
       rate: "Taxa",
       due: "Vencimento",
+      current: "Valor atual",
       value: "Valor",
       invested: "Aplicado",
       pctClass: (name: string) => `% em ${name}`,
@@ -886,7 +887,8 @@ export const ptBR = {
 
   movements: {
     import: "Importar planilha",
-    importHint: "Extrato da B3 ou planilha da corretora, em Excel ou CSV",
+    importHint: "Extrato ou posição da B3, ou planilha da corretora, em Excel ou CSV",
+    importPositions: "Importar posição da B3",
     importUnknown: "Não reconheci as colunas desta planilha. Ela precisa de data, ativo, quantidade e tipo da operação.",
     importFailed: (message: string) => `Não foi possível ler o arquivo: ${message}`,
     imported: (n: number) => `${n} ${s(n, "movimentação importada", "movimentações importadas")}.`,
@@ -1012,6 +1014,8 @@ export const ptBR = {
       invalidShare: "Digite uma porcentagem entre 0 e 100 (ex.: 20%) ou um valor (ex.: 300).",
     },
     fromPlan: (month: string) => `Valor que falta da meta Investir de ${month}. Mude se quiser simular outro.`,
+    reserveFirst: "Recomendação: completar a reserva",
+    reserveFirstSub: "Falta este valor na reserva de emergência. Vale completá-la antes de seguir a divisão abaixo.",
     toPension: "Previdência",
     toPensionSub: (names: string) => names,
     toTargets: (v: string) => `${v} divididos pelas metas`,
@@ -1167,6 +1171,17 @@ export const ptBR = {
       note: "Entra só o histórico: o valor e a quantidade de cada posição continuam os do banco. Com todas as compras de um ativo, o custo dele passa a ser o real.",
       confirm: "Importar",
     },
+    positions: {
+      title: "Importar posição da B3",
+      unknown: "Não reconheci este arquivo como o relatório de posição da B3.",
+      found: (n: number, date: string) => `${n} ${s(n, "posição será corrigida", "posições serão corrigidas")} com a posição da B3 de ${date}:`,
+      reopens: "reaberta",
+      none: "Nenhuma posição zerada ou encerrada para corrigir: as que o banco informa com valor continuam com ele.",
+      unmatched: (names: string) => `Sem posição correspondente na carteira, ficam de fora: ${names}.`,
+      note: "O valor e a quantidade passam a ser os da B3 e as posições voltam a ficar abertas. As que o banco encerrou ficam manuais até ele voltar a informá-las com valor; aí voltam a sincronizar, sem duplicar.",
+      confirm: "Corrigir posições",
+      done: (n: number) => `${n} ${s(n, "posição corrigida", "posições corrigidas")} com a posição da B3.`,
+    },
     debt: {
       newTitle: "Nova dívida",
       editTitle: "Editar dívida",
@@ -1279,6 +1294,8 @@ export const ptBR = {
     newInvestments: (n: number) => `${n} ${s(n, "investimento novo", "investimentos novos")}`,
     closedInvestments: (n: number) => `${n} ${s(n, "investimento encerrado", "investimentos encerrados")}`,
     investmentMovements: (n: number) => `${n} ${s(n, "movimentação de investimento", "movimentações de investimentos")}`,
+    staleInvestments: (dates: string) =>
+      `o Pluggy mandou investimentos com data de ${dates}, mais antigos que os já salvos; os valores anteriores foram mantidos (confira a conexão no Pluggy)`,
     noInvestments: (items: number) => `o Pluggy não informou investimentos em ${items} ${s(items, "item", "itens")}`,
     investmentErrors: (e: string) => `Trimly: alguns dados de investimentos não puderam ser carregados: ${e}`,
     quotesFailed: (e: string) => `Trimly: as cotações não foram atualizadas: ${e}`,
@@ -1368,6 +1385,10 @@ export const ptBR = {
     treasuryPricesDesc:
       "Atualiza uma vez por dia os títulos do Tesouro Direto lançados à mão, pelo arquivo público de www.tesourotransparente.gov.br (cerca de 15 MB). " +
       "O arquivo traz todos os títulos, então nada sobre os seus é enviado. Vale o preço de venda antes do IR, e o arquivo pode vir com alguns dias de atraso.",
+    importTitle: "Importar dados",
+    importPositionsDesc:
+      "Relatório de posição da Área do Investidor da B3 (investidor.b3.com.br → Posição → baixar em Excel, sem renomear o arquivo). Recupera posições que a sincronização zerou ou encerrou por engano. Mostra o que vai mudar antes; o arquivo é lido só na memória.",
+    importButton: "Escolher arquivo",
     exportTitle: "Exportar dados",
     exportIntro: "Cópia legível para guardar fora do cofre, sem as credenciais do Pluggy e o token do brapi. O Trimly não importa esses arquivos de volta: seu backup de verdade continua sendo o ledger criptografado.",
     exportMobile: "Disponível só no computador.",
@@ -1428,6 +1449,8 @@ export const ptBR = {
     loadingInvestments: (item: string) => `Carregar os investimentos do item ${item}`,
     loadingMovements: (name: string) => `Carregar as movimentações de ${name}`,
     loadingItem: "Carregar o item",
+    investmentsNotUpdated: (item: string) =>
+      `o Pluggy não conseguiu atualizar os investimentos de ${item}; os valores anteriores foram mantidos (confira a conexão no Pluggy)`,
     bcbSeries: (code: number, status: number) => `Série ${code} do Banco Central falhou (HTTP ${status})`,
     bcbSeriesBody: (code: number, detail: string) => `Série ${code} do Banco Central falhou: ${detail}`,
     b3Index: (index: string, status: number) => `${index} da B3 falhou (HTTP ${status})`,

@@ -76,6 +76,29 @@ test("positions of an item whose investments failed to load are not closed", () 
   assert.equal(portfolioValue(l), 2000_00);
 });
 
+test("a report older than the ledger's leaves the item's positions open and untouched", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("tesouro", { balance: 5000 }), inv("x", { itemId: "item-2" })], ["item-1", "item-2"], "2026-10-24");
+  // seen in the wild: Pluggy re-served an old day with every position zeroed and under new ids
+  const old = { date: "2026-10-20T00:00:00.000Z", balance: 0, amount: 0, quantity: 0, status: "TOTAL_WITHDRAWAL" };
+  const r = applyInvestments(l, [inv("tesouro-new", old), inv("x", { itemId: "item-2", balance: 1100 })], ["item-1", "item-2"], TODAY);
+  assert.deepEqual(r.stale, ["2026-10-20"]);
+  assert.equal(r.closed, 0);
+  assert.equal(asset(l, "tesouro").closed, undefined);
+  assert.equal(asset(l, "tesouro").value, 5000_00);
+  assert.ok(!l.investments.assets.some((a) => a.pluggyId === "tesouro-new"));
+  // the other item's fresh report still applies
+  assert.equal(asset(l, "x").value, 1100_00);
+});
+
+test("a report from the same day as the ledger's is not stale, so a real withdrawal still closes", () => {
+  const l = defaultLedger();
+  applyInvestments(l, [inv("a"), inv("b")], ["item-1"], TODAY);
+  const r = applyInvestments(l, [inv("a"), inv("b", { status: "TOTAL_WITHDRAWAL", balance: 0 })], ["item-1"], TODAY);
+  assert.deepEqual(r.stale, []);
+  assert.equal(asset(l, "b").closed, true);
+});
+
 test("a total withdrawal closes the position; it reopens if reported active again", () => {
   const l = defaultLedger();
   applyInvestments(l, [inv("a", { status: "TOTAL_WITHDRAWAL" })], ["item-1"], TODAY);

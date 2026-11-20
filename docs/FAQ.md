@@ -62,7 +62,8 @@ without a target count as 0%, so they never get new money.
 In *Metas*, *Reserva de emergência → Definir*: type the amount and mark the positions holding it. Up to that amount
 leaves the portfolio, and the targets and contribution plan apply to the rest. What the marked positions hold above
 the amount stays in the portfolio, each giving up the same proportion. If they hold less, the card shows what is
-missing; the contribution plan doesn't fill it for you.
+missing, and the contribution plan recommends finishing it first, showing the amount missing above its split. The
+split itself doesn't fill the reserve for you.
 
 **How do I keep previdência apart and send part of each aporte to it?**
 Open the position (a Tesouro Renda+, say) and set *Conta nas metas como* to *Previdência*; PGBL and VGBL are there
@@ -149,6 +150,12 @@ The last save wins. Avoid editing on two devices before a sync completes.
 Settings → *Exportar dados*, on desktop: everything as JSON, or transactions, positions and movements as CSV.
 The files are not encrypted and leave out the Pluggy credentials and the brapi token. Save them outside the
 vault, since vaults get synced. Trimly does not import them back: the real backup is the encrypted ledger.
+
+**A sync zeroed or closed positions I still hold. How do I put them back?**
+At [investidor.b3.com.br](https://investidor.b3.com.br), download the position report (*Posição*) in Excel, then use
+*Importar posição da B3* in Settings → *Importar dados*. Trimly shows what it will correct, sets B3's value and quantity, and reopens what was
+closed. A position the bank had closed stays manual until the bank reports it again, then goes back to syncing. Products
+B3 doesn't hold (bank CDBs outside B3, funds) need a manual edit.
 
 **The average price of my FIIs shows "—". How do I get it?**
 Banks don't report what the shares cost. At [investidor.b3.com.br](https://investidor.b3.com.br), download the trade statement

@@ -1,7 +1,7 @@
 import { ItemView, Menu, Modal, Notice, Setting, WorkspaceLeaf, setIcon } from "obsidian";
 import type TrimlyPlugin from "./main";
 import { LineSeries, bars, cashFlowBars, donut, lineChart } from "./charts";
-import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, ImportModal, MovementModal, ObligationModal, RecurringModal, ReserveModal, SettleModal, TransactionModal } from "./modals";
+import { AccountModal, AssetModal, CategoryModal, ConfirmModal, DebtModal, GoalModal, ImportModal, MovementModal, pickFile, ObligationModal, RecurringModal, ReserveModal, SettleModal, TransactionModal } from "./modals";
 import {
   ACCOUNT_TYPE_ICONS,
   TARGET_CLASSES,
@@ -89,9 +89,11 @@ import {
   nextDue,
   linkObligationPayments,
   expectedAmount,
+  forgetPayment,
   learnPayment,
   linkPayment,
   paidOn,
+  settlementFor,
   paymentCandidates,
   settleObligation,
   unsettleObligation,
@@ -132,6 +134,7 @@ import { sendToClaude } from "./assistant-fetch";
 import type { SavedChat } from "./chat-store";
 import { applyImport, dismissMovement, previewImport } from "./investment-import";
 import { readSpreadsheet } from "./spreadsheet";
+import { parsePositions } from "./b3-position";
 import { distributionCuts, incomeGoal, paymentCalendar, positionIncome, CONCENTRATION_ALERT } from "./income";
 import type { Payout, PositionIncome } from "./income";
 import { calculatorDefaults, compareCdbLci, compound, fixedIncomeTax, monthlyToReach, monthsToReach, wealthForIncome } from "./calculators";
@@ -2077,9 +2080,12 @@ export class TrimlyView extends ItemView {
           const target = l.obligations.find((x) => x.id === o.id);
           if (!target) return;
           const tx = s?.transactionId ? l.transactions.find((x) => x.id === s.transactionId) : undefined;
+          const prevId = settlementFor(target, due)?.transactionId;
+          const prev = prevId && prevId !== tx?.id ? l.transactions.find((x) => x.id === prevId) : undefined;
           // linking keeps the date picked here; the description is remembered to link the next payments
           if (s) settleObligation(target, s);
           else unsettleObligation(target, due);
+          if (prev) forgetPayment(l, target, prev);
           if (tx) learnPayment(target, tx);
         })
     ).open();
@@ -2775,19 +2781,18 @@ export class TrimlyView extends ItemView {
 
   /** Read in memory, shown first, and only movements enter the ledger: the file itself goes nowhere. */
   private importSpreadsheet() {
-    const picker = createEl("input", { type: "file", attr: { accept: ".xlsx,.csv" } });
-    picker.addEventListener("change", () => {
-      const file = picker.files?.[0];
-      if (file) void this.previewFile(file);
-    });
-    picker.click();
+    pickFile(".xlsx,.csv", (file) => void this.previewFile(file));
   }
 
   private async previewFile(file: File) {
     const ledger = this.plugin.ledger;
     if (!ledger) return;
     try {
-      const preview = previewImport(ledger, await readSpreadsheet(new Uint8Array(await file.arrayBuffer())));
+      const sheets = await readSpreadsheet(new Uint8Array(await file.arrayBuffer()));
+      const preview = previewImport(ledger, sheets);
+      // a position report has no dates: it is what is held, not what moved
+      const held = !preview && parsePositions(sheets);
+      if (held) return void this.plugin.importB3Position(file, sheets);
       if (!preview) {
         new Notice(t.movements.importUnknown);
         return;
@@ -3960,6 +3965,16 @@ export class TrimlyView extends ItemView {
       this.render();
     });
     if (this.contribution === null && fromPlan > 0) plan.createDiv({ cls: "trimly-muted", text: t.targets.fromPlan(this.monthLabel(month)) });
+    // a recommendation only: the split below still ignores the reserve
+    const reserveMissing = reserveStatus(ledger)?.missing ?? 0;
+    if (reserveMissing > 0) {
+      const row = plan.createDiv("trimly-row");
+      this.iconTile(row, "life-buoy", RESERVE_COLOR);
+      const main = row.createDiv("trimly-row-main");
+      main.createDiv({ cls: "trimly-row-title", text: t.targets.reserveFirst });
+      main.createDiv({ cls: "trimly-row-sub", text: t.targets.reserveFirstSub });
+      row.createDiv({ cls: "trimly-amount is-expense", text: this.money(reserveMissing) });
+    }
     if (!contribution) {
       plan.createDiv({ cls: "trimly-muted", text: t.targets.typeAmount });
       return;
@@ -4248,6 +4263,7 @@ export class TrimlyView extends ItemView {
       ? [
           { label: table.rate, sort: (a) => a.fixedRate ?? a.rate, text: (a) => this.rateLabel(a) || "—" },
           { label: table.due, sort: (a) => a.dueDate, text: (a) => (a.dueDate ? this.longDate(a.dueDate) : "—") },
+          { label: table.current, sort: (a) => a.value, text: (a) => this.money(a.value) },
         ]
       : assets.some((a) => price(a) !== undefined)
         ? [
@@ -4277,7 +4293,7 @@ export class TrimlyView extends ItemView {
           return sort.desc ? -order : order;
         });
 
-    const el = parent.createDiv("trimly-perf-table trimly-asset-table");
+    const el = parent.createDiv(`trimly-perf-table trimly-asset-table${byRate ? " has-value" : ""}`);
     const head = el.createDiv("trimly-perf-row is-head");
     columns.forEach((col, i) => {
       const cell = head.createDiv(i > 1 ? "trimly-perf-cell" : "");
@@ -4431,12 +4447,14 @@ export function openTransactionModal(plugin: TrimlyPlugin, tx: Transaction | nul
           dateLabel: (iso) => new Intl.DateTimeFormat(plugin.locale(), { day: "numeric", month: "short" }).format(new Date(`${iso}T12:00:00`)),
           onLink: (saved, target) =>
             void plugin.mutate((l) => {
+              const linked = l.transactions.find((x) => x.id === saved.id);
               for (const o of l.obligations) {
                 const s = o.settled.find((x) => x.transactionId === saved.id);
-                if (s) unsettleObligation(o, s.due);
+                if (!s) continue;
+                unsettleObligation(o, s.due);
+                if (linked) forgetPayment(l, o, linked);
               }
               const o = target && l.obligations.find((x) => x.id === target.obligation.id);
-              const linked = l.transactions.find((x) => x.id === saved.id);
               // unlinked by hand: not this bill's, and not matched to one again
               if (linked && !o) linked.obligationId = null;
               if (o && linked) linkPayment(o, target.due, linked);

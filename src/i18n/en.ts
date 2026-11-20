@@ -761,6 +761,7 @@ export const en: Strings = {
       type: "Type",
       rate: "Rate",
       due: "Maturity",
+      current: "Current value",
       value: "Value",
       invested: "Invested",
       pctClass: (name: string) => `% of ${name}`,
@@ -880,7 +881,8 @@ export const en: Strings = {
 
   movements: {
     import: "Import spreadsheet",
-    importHint: "A B3 statement or a broker's spreadsheet, in Excel or CSV",
+    importHint: "A B3 statement or position report, or a broker's spreadsheet, in Excel or CSV",
+    importPositions: "Import B3 position",
     importUnknown: "I couldn't recognize this spreadsheet's columns. It needs date, asset, quantity and operation type.",
     importFailed: (message: string) => `Could not read the file: ${message}`,
     imported: (n: number) => `${n} ${s(n, "movement", "movements")} imported.`,
@@ -1006,6 +1008,8 @@ export const en: Strings = {
       invalidShare: "Type a percentage from 0 to 100 (e.g. 20%) or an amount (e.g. 300).",
     },
     fromPlan: (month: string) => `What is left of the Invest goal for ${month}. Change it to simulate another amount.`,
+    reserveFirst: "Recommended: finish the reserve",
+    reserveFirstSub: "This much is missing from the emergency reserve. Worth completing it before following the split below.",
     toPension: "Retirement",
     toPensionSub: (names: string) => names,
     toTargets: (v: string) => `${v} split by the targets`,
@@ -1160,6 +1164,17 @@ export const en: Strings = {
       note: "Only history comes in: each position's value and quantity stay the bank's. With all the buys of an asset, its cost becomes the real one.",
       confirm: "Import",
     },
+    positions: {
+      title: "Import B3 position",
+      unknown: "This file doesn't look like B3's position report.",
+      found: (n: number, date: string) => `${n} ${s(n, "position will be corrected", "positions will be corrected")} with B3's position of ${date}:`,
+      reopens: "reopened",
+      none: "No zeroed or closed position to correct: the ones the bank reports with a value stay with it.",
+      unmatched: (names: string) => `No matching position in the portfolio, left out: ${names}.`,
+      note: "Value and quantity become B3's and the positions are reopened. Those the bank closed stay manual until it reports them with a value again; then they sync again, without a duplicate.",
+      confirm: "Correct positions",
+      done: (n: number) => `${n} ${s(n, "position corrected", "positions corrected")} with B3's position.`,
+    },
     debt: {
       newTitle: "New debt",
       editTitle: "Edit debt",
@@ -1272,6 +1287,8 @@ export const en: Strings = {
     newInvestments: (n: number) => `${n} new ${s(n, "investment", "investments")}`,
     closedInvestments: (n: number) => `${n} ${s(n, "investment", "investments")} closed`,
     investmentMovements: (n: number) => `${n} investment ${s(n, "movement", "movements")}`,
+    staleInvestments: (dates: string) =>
+      `Pluggy sent investments dated ${dates}, older than the ones already saved; the previous values were kept (check the connection in Pluggy)`,
     noInvestments: (items: number) => `Pluggy reported no investments for ${items} ${s(items, "item", "items")}`,
     investmentErrors: (e: string) => `Trimly: some investment data could not be loaded: ${e}`,
     quotesFailed: (e: string) => `Trimly: quotes not updated: ${e}`,
@@ -1361,6 +1378,10 @@ export const en: Strings = {
     treasuryPricesDesc:
       "Updates manually added Tesouro Direto bonds once a day from the public file at www.tesourotransparente.gov.br (about 15 MB). " +
       "The file has every bond, so nothing about yours is sent. It uses the selling price before tax, and the file can lag a few days.",
+    importTitle: "Import data",
+    importPositionsDesc:
+      "Position report from B3's investor area (investidor.b3.com.br → Posição → download in Excel, without renaming the file). Recovers positions the sync zeroed or closed by mistake. Shows what will change first; the file is only read in memory.",
+    importButton: "Choose file",
     exportTitle: "Export data",
     exportIntro: "A readable copy to keep outside the vault, without the Pluggy credentials and the brapi token. Trimly does not import these files back: your real backup is still the encrypted ledger.",
     exportMobile: "Only available on desktop.",
@@ -1421,6 +1442,8 @@ export const en: Strings = {
     loadingInvestments: (item: string) => `Loading investments of item ${item}`,
     loadingMovements: (name: string) => `Loading movements of ${name}`,
     loadingItem: "Loading item",
+    investmentsNotUpdated: (item: string) =>
+      `Pluggy could not update the investments of ${item}; the previous values were kept (check the connection in Pluggy)`,
     bcbSeries: (code: number, status: number) => `Central Bank series ${code} failed (HTTP ${status})`,
     bcbSeriesBody: (code: number, detail: string) => `Central Bank series ${code} failed: ${detail}`,
     b3Index: (index: string, status: number) => `B3's ${index} failed (HTTP ${status})`,
