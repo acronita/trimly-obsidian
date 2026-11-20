@@ -89,9 +89,11 @@ import {
   nextDue,
   linkObligationPayments,
   expectedAmount,
+  forgetPayment,
   learnPayment,
   linkPayment,
   paidOn,
+  settlementFor,
   paymentCandidates,
   settleObligation,
   unsettleObligation,
@@ -2077,9 +2079,12 @@ export class TrimlyView extends ItemView {
           const target = l.obligations.find((x) => x.id === o.id);
           if (!target) return;
           const tx = s?.transactionId ? l.transactions.find((x) => x.id === s.transactionId) : undefined;
+          const prevId = settlementFor(target, due)?.transactionId;
+          const prev = prevId && prevId !== tx?.id ? l.transactions.find((x) => x.id === prevId) : undefined;
           // linking keeps the date picked here; the description is remembered to link the next payments
           if (s) settleObligation(target, s);
           else unsettleObligation(target, due);
+          if (prev) forgetPayment(l, target, prev);
           if (tx) learnPayment(target, tx);
         })
     ).open();
@@ -4441,12 +4446,14 @@ export function openTransactionModal(plugin: TrimlyPlugin, tx: Transaction | nul
           dateLabel: (iso) => new Intl.DateTimeFormat(plugin.locale(), { day: "numeric", month: "short" }).format(new Date(`${iso}T12:00:00`)),
           onLink: (saved, target) =>
             void plugin.mutate((l) => {
+              const linked = l.transactions.find((x) => x.id === saved.id);
               for (const o of l.obligations) {
                 const s = o.settled.find((x) => x.transactionId === saved.id);
-                if (s) unsettleObligation(o, s.due);
+                if (!s) continue;
+                unsettleObligation(o, s.due);
+                if (linked) forgetPayment(l, o, linked);
               }
               const o = target && l.obligations.find((x) => x.id === target.obligation.id);
-              const linked = l.transactions.find((x) => x.id === saved.id);
               // unlinked by hand: not this bill's, and not matched to one again
               if (linked && !o) linked.obligationId = null;
               if (o && linked) linkPayment(o, target.due, linked);

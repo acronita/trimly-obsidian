@@ -7,6 +7,7 @@ import {
   expectedAmount,
   linkObligationPayments,
   linkPayment,
+  forgetPayment,
   matchScore,
   nextDue,
   obligationReminders,
@@ -205,6 +206,29 @@ test("a Pix to someone else is not taken for a bill's, by shared bank wording or
   l.transactions.push({ id: "sep", date: "2026-09-10", type: "expense", amount: 86_50, accountId: acc, description: "Transferência enviada pelo Pix|MINISTERIO DA FAZENDA" });
   assert.equal(linkObligationPayments(l, TODAY), 1);
   assert.equal(settlementFor(mei, "2026-09-10")?.transactionId, "sep");
+});
+
+test("unlinking a wrong payment forgets what it taught the bill, and it is not linked again", () => {
+  const mei = obligation({ id: "mei", name: "MEI pagar", amount: 86_50 });
+  const l = ledgerWith(mei);
+  const acc = l.accounts[0].id;
+  const das: Transaction = { id: "aug", date: "2026-08-10", type: "expense", amount: 86_50, accountId: acc, description: "Transferência enviada pelo Pix|MINISTERIO DA FAZENDA" };
+  const wrong: Transaction = { id: "sep", date: "2026-09-10", type: "expense", amount: 100_00, accountId: acc, description: "Transferência enviada pelo Pix|JOAO SILVA" };
+  l.transactions.push(das, wrong);
+  linkPayment(mei, "2026-08-10", das);
+  linkPayment(mei, "2026-09-10", wrong); // a wrong link: the bill now expects João at R$ 100
+
+  // what the transaction modal does on unlink
+  unsettleObligation(mei, "2026-09-10");
+  forgetPayment(l, mei, wrong);
+  wrong.obligationId = null;
+  assert.equal(mei.payee, das.description);
+  assert.equal(mei.amount, 86_50);
+
+  // João paid again: neither the unlinked one nor the new one is the bill's
+  l.transactions.push({ id: "oct", date: "2026-10-10", type: "expense", amount: 100_00, accountId: acc, description: "Transferência enviada pelo Pix|JOAO SILVA" });
+  assert.equal(linkObligationPayments(l, TODAY), 0);
+  assert.equal(settlementFor(mei, "2026-09-10"), undefined);
 });
 
 test("a bill without a usual amount is projected at its last linked payment, else at an explicit 0", () => {

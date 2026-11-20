@@ -2331,6 +2331,27 @@ export function linkPayment(o: Obligation, due: string, tx: Transaction) {
   learnPayment(o, tx);
 }
 
+/**
+ * Undo what `learnPayment` took from `tx` once it no longer pays `o` (call it
+ * after unsettling): the description and amount go back to the latest payment
+ * still linked, so a wrong link stops pulling the next payments after it. With
+ * none left, the description is forgotten and the amount kept for the user to fix.
+ */
+export function forgetPayment(ledger: Ledger, o: Obligation, tx: Transaction) {
+  if (o.payee !== tx.description) return;
+  const last = [...o.settled]
+    .filter((s) => s.transactionId && s.transactionId !== tx.id)
+    .sort((a, b) => (a.due < b.due ? 1 : -1))
+    .map((s) => ledger.transactions.find((x) => x.id === s.transactionId))
+    .find((x) => x);
+  if (!last) {
+    delete o.payee;
+    return;
+  }
+  o.payee = last.description;
+  if (o.amount === tx.amount) o.amount = last.amount;
+}
+
 /** Remember a payment's description and amount for the next ones. */
 export function learnPayment(o: Obligation, tx: Transaction) {
   o.payee = tx.description;
@@ -2404,6 +2425,8 @@ export function linkObligationPayments(ledger: Ledger, today: string): number {
           tx.type !== "income" &&
           tx.date <= today &&
           !taken.has(tx.id) &&
+          tx.obligationId !== null && // unlinked by hand
+          (tx.obligationId === undefined || tx.obligationId === o.id) &&
           (!usual || Math.abs(tx.amount - usual) <= usual * LINK_NAMED_AMOUNT_TOLERANCE)
       );
       const tx = bestMatch(pool, { ...expectedPayment(o, due), text: o.payee, requireName: true });

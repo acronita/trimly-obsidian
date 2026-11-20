@@ -9,6 +9,12 @@
 
 ## 1.10.2 — 2026-11-19
 
+- 2026-11-19 — Unlinking a bill's payment undoes what it taught the bill: the description and usual amount go back to
+  the latest payment still linked (with none, the description is forgotten), and a transaction unlinked by hand, or
+  tagged as another bill's, is never linked to it automatically again. Why: after a wrong link, unlinking kept the
+  wrong payee, so the next Pix to it was linked again on reopening and changed the amount. Files touched:
+  `src/ledger.ts`, `src/view.ts`, `test/obligations.test.ts`, `docs/CHANGELOG.md`.
+
 - 2026-11-19 — Bills no longer link themselves to someone else's Pix. Connectives and company boilerplate ("pelo",
   "para", "Ltda", "Instituição de Pagamento"…) no longer count as a shared name, and an automatic link also needs the
   amount within 50% of the bill's usual one. Why: "Transferência enviada pelo Pix|PAY2ALL…" was taken for the MEI
