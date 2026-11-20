@@ -28,7 +28,10 @@ import {
   todayISO,
   translateDefaults,
 } from "./ledger";
-import { ConfirmModal, PassphraseModal } from "./modals";
+import { ConfirmModal, PassphraseModal, PositionImportModal, pickFile } from "./modals";
+import { applyPositions, parsePositions, previewPositions, reportDate } from "./b3-position";
+import { readSpreadsheet } from "./spreadsheet";
+import type { Rows } from "./spreadsheet";
 import { PassphraseManager } from "./passphrase";
 import { fetchBankData } from "./pluggy";
 import { applyQuotes, quoteTickers } from "./quotes";
@@ -200,6 +203,30 @@ export default class TrimlyPlugin extends Plugin {
 
   locale(): string {
     return t.locale;
+  }
+
+  /**
+   * B3's position report: what it would restore is shown first, and only the positions
+   * enter the ledger; the file is read in memory and goes nowhere. `sheets` when already read.
+   */
+  async importB3Position(file: File, sheets?: Rows[]) {
+    const ledger = this.ledger;
+    if (!ledger) return;
+    try {
+      const held = parsePositions(sheets ?? (await readSpreadsheet(new Uint8Array(await file.arrayBuffer()))));
+      if (!held) {
+        new Notice(t.modals.positions.unknown);
+        return;
+      }
+      const preview = previewPositions(ledger, held, reportDate(file.name) ?? todayISO());
+      const date = (iso: string) => new Date(`${iso}T12:00:00`).toLocaleDateString(this.locale(), { day: "numeric", month: "long", year: "numeric" });
+      new PositionImportModal(this.app, preview, { money: (c) => this.formatMoney(c), date }, () => {
+        void this.mutate((l) => applyPositions(l, preview, todayISO()));
+        new Notice(t.modals.positions.done(preview.restores.length));
+      }).open();
+    } catch (e) {
+      new Notice(t.movements.importFailed((e as Error).message));
+    }
   }
 
   /** `currency` defaults to the one in the settings. */
@@ -894,6 +921,7 @@ class TrimlySettingTab extends PluginSettingTab {
 
     this.displayQuotes();
     this.displayBankSync();
+    this.displayImport();
     this.displayExport();
     this.displayAssistant();
   }
@@ -968,6 +996,23 @@ class TrimlySettingTab extends PluginSettingTab {
           })
       );
     }
+  }
+
+  private displayImport() {
+    const { containerEl } = this;
+    const p = this.plugin;
+    const s = t.settings;
+    new Setting(containerEl).setName(s.importTitle).setHeading();
+    if (!p.ledger) {
+      new Setting(containerEl).setDesc(s.unlockForSync);
+      return;
+    }
+    new Setting(containerEl)
+      .setName(t.movements.importPositions)
+      .setDesc(s.importPositionsDesc)
+      .addButton((b) =>
+        b.setButtonText(s.importButton).onClick(() => pickFile(".xlsx", (file) => void p.importB3Position(file)))
+      );
   }
 
   /** Readable copies go through the system download, the only way out that is not the vault. */

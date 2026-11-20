@@ -1,5 +1,6 @@
 import { App, Modal, Setting, setIcon } from "obsidian";
 import { t } from "./i18n";
+import type { PositionPreview } from "./b3-position";
 import type { ImportPreview } from "./investment-import";
 import {
   Account,
@@ -1067,6 +1068,64 @@ export class ImportModal extends Modal {
         .setButtonText(m.confirm)
         .setCta()
         .setDisabled(p.trades.length === 0)
+        .onClick(() => {
+          this.close();
+          this.onImport();
+        })
+    );
+  }
+
+  onClose() {
+    this.contentEl.empty();
+  }
+}
+
+/**
+ * Open the system file chooser. The input lives in the page while the chooser is open:
+ * a detached one may never open the chooser or report the choice.
+ */
+export function pickFile(accept: string, onPick: (file: File) => void) {
+  const picker = activeDocument.body.createEl("input", { type: "file", attr: { accept }, cls: "trimly-file-picker" });
+  picker.addEventListener("change", () => {
+    const file = picker.files?.[0];
+    picker.remove();
+    if (file) onPick(file);
+  });
+  picker.addEventListener("cancel", () => picker.remove());
+  picker.click();
+}
+
+export class PositionImportModal extends Modal {
+  constructor(
+    app: App,
+    private preview: PositionPreview,
+    private format: { money: (cents: number) => string; date: (iso: string) => string },
+    private onImport: () => void
+  ) {
+    super(app);
+  }
+
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.addClass("trimly-modal");
+    const m = t.modals.positions;
+    const p = this.preview;
+    this.setTitle(m.title);
+    if (p.restores.length) {
+      contentEl.createEl("p", { text: m.found(p.restores.length, this.format.date(p.date)) });
+      const list = contentEl.createEl("ul");
+      for (const r of p.restores) {
+        const parts = [r.name, this.format.money(r.value), r.quantity !== undefined ? `${r.quantity}` : "", r.reopens ? m.reopens : ""];
+        list.createEl("li", { text: parts.filter(Boolean).join(" · ") });
+      }
+    } else contentEl.createEl("p", { text: m.none });
+    if (p.unmatched.length) contentEl.createEl("p", { cls: "setting-item-description", text: m.unmatched(p.unmatched.join(", ")) });
+    contentEl.createEl("p", { cls: "setting-item-description", text: m.note });
+    new Setting(contentEl).addButton((b) =>
+      b
+        .setButtonText(m.confirm)
+        .setCta()
+        .setDisabled(p.restores.length === 0)
         .onClick(() => {
           this.close();
           this.onImport();
