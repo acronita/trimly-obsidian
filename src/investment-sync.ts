@@ -330,6 +330,27 @@ function staleItems(ledger: Ledger, investments: PluggyInvestment[], today: stri
 }
 
 /**
+ * The position put back by hand (from B3's position report) after the bank had closed it,
+ * once the bank reports that product again with a value: it becomes synced again
+ * instead of the bank's position arriving as a second one. Sets its `pluggyId`.
+ */
+function adopt(assets: Asset[], p: PluggyInvestment): Asset | undefined {
+  if (p.status === "TOTAL_WITHDRAWAL" || !(p.balance > 0)) return undefined;
+  const due = p.dueDate?.slice(0, 10);
+  const code = p.code?.trim().toUpperCase();
+  const found = assets.find(
+    (a) =>
+      !a.pluggyId &&
+      !a.closed &&
+      a.pluggyItemId === p.itemId &&
+      a.assetClass === assetClass(p) &&
+      ((!!code && a.code?.toUpperCase() === code) || (!!a.dueDate && a.dueDate === due && a.name === displayName(p)))
+  );
+  if (found) found.pluggyId = p.id;
+  return found;
+}
+
+/**
  * Upsert the positions of the items in `itemIds` and their movements, and close
  * the positions those items no longer report. Positions of other items and
  * manual ones are left alone, and so are those of an item whose report is older
@@ -365,7 +386,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
   const seen = new Set<string>();
   for (const p of investments) {
     seen.add(p.id);
-    let asset = assets.find((a) => a.pluggyId === p.id);
+    let asset = assets.find((a) => a.pluggyId === p.id) ?? adopt(assets, p);
     const before = asset ? { value: asset.value, invested: asset.invested, closed: asset.closed } : { value: 0, invested: 0 };
     const newlyTracked = !asset || !!asset.closed;
     if (!asset) {

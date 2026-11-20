@@ -83,6 +83,10 @@ passphrase that never leaves your device.
   Excel or CSV. Banks don't report what FII shares cost: with all the buys of an asset, Trimly gets its real average price.
   The file is read in memory and goes nowhere. A trade the bank also reports counts once, and a repeat left over can be
   deleted from its row without coming back on the next sync.
+- **B3 position** (*Importar posição da B3*, in Settings → *Importar dados*) — the position report from B3's investor area puts back
+  stocks, FIIs, ETFs, Tesouro Direto and fixed income a bad bank sync zeroed or closed, with B3's value and quantity.
+  Positions the bank still reports are left to it. Shown first, read in memory; products with no position in the
+  portfolio are only listed.
 - **Income tax** (*IR*, in the investments mode) — an estimate from your movements: average price per
   asset, each month's result and DARF with its due date, the R$ 20.000 stock exemption meter, losses
   to offset, and the costs for *Bens e direitos*. Covers common operations in stocks, BDRs, ETFs and FIIs,

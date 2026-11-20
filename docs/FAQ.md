@@ -151,6 +151,12 @@ Settings → *Exportar dados*, on desktop: everything as JSON, or transactions, 
 The files are not encrypted and leave out the Pluggy credentials and the brapi token. Save them outside the
 vault, since vaults get synced. Trimly does not import them back: the real backup is the encrypted ledger.
 
+**A sync zeroed or closed positions I still hold. How do I put them back?**
+At [investidor.b3.com.br](https://investidor.b3.com.br), download the position report (*Posição*) in Excel, then use
+*Importar posição da B3* in Settings → *Importar dados*. Trimly shows what it will correct, sets B3's value and quantity, and reopens what was
+closed. A position the bank had closed stays manual until the bank reports it again, then goes back to syncing. Products
+B3 doesn't hold (bank CDBs outside B3, funds) need a manual edit.
+
 **The average price of my FIIs shows "—". How do I get it?**
 Banks don't report what the shares cost. At [investidor.b3.com.br](https://investidor.b3.com.br), download the trade statement
 (*Extratos → Negociação*) in Excel, then use *Importar planilha* in Movements. Or type the average price in the IR tab.

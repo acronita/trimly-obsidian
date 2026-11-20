@@ -7,6 +7,21 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.11.0 — 2026-11-20
+
+- 2026-11-20 — *Importar posição da B3* (Settings → *Importar dados*; the Movements import also takes the file): B3's position report
+  puts back the positions a sync zeroed or closed (stocks, FIIs, ETFs, Tesouro Direto, fixed income), matched by
+  ticker, ISIN or issuer and due date, with B3's value, quantity, gross value and cost. When a sync left copies, the
+  oldest one, which carries the history, comes back. A position the bank still reports with a value is left to the
+  bank. One the bank had closed becomes manual (a Tesouro bond is then priced daily), or the next sync would close it
+  again; it keeps its connection, and when the bank reports that product again with a value the sync takes it back
+  instead of adding a second one. Products with no position are only listed. Checked against a real B3 *Posição*
+  file (ETF, FII and Tesouro sheets). The fixed income and Tesouro tables also get a *Valor atual* column. Why: a
+  zeroed Pluggy report closed every Tesouro Direto bond and there was no way to put them back. Files touched:
+  `src/b3-position.ts`, `src/investment-sync.ts`, `src/main.ts`, `src/view.ts`, `src/modals.ts`, `src/i18n/pt-BR.ts`,
+  `src/i18n/en.ts`, `src/styles/index.css`, `styles.css`, `test/b3-position.test.ts`, `README.md`,
+  `docs/ARCHITECTURE.md`, `docs/FAQ.md`, `docs/CHANGELOG.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.10.2 — 2026-11-19
 
 - 2026-11-20 — Investment sync no longer zeroes or closes positions on bad data from Pluggy. A connection whose

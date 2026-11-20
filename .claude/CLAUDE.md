@@ -39,6 +39,14 @@ languages.
 
 These rules apply to every task unless explicitly overridden.
 
+### Always Run `npm run build` After Changing the Plugin (non-negotiable)
+Whenever a turn changes anything that ships (`src/**`, `src/styles/**`, `styles.css`, `manifest.json`), run
+`npm run build` before ending the turn — not `tsc` alone, not `node esbuild.config.mjs`. Only `npm run build`
+copies `main.js`, `manifest.json` and `styles.css` into the user's vault; without it the user tests the old version.
+Do it every time, even for a one-line change, and before telling the user how to try anything. Say in the reply that
+it ran, and tell the user to reload the plugin. If the build fails, fix it or say so; never end a turn with plugin
+changes the vault doesn't have.
+
 ### Think Before Coding
 State assumptions explicitly. If uncertain, ask — don't guess. Present multiple interpretations when ambiguity exists. Push back when a simpler approach exists. Stop when confused and name what's unclear.
 
