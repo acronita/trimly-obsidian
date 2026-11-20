@@ -69,6 +69,8 @@ export interface InvestmentSyncResult {
   closed: number;
   /** movements imported for the first time */
   movements: number;
+  /** reference date of each item left as it was because Pluggy sent older data than the ledger's */
+  stale: string[];
 }
 
 const MOVEMENT_TYPES: Record<string, MovementType> = {
@@ -307,13 +309,41 @@ function forgetProductInstitutions(ledger: Ledger) {
 }
 
 /**
+ * Items whose report is older than what the ledger already has: even the newest
+ * reference date sent is before the newest one of the item's open positions.
+ * Pluggy has served such a report with every position zeroed and under new ids,
+ * which would close the whole portfolio. Item id → the report's date.
+ */
+function staleItems(ledger: Ledger, investments: PluggyInvestment[], today: string): Map<string, string> {
+  const reported = new Map<string, string>();
+  for (const p of investments) {
+    // same fallback as apply(), so a position without a date counts as today's
+    const date = p.date?.slice(0, 10) || today;
+    if (date > (reported.get(p.itemId) ?? "")) reported.set(p.itemId, date);
+  }
+  const stale = new Map<string, string>();
+  for (const [item, date] of reported) {
+    const known = ledger.investments.assets.some((a) => a.pluggyId && !a.closed && a.pluggyItemId === item && a.updatedAt > date);
+    if (known) stale.set(item, date);
+  }
+  return stale;
+}
+
+/**
  * Upsert the positions of the items in `itemIds` and their movements, and close
  * the positions those items no longer report. Positions of other items and
- * manual ones are left alone. Records today's snapshot with the flows since the
+ * manual ones are left alone, and so are those of an item whose report is older
+ * than the ledger's. Records today's snapshot with the flows since the
  * previous day's one. Mutates the ledger.
  */
 export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[], itemIds: string[], today: string): InvestmentSyncResult {
-  const result: InvestmentSyncResult = { added: 0, updated: 0, closed: 0, movements: 0 };
+  const result: InvestmentSyncResult = { added: 0, updated: 0, closed: 0, movements: 0, stale: [] };
+  const stale = staleItems(ledger, investments, today);
+  if (stale.size) {
+    result.stale = [...stale.values()];
+    investments = investments.filter((p) => !stale.has(p.itemId));
+    itemIds = itemIds.filter((i) => !stale.has(i));
+  }
   const assets = ledger.investments.assets;
   const since = flowWindowStart(ledger, today);
   // money moved that the positions' movements don't explain

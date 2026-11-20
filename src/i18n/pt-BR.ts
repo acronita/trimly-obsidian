@@ -1281,6 +1281,8 @@ export const ptBR = {
     newInvestments: (n: number) => `${n} ${s(n, "investimento novo", "investimentos novos")}`,
     closedInvestments: (n: number) => `${n} ${s(n, "investimento encerrado", "investimentos encerrados")}`,
     investmentMovements: (n: number) => `${n} ${s(n, "movimentação de investimento", "movimentações de investimentos")}`,
+    staleInvestments: (dates: string) =>
+      `o Pluggy mandou investimentos com data de ${dates}, mais antigos que os já salvos; os valores anteriores foram mantidos (confira a conexão no Pluggy)`,
     noInvestments: (items: number) => `o Pluggy não informou investimentos em ${items} ${s(items, "item", "itens")}`,
     investmentErrors: (e: string) => `Trimly: alguns dados de investimentos não puderam ser carregados: ${e}`,
     quotesFailed: (e: string) => `Trimly: as cotações não foram atualizadas: ${e}`,
@@ -1430,6 +1432,8 @@ export const ptBR = {
     loadingInvestments: (item: string) => `Carregar os investimentos do item ${item}`,
     loadingMovements: (name: string) => `Carregar as movimentações de ${name}`,
     loadingItem: "Carregar o item",
+    investmentsNotUpdated: (item: string) =>
+      `o Pluggy não conseguiu atualizar os investimentos de ${item}; os valores anteriores foram mantidos (confira a conexão no Pluggy)`,
     bcbSeries: (code: number, status: number) => `Série ${code} do Banco Central falhou (HTTP ${status})`,
     bcbSeriesBody: (code: number, detail: string) => `Série ${code} do Banco Central falhou: ${detail}`,
     b3Index: (index: string, status: number) => `${index} da B3 falhou (HTTP ${status})`,

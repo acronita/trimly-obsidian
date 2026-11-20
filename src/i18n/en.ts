@@ -1274,6 +1274,8 @@ export const en: Strings = {
     newInvestments: (n: number) => `${n} new ${s(n, "investment", "investments")}`,
     closedInvestments: (n: number) => `${n} ${s(n, "investment", "investments")} closed`,
     investmentMovements: (n: number) => `${n} investment ${s(n, "movement", "movements")}`,
+    staleInvestments: (dates: string) =>
+      `Pluggy sent investments dated ${dates}, older than the ones already saved; the previous values were kept (check the connection in Pluggy)`,
     noInvestments: (items: number) => `Pluggy reported no investments for ${items} ${s(items, "item", "items")}`,
     investmentErrors: (e: string) => `Trimly: some investment data could not be loaded: ${e}`,
     quotesFailed: (e: string) => `Trimly: quotes not updated: ${e}`,
@@ -1423,6 +1425,8 @@ export const en: Strings = {
     loadingInvestments: (item: string) => `Loading investments of item ${item}`,
     loadingMovements: (name: string) => `Loading movements of ${name}`,
     loadingItem: "Loading item",
+    investmentsNotUpdated: (item: string) =>
+      `Pluggy could not update the investments of ${item}; the previous values were kept (check the connection in Pluggy)`,
     bcbSeries: (code: number, status: number) => `Central Bank series ${code} failed (HTTP ${status})`,
     bcbSeriesBody: (code: number, detail: string) => `Central Bank series ${code} failed: ${detail}`,
     b3Index: (index: string, status: number) => `B3's ${index} failed (HTTP ${status})`,

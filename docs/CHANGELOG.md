@@ -9,6 +9,15 @@
 
 ## 1.10.2 — 2026-11-19
 
+- 2026-11-20 — Investment sync no longer zeroes or closes positions on bad data from Pluggy. A connection whose
+  investments Pluggy could not update (item `LOGIN_ERROR`/`OUTDATED`, or `statusDetail.investments.isUpdated` false)
+  is skipped with a warning, and so is a report whose newest reference date is older than the connection's open
+  positions already have. Why: Pluggy re-served an 8 Nov report with every position (Tesouro, FIIs, CDBs, across
+  brokers) zeroed and under new ids, and the sync moved the whole portfolio to *Encerrados* though nothing was sold.
+  Positions already closed this way come back only when Pluggy reports them again. Files touched: `src/pluggy.ts`,
+  `src/investment-sync.ts`, `src/main.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `test/investment-sync.test.ts`,
+  `docs/CHANGELOG.md`.
+
 - 2026-11-19 — Unlinking a bill's payment undoes what it taught the bill: the description and usual amount go back to
   the latest payment still linked (with none, the description is forgotten), and a transaction unlinked by hand, or
   tagged as another bill's, is never linked to it automatically again. Why: after a wrong link, unlinking kept the

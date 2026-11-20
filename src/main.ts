@@ -528,6 +528,7 @@ export default class TrimlyPlugin extends Plugin {
         inv.added && n.newInvestments(inv.added),
         inv.closed && n.closedInvestments(inv.closed),
         inv.movements && n.investmentMovements(inv.movements),
+        inv.stale.length > 0 && n.staleInvestments(inv.stale.map((d) => new Date(`${d}T12:00:00`).toLocaleDateString(this.locale())).join(", ")),
         paid && t.obligations.autoLinked(paid),
       ].filter((x): x is string => !!x);
       // say when Pluggy reports no investments at all, so an empty Investments tab is explainable
