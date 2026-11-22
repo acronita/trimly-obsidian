@@ -1814,19 +1814,32 @@ export class TrimlyView extends ItemView {
     sums.createDiv({ cls: "trimly-muted", text: t.recurring.perYear(this.money(Math.round(monthly * 12))) });
   }
 
-  /** What each subscription costs per year and how its price moved, to judge whether it is worth keeping. */
+  /** Subscriptions in two cards: monthly ones are a running cost, yearly ones are paid once, so their per-month figure is only a reference. */
   private renderSubscriptions(body: HTMLElement, ledger: Ledger, subs: Recurring[]) {
-    const card = this.card(body, t.recurring.subscriptions);
     if (subs.length === 0) {
-      this.empty(card, "clapperboard", t.recurring.subscriptionsEmpty);
+      this.empty(this.card(body, t.recurring.subscriptions), "clapperboard", t.recurring.subscriptionsEmpty);
       return;
     }
+    const periodic = subs.filter((r) => r.frequency !== "yearly");
+    const yearly = subs.filter((r) => r.frequency === "yearly");
+    if (periodic.length > 0) this.subscriptionsCard(body, ledger, periodic, false);
+    if (yearly.length > 0) this.subscriptionsCard(body, ledger, yearly, true);
+  }
+
+  /** What each subscription costs and how its price moved, to judge whether it is worth keeping. */
+  private subscriptionsCard(body: HTMLElement, ledger: Ledger, subs: Recurring[], yearly: boolean) {
+    const card = this.card(body, yearly ? t.recurring.subscriptionsYearly : t.recurring.subscriptionsMonthly);
+    if (yearly) card.createDiv({ cls: "trimly-muted trimly-section-hint", text: t.recurring.subscriptionsYearlyHint });
     const today = todayISO();
     let monthly = 0;
-    for (const r of [...subs].sort((a, b) => monthlyAmount(b) - monthlyAmount(a))) {
+    let perCharge = 0;
+    for (const r of [...subs].sort((a, b) => (yearly ? (a.nextDate < b.nextDate ? -1 : 1) : monthlyAmount(b) - monthlyAmount(a)))) {
       const ended = !!r.endDate && r.nextDate > r.endDate;
       const currency = accountCurrency(ledger, r.accountId);
-      if (!ended) monthly += toBase(ledger, monthlyAmount(r), currency);
+      if (!ended) {
+        monthly += toBase(ledger, monthlyAmount(r), currency);
+        perCharge += toBase(ledger, r.amount, currency);
+      }
       const row = card.createDiv("trimly-row is-clickable");
       const cat = this.category(ledger, r.categoryId);
       this.iconTile(row, cat?.icon ?? "tag", cat?.color ?? NEUTRAL);
@@ -1838,9 +1851,12 @@ export class TrimlyView extends ItemView {
       const prev = charges[charges.length - 2];
       const parts = [
         ended ? t.recurring.ended(t.labels.frequency[r.frequency]) : t.labels.frequency[r.frequency],
-        t.recurring.perYear(this.money(Math.round(monthlyAmount(r) * 12), currency)),
+        yearly
+          ? t.recurring.monthlyEquivalent(this.money(Math.round(monthlyAmount(r)), currency))
+          : t.recurring.perYear(this.money(Math.round(monthlyAmount(r) * 12), currency)),
       ];
       if (!ended && r.nextDate < today) parts.push(t.recurring.awaitingCharge(this.shortDate(r.nextDate)));
+      else if (yearly && !ended) parts.push(t.recurring.nextCharge(this.shortDate(r.nextDate)));
       else if (last) parts.push(t.recurring.lastCharge(this.shortDate(last.date)));
       if (last && prev && last.amount !== prev.amount) {
         parts.push((last.amount > prev.amount ? t.recurring.priceUp : t.recurring.priceDown)(this.money(prev.amount, currency)));
@@ -1850,10 +1866,15 @@ export class TrimlyView extends ItemView {
       row.addEventListener("click", () => this.editRecurring(r.id));
     }
     const foot = card.createDiv("trimly-total-foot");
-    foot.createDiv({ cls: "trimly-eyebrow", text: t.recurring.subscriptionsTotal });
+    foot.createDiv({ cls: "trimly-eyebrow", text: yearly ? t.recurring.subscriptionsYearlyTotal : t.recurring.subscriptionsTotal });
     const sums = foot.createDiv("trimly-total-foot-values");
-    sums.createDiv({ cls: "trimly-total-foot-value is-expense", text: t.recurring.perMonth(this.money(Math.round(monthly))) });
-    sums.createDiv({ cls: "trimly-muted", text: t.recurring.perYear(this.money(Math.round(monthly * 12))) });
+    if (yearly) {
+      sums.createDiv({ cls: "trimly-total-foot-value is-expense", text: t.recurring.perYear(this.money(Math.round(perCharge))) });
+      sums.createDiv({ cls: "trimly-muted", text: t.recurring.monthlyEquivalent(this.money(Math.round(monthly))) });
+    } else {
+      sums.createDiv({ cls: "trimly-total-foot-value is-expense", text: t.recurring.perMonth(this.money(Math.round(monthly))) });
+      sums.createDiv({ cls: "trimly-muted", text: t.recurring.perYear(this.money(Math.round(monthly * 12))) });
+    }
   }
 
   private editRecurring(id: string | null) {
