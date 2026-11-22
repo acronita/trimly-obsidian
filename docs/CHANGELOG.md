@@ -15,6 +15,14 @@
   subscriptions were mixed into the monthly list and total, which read as a monthly cost. The summary chips on top are
   unchanged. Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `README.md`, `docs/CHANGELOG.md`.
 
+## 1.11.1 — 2026-11-22
+
+- 2026-11-22 — A Tesouro bond put back from B3's position report no longer doubles when the bank reports it again under
+  the id of the zeroed copy it sent before: the restored position takes that id over, gets the copy's movements, and the
+  copy goes. Duplicates 1.11.0 already left are merged on the next sync. Why: Pluggy revived the zeroed copies' ids, so
+  each restored bond showed twice. Files touched: `src/investment-sync.ts`, `test/b3-position.test.ts`,
+  `docs/CHANGELOG.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.11.0 — 2026-11-20
 
 - 2026-11-20 — *Importar posição da B3* (Settings → *Importar dados*; the Movements import also takes the file): B3's position report

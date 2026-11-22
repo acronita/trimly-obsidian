@@ -108,6 +108,37 @@ test("once the bank reports the product again with a value, it takes the restore
   assert.equal(l.investments.assets.filter((a) => !a.closed && a.assetClass === "treasury" && a.dueDate === "2027-01-01").length, 1);
 });
 
+test("when the bank revives the zeroed copy's id, the restored position takes it over instead of a duplicate", () => {
+  const l = zeroedPortfolio();
+  applyPositions(l, previewPositions(l, parsePositions([ACOES, TESOURO])!, "2026-11-19"), TODAY);
+  const restored = l.investments.assets.find((a) => a.code === "BRSTNCLTN8C3")!.id;
+  // seen in the wild: two days later Pluggy reported the bond again, under the id of the zeroed copy
+  applyInvestments(l, [inv("ltn-2", { name: "LTN", subtype: "TREASURY", dueDate: "2027-01-01T00:00:00.000Z", balance: 1300 })], ["item-1"], "2026-11-22");
+  const bonds = l.investments.assets.filter((a) => !a.closed && a.dueDate === "2027-01-01");
+  assert.equal(bonds.length, 1);
+  assert.equal(bonds[0].id, restored);
+  assert.equal(bonds[0].pluggyId, "ltn-2");
+  assert.equal(bonds[0].value, 1300_00);
+  // the copy is gone, not left behind as a second closed bond
+  assert.equal(l.investments.assets.filter((a) => a.pluggyId === "ltn-2").length, 1);
+});
+
+test("a duplicate left by 1.11.0 (restored position plus the reopened copy) is merged on the next sync", () => {
+  const l = zeroedPortfolio();
+  applyPositions(l, previewPositions(l, parsePositions([ACOES, TESOURO])!, "2026-11-19"), TODAY);
+  // what 1.11.0 did: the copy reopened beside the restored position
+  const copy = l.investments.assets.find((a) => a.pluggyId === "ltn-2")!;
+  delete copy.closed;
+  copy.value = 1300_00;
+  l.investments.movements.push({ id: "m1", assetId: copy.id, date: "2026-11-21", type: "income", amount: 5_00, pluggyId: "tx-1" });
+  applyInvestments(l, [inv("ltn-2", { name: "LTN", subtype: "TREASURY", dueDate: "2027-01-01T00:00:00.000Z", balance: 1310 })], ["item-1"], "2026-11-23");
+  const bonds = l.investments.assets.filter((a) => !a.closed && a.dueDate === "2027-01-01");
+  assert.equal(bonds.length, 1);
+  assert.equal(bonds[0].value, 1310_00);
+  // the copy's movements now belong to the position that stays
+  assert.equal(l.investments.movements.find((m) => m.id === "m1")?.assetId, bonds[0].id);
+});
+
 test("a position the bank still reports with a value is left to the bank; products the portfolio lacks are only listed", () => {
   const l = defaultLedger();
   applyInvestments(l, [inv("tgar", { name: "TGAR11", code: "TGAR11", type: "EQUITY", subtype: "REAL_ESTATE_FUND", balance: 520 })], ["item-1"], DAY);
