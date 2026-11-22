@@ -7,6 +7,14 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.11.1 — 2026-11-22
+
+- 2026-11-22 — A Tesouro bond put back from B3's position report no longer doubles when the bank reports it again under
+  the id of the zeroed copy it sent before: the restored position takes that id over, gets the copy's movements, and the
+  copy goes. Duplicates 1.11.0 already left are merged on the next sync. Why: Pluggy revived the zeroed copies' ids, so
+  each restored bond showed twice. Files touched: `src/investment-sync.ts`, `test/b3-position.test.ts`,
+  `docs/CHANGELOG.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.11.0 — 2026-11-20
 
 - 2026-11-20 — *Importar posição da B3* (Settings → *Importar dados*; the Movements import also takes the file): B3's position report
