@@ -7,6 +7,14 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.12.0 — 2026-11-22
+
+- 2026-11-22 — Recurring tab: subscriptions split into *Assinaturas mensais* and *Assinaturas anuais*. Yearly ones are
+  paid once, so they get their own card with the charge, the next date and the per-month equivalent as a reference; the
+  *Total em assinaturas* of the monthly card no longer includes them, and the yearly card totals per year. Why: yearly
+  subscriptions were mixed into the monthly list and total, which read as a monthly cost. The summary chips on top are
+  unchanged. Files touched: `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `README.md`, `docs/CHANGELOG.md`.
+
 ## 1.11.0 — 2026-11-20
 
 - 2026-11-20 — *Importar posição da B3* (Settings → *Importar dados*; the Movements import also takes the file): B3's position report
