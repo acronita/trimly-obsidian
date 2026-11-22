@@ -331,14 +331,14 @@ function staleItems(ledger: Ledger, investments: PluggyInvestment[], today: stri
 
 /**
  * The position put back by hand (from B3's position report) after the bank had closed it,
- * once the bank reports that product again with a value: it becomes synced again
- * instead of the bank's position arriving as a second one. Sets its `pluggyId`.
+ * for a product the bank reports again with a value. Manual but still tied to its
+ * connection (`pluggyItemId`), which no other manual position is.
  */
-function adopt(assets: Asset[], p: PluggyInvestment): Asset | undefined {
+function restoredTwin(assets: Asset[], p: PluggyInvestment): Asset | undefined {
   if (p.status === "TOTAL_WITHDRAWAL" || !(p.balance > 0)) return undefined;
   const due = p.dueDate?.slice(0, 10);
   const code = p.code?.trim().toUpperCase();
-  const found = assets.find(
+  return assets.find(
     (a) =>
       !a.pluggyId &&
       !a.closed &&
@@ -346,8 +346,22 @@ function adopt(assets: Asset[], p: PluggyInvestment): Asset | undefined {
       a.assetClass === assetClass(p) &&
       ((!!code && a.code?.toUpperCase() === code) || (!!a.dueDate && a.dueDate === due && a.name === displayName(p)))
   );
-  if (found) found.pluggyId = p.id;
-  return found;
+}
+
+/**
+ * The restored position becomes synced again under `p`'s id, instead of the bank's
+ * position arriving as a second one. The bank may report it under an id it already used
+ * for a zeroed copy, closed then and reopened by now: that copy gives its movements to the
+ * restored position, which carries the history, and goes. Returns the copy's value that
+ * counted as money in, now leaving with it. Mutates the ledger.
+ */
+function adopt(ledger: Ledger, restored: Asset, p: PluggyInvestment, copy: Asset | undefined): number {
+  restored.pluggyId = p.id;
+  if (!copy) return 0;
+  const inv = ledger.investments;
+  for (const m of [...inv.movements, ...inv.dismissedMovements]) if (m.assetId === copy.id) m.assetId = restored.id;
+  inv.assets = inv.assets.filter((a) => a.id !== copy.id);
+  return copy.closed ? 0 : copy.value;
 }
 
 /**
@@ -365,7 +379,6 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
     investments = investments.filter((p) => !stale.has(p.itemId));
     itemIds = itemIds.filter((i) => !stale.has(i));
   }
-  const assets = ledger.investments.assets;
   const since = flowWindowStart(ledger, today);
   // money moved that the positions' movements don't explain
   let untracked = 0;
@@ -386,7 +399,14 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
   const seen = new Set<string>();
   for (const p of investments) {
     seen.add(p.id);
-    let asset = assets.find((a) => a.pluggyId === p.id) ?? adopt(assets, p);
+    let asset = ledger.investments.assets.find((a) => a.pluggyId === p.id);
+    const restored = restoredTwin(ledger.investments.assets, p);
+    if (restored) {
+      const gone = adopt(ledger, restored, p, asset);
+      if (since !== undefined) untracked -= gone;
+      asset = restored;
+    }
+    const assets = ledger.investments.assets;
     const before = asset ? { value: asset.value, invested: asset.invested, closed: asset.closed } : { value: 0, invested: 0 };
     const newlyTracked = !asset || !!asset.closed;
     if (!asset) {
@@ -409,7 +429,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
       untracked += estimatedFlow(before, asset);
     }
   }
-  for (const a of assets) {
+  for (const a of ledger.investments.assets) {
     if (!a.pluggyId || a.closed || seen.has(a.pluggyId) || !itemIds.includes(a.pluggyItemId ?? "")) continue;
     const before = { value: a.value, invested: a.invested };
     a.closed = true;
