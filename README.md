@@ -134,7 +134,9 @@ passphrase that never leaves your device.
   bills excluded) at their usual amount, with the monthly total, read only. The summary on top
   shows fixed income, fixed costs, variable costs and what is left each month after all of them.
 - **Subscriptions** — mark a recurring expense as a subscription to list it apart with its yearly
-  cost, last charge and price changes, to judge whether it is still worth paying for.
+  cost, last charge and price changes, to judge whether it is still worth paying for. Monthly (and
+  weekly) ones and yearly ones sit in two cards: yearly subscriptions show the charge, the next date
+  and what they work out to per month as a reference only, and never count in the monthly total.
 - **Obrigações (obligations)** — a checklist of what you must do by hand by a due date: bills to
   pay (electricity, water, health plan, DAS MEI) and documents to issue or file (IRPF,
   DASN-SIMEI, invoices). Bills take only a due day, documents a start and an end day (yearly
