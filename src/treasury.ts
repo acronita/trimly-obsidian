@@ -69,9 +69,12 @@ export function findBond(a: Pick<Asset, "name" | "dueDate">, prices: TreasuryPri
   return bonds.find((p) => p.due === a.dueDate) ?? (bonds.length === 1 ? bonds[0] : null);
 }
 
-/** Manual Tesouro Direto positions still open; a synced one keeps the value its bank reports. */
+/**
+ * Open Tesouro Direto positions Trimly prices itself: manual ones, and synced ones the bank
+ * stopped reporting (`missingSince`). Any other synced one keeps the value its bank reports.
+ */
 export function manualTreasuryPositions(ledger: Ledger): Asset[] {
-  return ledger.investments.assets.filter((a) => a.assetClass === "treasury" && !a.closed && !a.pluggyId);
+  return ledger.investments.assets.filter((a) => a.assetClass === "treasury" && !a.closed && (!a.pluggyId || !!a.missingSince));
 }
 
 export interface TreasuryUpdate {

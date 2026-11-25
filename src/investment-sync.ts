@@ -17,6 +17,28 @@ import { isSameTrade, setAsideMovement, setAsideSettlementRepeats } from "./inve
 import { IMPORT_PREFIX, flowWindowStart, newId, recordSnapshot } from "./ledger.ts";
 import type { Asset, AssetClass, Ledger, Movement, MovementType } from "./ledger.ts";
 
+/**
+ * Classes a bank sync may not close on its own word: Pluggy has reported every Tesouro bond
+ * gone or zeroed, more than once, while nothing was sold, and sends no movements for them.
+ */
+const HELD_UNTIL_PROVEN: AssetClass[] = ["treasury", "fixed_income"];
+
+/**
+ * Whether a held position (see HELD_UNTIL_PROVEN) the bank reports gone or zeroed really
+ * ended. `movements` are the position's own, the bank's ones of this sync included.
+ */
+export function provenGone(asset: Asset, movements: Movement[], today: string): boolean {
+  // a matured bond pays out on its due date
+  if (asset.dueDate && asset.dueDate <= today) return true;
+  // money taken out recently, after the last money put in: an old sale says nothing about today
+  const recent = new Date(Date.parse(today) - PROOF_DAYS * 86_400_000).toISOString().slice(0, 10);
+  const lastIn = movements.reduce((d, m) => (m.type === "buy" || (m.type === "transfer" && m.direction === "in") ? (m.date > d ? m.date : d) : d), "");
+  return movements.some((m) => (m.type === "sell" || (m.type === "transfer" && m.direction === "out")) && m.date >= recent && m.date >= lastIn);
+}
+
+/** How far back a sale still explains the bank reporting a position gone. */
+const PROOF_DAYS = 30;
+
 export interface PluggyInvestmentTransaction {
   id: string;
   /** BUY, SELL, TAX, TRANSFER, INTEREST or AMORTIZATION */
@@ -71,6 +93,8 @@ export interface InvestmentSyncResult {
   movements: number;
   /** reference date of each item left as it was because Pluggy sent older data than the ledger's */
   stale: string[];
+  /** positions the bank reported gone or zeroed for the first time, kept open for lack of proof */
+  held: number;
 }
 
 const MOVEMENT_TYPES: Record<string, MovementType> = {
@@ -180,6 +204,8 @@ function apply(asset: Asset, p: PluggyInvestment, today: string, itemInstitution
     if (value === undefined || value === null || value === "") delete asset[key];
     else asset[key] = value;
   };
+  // reported with a value again: the bank's numbers are back
+  delete asset.missingSince;
   asset.value = cents(p.balance) ?? 0;
   set("grossValue", cents(p.amount));
   // Pluggy reports 0 when it does not know the cost; 0 would show the whole value as profit
@@ -323,7 +349,8 @@ function staleItems(ledger: Ledger, investments: PluggyInvestment[], today: stri
   }
   const stale = new Map<string, string>();
   for (const [item, date] of reported) {
-    const known = ledger.investments.assets.some((a) => a.pluggyId && !a.closed && a.pluggyItemId === item && a.updatedAt > date);
+    // a frozen position's date is Trimly's own pricing, not the bank's
+    const known = ledger.investments.assets.some((a) => a.pluggyId && !a.closed && !a.missingSince && a.pluggyItemId === item && a.updatedAt > date);
     if (known) stale.set(item, date);
   }
   return stale;
@@ -365,6 +392,20 @@ function adopt(ledger: Ledger, restored: Asset, p: PluggyInvestment, copy: Asset
 }
 
 /**
+ * Keep `asset` open at its last value when the bank says it ended without proof. Returns
+ * whether it was held; counts it in `result` the first time. Mutates the asset.
+ */
+function hold(ledger: Ledger, asset: Asset, today: string, result: InvestmentSyncResult): boolean {
+  if (!HELD_UNTIL_PROVEN.includes(asset.assetClass)) return false;
+  if (provenGone(asset, ledger.investments.movements.filter((m) => m.assetId === asset.id), today)) return false;
+  if (!asset.missingSince) {
+    asset.missingSince = today;
+    result.held++;
+  }
+  return true;
+}
+
+/**
  * Upsert the positions of the items in `itemIds` and their movements, and close
  * the positions those items no longer report. Positions of other items and
  * manual ones are left alone, and so are those of an item whose report is older
@@ -372,7 +413,7 @@ function adopt(ledger: Ledger, restored: Asset, p: PluggyInvestment, copy: Asset
  * previous day's one. Mutates the ledger.
  */
 export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[], itemIds: string[], today: string): InvestmentSyncResult {
-  const result: InvestmentSyncResult = { added: 0, updated: 0, closed: 0, movements: 0, stale: [] };
+  const result: InvestmentSyncResult = { added: 0, updated: 0, closed: 0, movements: 0, stale: [], held: 0 };
   const stale = staleItems(ledger, investments, today);
   if (stale.size) {
     result.stale = [...stale.values()];
@@ -407,6 +448,10 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
       asset = restored;
     }
     const assets = ledger.investments.assets;
+    if (asset && !asset.closed && (p.status === "TOTAL_WITHDRAWAL" || !(p.balance > 0))) {
+      if (p.transactions) result.movements += mergeMovements(ledger, asset, p.transactions);
+      if (hold(ledger, asset, today, result)) continue;
+    }
     const before = asset ? { value: asset.value, invested: asset.invested, closed: asset.closed } : { value: 0, invested: 0 };
     const newlyTracked = !asset || !!asset.closed;
     if (!asset) {
@@ -431,6 +476,7 @@ export function applyInvestments(ledger: Ledger, investments: PluggyInvestment[]
   }
   for (const a of ledger.investments.assets) {
     if (!a.pluggyId || a.closed || seen.has(a.pluggyId) || !itemIds.includes(a.pluggyItemId ?? "")) continue;
+    if (hold(ledger, a, today, result)) continue;
     const before = { value: a.value, invested: a.invested };
     a.closed = true;
     result.closed++;

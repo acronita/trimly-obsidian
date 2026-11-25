@@ -2173,6 +2173,7 @@ export class TrimlyView extends ItemView {
     if (a.code && !a.name.includes(a.code)) sub.unshift(a.code);
     if (a.quote?.longName && a.institution && tickerOf({ code: a.name })) sub.unshift(a.quote.longName);
     if (a.quote?.changePct !== undefined) sub.push(this.signedPct(a.quote.changePct / 100));
+    if (a.missingSince) sub.push(t.details.missingSince(this.longDate(a.missingSince)));
     main.createDiv({ cls: "trimly-row-sub", text: sub.join(" · ") || t.labels.assetClass[a.assetClass] });
     const end = row.createDiv("trimly-row-end");
     end.createDiv({ cls: "trimly-amount", text: this.money(a.value) });
@@ -2243,6 +2244,7 @@ export class TrimlyView extends ItemView {
     tags.createSpan({ cls: "trimly-tile-tag", text: t.labels.assetClass[a.assetClass] });
     tags.createSpan({ cls: "trimly-tile-tag", text: a.pluggyId ? t.details.bankSync : t.details.manual });
     if (a.closed) tags.createSpan({ cls: "trimly-tile-tag", text: t.details.closed });
+    if (a.missingSince) tags.createSpan({ cls: "trimly-tile-tag is-warning", text: t.details.missingSince(this.longDate(a.missingSince)) });
     const copies = head.createDiv("trimly-detail-copies");
     const copyButton = (label: string, value: string) => {
       const b = copies.createEl("button", { cls: "clickable-icon trimly-detail-copy", attr: { "aria-label": t.details.copy(value) } });
@@ -2258,6 +2260,7 @@ export class TrimlyView extends ItemView {
     copyButton(t.details.copyName, a.name);
     if (a.code) copyButton(a.code, a.code);
 
+    if (a.missingSince) el.createEl("p", { cls: "setting-item-description", text: t.details.missingHint });
     el.createDiv({ cls: "trimly-eyebrow", text: t.details.currentValue });
     el.createDiv({ cls: "trimly-page-value", text: this.money(a.value) });
     if (a.invested) {
@@ -2368,6 +2371,20 @@ export class TrimlyView extends ItemView {
         b.setButtonText(t.details.addMovement).onClick(() => {
           modal.close();
           this.editMovement(null, a.id);
+        })
+      );
+    }
+    if (a.missingSince && !a.closed) {
+      actions.addButton((b) =>
+        b.setButtonText(t.details.closeHeld).onClick(() => {
+          modal.close();
+          void this.plugin.mutate((l) => {
+            const x = l.investments.assets.find((y) => y.id === a.id);
+            if (!x) return;
+            const next = { ...x, closed: true };
+            delete next.missingSince;
+            saveAsset(l, next, todayISO());
+          });
         })
       );
     }

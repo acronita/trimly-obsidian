@@ -151,6 +151,11 @@ Settings → *Exportar dados*, on desktop: everything as JSON, or transactions, 
 The files are not encrypted and leave out the Pluggy credentials and the brapi token. Save them outside the
 vault, since vaults get synced. Trimly does not import them back: the real backup is the encrypted ledger.
 
+**A Tesouro bond shows "O banco parou de informar". What does it mean?**
+The bank sync stopped reporting it, or reported it zeroed, with no redemption. Trimly keeps it open at its last value
+and prices it daily by Tesouro Transparente. If you did redeem it, open it and use *Encerrar posição*. When the bank
+reports it again, it goes back to syncing on its own.
+
 **A sync zeroed or closed positions I still hold. How do I put them back?**
 At [investidor.b3.com.br](https://investidor.b3.com.br), download the position report (*Posição*) in Excel, then use
 *Importar posição da B3* in Settings → *Importar dados*. Trimly shows what it will correct, sets B3's value and quantity, and reopens what was

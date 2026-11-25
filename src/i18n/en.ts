@@ -794,6 +794,10 @@ export const en: Strings = {
     bankSync: "Bank sync",
     manual: "Manual",
     closed: "Closed",
+    missingSince: (date: string) => `The bank stopped reporting on ${date}`,
+    missingHint:
+      "The bank stopped reporting this position (or reported it zeroed) with no redemption. It stays open at its last value; Tesouro keeps the Tesouro Transparente price. If you redeemed it, close it here.",
+    closeHeld: "Close position",
     currentValue: "Current value",
     copyName: "Name",
     copy: (value: string) => `Copy ${value}`,
@@ -1291,6 +1295,7 @@ export const en: Strings = {
     updated: (n: number) => `${n} updated`,
     removed: (n: number) => `${n} removed`,
     newInvestments: (n: number) => `${n} new ${s(n, "investment", "investments")}`,
+    heldInvestments: (n: number) => `${n} ${s(n, "position", "positions")} left by the bank with no redemption, kept open (see Portfolio)`,
     closedInvestments: (n: number) => `${n} ${s(n, "investment", "investments")} closed`,
     investmentMovements: (n: number) => `${n} investment ${s(n, "movement", "movements")}`,
     staleInvestments: (dates: string) =>

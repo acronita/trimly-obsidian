@@ -320,6 +320,11 @@ export interface Asset {
   updatedAt: string;
   /** fully withdrawn or no longer reported; kept for history, excluded from totals */
   closed?: boolean;
+  /**
+   * synced Tesouro or fixed income the bank stopped reporting, or reported zeroed, with no
+   * proof it was redeemed: kept open at its last value since this day (YYYY-MM-DD)
+   */
+  missingSince?: string;
   /** Pluggy investment this one mirrors, and the item it belongs to */
   pluggyId?: string;
   pluggyItemId?: string;

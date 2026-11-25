@@ -554,6 +554,7 @@ export default class TrimlyPlugin extends Plugin {
         r.removed && n.removed(r.removed),
         inv.added && n.newInvestments(inv.added),
         inv.closed && n.closedInvestments(inv.closed),
+        inv.held && n.heldInvestments(inv.held),
         inv.movements && n.investmentMovements(inv.movements),
         inv.stale.length > 0 && n.staleInvestments(inv.stale.map((d) => new Date(`${d}T12:00:00`).toLocaleDateString(this.locale())).join(", ")),
         paid && t.obligations.autoLinked(paid),

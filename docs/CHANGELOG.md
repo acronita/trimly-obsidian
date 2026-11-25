@@ -7,6 +7,20 @@
   key is kept. The 1.0.0 entry no longer lists *Várias carteiras*, removed in 0.35.0. Why: the release review found them
   out of date. Files touched: `README.md`, `docs/CHANGELOG.md`.
 
+## 1.13.0 — 2026-11-24
+
+- 2026-11-24 — A bank sync no longer closes a Tesouro Direto or fixed income position on its own word. When the bank
+  reports one zeroed or as withdrawn, or stops reporting it, with no proof it ended (`provenGone`), it stays open at its
+  last value with *O banco parou de informar em …* on its row and in its details (new optional `missingSince` on
+  `Asset`), a *Encerrar posição* button there, and a sync notice the first time. Meanwhile a held Tesouro bond is
+  priced daily by Tesouro Transparente like a manual one (gross of IR). Reported again with a value, it goes back to the
+  bank's numbers. Stocks, FIIs, ETFs and funds still close when the bank says so. Why: Pluggy reported every Tesouro
+  bond gone or zeroed again with a current date, which the stale-report guard can't catch, and sends no movements for
+  them, so each time they had to be restored from B3. Files touched: `src/investment-sync.ts`, `src/ledger.ts`,
+  `src/treasury.ts`, `src/main.ts`, `src/view.ts`, `src/i18n/pt-BR.ts`, `src/i18n/en.ts`, `src/styles/index.css`,
+  `styles.css`, `test/held-positions.test.ts`, `test/investment-sync.test.ts`, `test/b3-position.test.ts`,
+  `docs/ARCHITECTURE.md`, `docs/FAQ.md`, `docs/CHANGELOG.md`, `package.json`, `manifest.json`, `versions.json`.
+
 ## 1.12.0 — 2026-11-22
 
 - 2026-11-22 — Recurring tab: subscriptions split into *Assinaturas mensais* and *Assinaturas anuais*. Yearly ones are
