@@ -800,6 +800,10 @@ export const ptBR = {
     bankSync: "Sincronizado",
     manual: "Manual",
     closed: "Encerrado",
+    missingSince: (date: string) => `O banco parou de informar em ${date}`,
+    missingHint:
+      "O banco deixou de informar esta posição (ou a informou zerada) sem nenhum resgate. Ela continua aberta com o último valor; o Tesouro segue com o preço do Tesouro Transparente. Se você resgatou, encerre aqui.",
+    closeHeld: "Encerrar posição",
     currentValue: "Valor atual",
     copyName: "Nome",
     copy: (value: string) => `Copiar ${value}`,
@@ -1299,6 +1303,8 @@ export const ptBR = {
     removed: (n: number) => `${n} ${s(n, "removida", "removidas")}`,
     newInvestments: (n: number) => `${n} ${s(n, "investimento novo", "investimentos novos")}`,
     closedInvestments: (n: number) => `${n} ${s(n, "investimento encerrado", "investimentos encerrados")}`,
+    heldInvestments: (n: number) =>
+      `${n} ${s(n, "posição sumiu", "posições sumiram")} do banco sem resgate e ${s(n, "continua aberta", "continuam abertas")} (confira na Carteira)`,
     investmentMovements: (n: number) => `${n} ${s(n, "movimentação de investimento", "movimentações de investimentos")}`,
     staleInvestments: (dates: string) =>
       `o Pluggy mandou investimentos com data de ${dates}, mais antigos que os já salvos; os valores anteriores foram mantidos (confira a conexão no Pluggy)`,

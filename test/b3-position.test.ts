@@ -39,6 +39,12 @@ function zeroedPortfolio(): Ledger {
   // Pluggy's new ids for the same products
   const again = (p: PluggyInvestment, id: string, extra: Partial<PluggyInvestment> = {}) => ({ ...p, ...zero, ...extra, id });
   applyInvestments(l, [again(held[0], "ltn-2", { code: null }), again(held[2], "tgar-2")], ["item-1"], DAY);
+  // up to 1.12.0 the bonds closed here too; ledgers from then still hold them closed
+  for (const a of l.investments.assets) {
+    if (!a.missingSince) continue;
+    a.closed = true;
+    delete a.missingSince;
+  }
   return l;
 }
 

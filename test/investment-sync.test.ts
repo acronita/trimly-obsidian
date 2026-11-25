@@ -9,6 +9,9 @@ import { periodReturn, portfolioIndex } from "../src/returns.ts";
 
 const TODAY = "2026-10-25";
 
+// a fund: the bank's word on it ending is taken; Tesouro and fixed income need proof (see held-positions)
+const FUND = { type: "MUTUAL_FUND", subtype: "MULTIMARKET_FUND" };
+
 function inv(id: string, extra: Partial<PluggyInvestment> = {}): PluggyInvestment {
   return {
     id,
@@ -60,7 +63,7 @@ test("syncing again updates values in place without duplicating, keeping the use
 
 test("a position the item no longer reports is closed and drops out of totals", () => {
   const l = defaultLedger();
-  applyInvestments(l, [inv("a"), inv("b")], ["item-1"], "2026-10-24");
+  applyInvestments(l, [inv("a"), inv("b", FUND)], ["item-1"], "2026-10-24");
   const r = applyInvestments(l, [inv("a")], ["item-1"], TODAY);
   assert.equal(r.closed, 1);
   assert.equal(asset(l, "b").closed, true);
@@ -93,8 +96,8 @@ test("a report older than the ledger's leaves the item's positions open and unto
 
 test("a report from the same day as the ledger's is not stale, so a real withdrawal still closes", () => {
   const l = defaultLedger();
-  applyInvestments(l, [inv("a"), inv("b")], ["item-1"], TODAY);
-  const r = applyInvestments(l, [inv("a"), inv("b", { status: "TOTAL_WITHDRAWAL", balance: 0 })], ["item-1"], TODAY);
+  applyInvestments(l, [inv("a"), inv("b", FUND)], ["item-1"], TODAY);
+  const r = applyInvestments(l, [inv("a"), inv("b", { ...FUND, status: "TOTAL_WITHDRAWAL", balance: 0 })], ["item-1"], TODAY);
   assert.deepEqual(r.stale, []);
   assert.equal(asset(l, "b").closed, true);
 });
@@ -342,7 +345,7 @@ test("a position first seen after history started arrives as money in, not as ga
 
 test("a position that disappears is treated as withdrawn at its value", () => {
   const l = defaultLedger();
-  applyInvestments(l, [inv("a"), inv("b")], ["item-1"], "2026-10-01");
+  applyInvestments(l, [inv("a"), inv("b", FUND)], ["item-1"], "2026-10-01");
   applyInvestments(l, [inv("a")], ["item-1"], "2026-10-02");
   assert.equal(l.investments.snapshots[1].flow, -1000_00);
   const idx = portfolioIndex(l.investments.snapshots);
